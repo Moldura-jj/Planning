@@ -5,8 +5,9 @@ export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 // 2) Pas dit aan naar je schema als kolomnamen anders zijn
 export const DB = {
+export const DB = {
   tables: {
-    customers: "klanten",
+    customers: null,
     projects: "projecten",
     sections: "secties",
     employees: "werknemers",
@@ -16,29 +17,18 @@ export const DB = {
     projectOrders: "project_orders",
   },
 
-  // Primary keys (pas aan naar jouw schema)
   projectPkCol: "project_id",
-  customerPkCol: "customer_id",
+  customerPkCol: null,
   sectionPkCol: "section_id",
 
-  // Medewerkers (tabel bestaat bij jou als 'werknemers')
-  // Zet employeePkCol naar je echte PK kolomnaam (bv werknemer_id / employee_id)
   employeePkCol: "werknemer_id",
-  // Naam kolom (als je die hebt). Als leeg, proberen we automatisch een paar bekende velden.
   employeeNameCol: "naam",
 
-  // FK kolom in projecten -> klanten.customer_id
-  projectCustomerFk: "customer_id",
-
-  // FK kolom in secties -> projecten.project_id
+  projectCustomerFk: null,
   sectionProjectFk: "project_id",
 
-  // Boolean veld op sectie om te bepalen of deze in planning zichtbaar is
-  // Eerste bestaande kolom in deze lijst wordt gebruikt.
   sectionIncludeInPlanningCols: ["in_planning", "include_in_planning", "show_in_planning", "planning_visible"],
 
-  // Project "header" titel: <OFFFERNO> - <name_kl> - <projectname>
-  // Dit zijn kolommen in projecten en klanten:
   projectNoCol: "offerno",
   projectNameCol: "projectname",
   customerNameCol: "name_kl",
