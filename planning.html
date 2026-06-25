@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LOVD Planning — Capaciteit</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="container full-width">
+    <div class="topbar">
+      <div class="row" style="gap:12px">
+        <a class="btn ghost" href="index.html">← Menu</a>
+        <div class="brand">Capaciteitsplanning</div>
+        <button class="icon-btn" id="btnSettings" title="Instellingen" aria-label="Instellingen">
+  ⚙️
+</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hd row" style="justify-content:space-between">
+        <div id="week-nav" class="row" style="gap:10px">
+          <button id="btnPrev" class="btn">Vorige week</button>
+          <h2 id="current-week-label">Week --</h2>
+          <button id="btnNext" class="btn">Volgende week</button>
+        </div>
+      </div>
+
+      <div class="bd">
+        <div id="plannerStatus"></div>
+
+        <div class="planner-scroll" id="plannerScroll">
+          <div class="planning-grid" id="plannerGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section details modal (moet IN body) -->
+<div id="secModalBackdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:900px;">
+    <div class="hd">
+      <div>
+        <div class="assign-title">Sectie</div>
+        <div class="assign-sub" id="secModalSub"></div>
+      </div>
+      <button class="btn small" id="secModalClose" type="button">✕</button>
+    </div>
+
+    <div class="bd" id="secModalBody"></div>
+
+    <div class="ft">
+      <button class="btn" id="secModalClose2" type="button">Sluiten</button>
+    </div>
+  </div>
+</div>
+
+  
+
+  <div class="modal-backdrop" id="settingsBackdrop" hidden></div>
+
+<div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title" id="settingsTitle">Instellingen</div>
+      <button class="icon-btn" id="btnSettingsClose" aria-label="Sluiten">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <label class="field">
+        <div class="field-label">Planningsfactor</div>
+        <div class="field-row">
+          <input type="range" id="planFactor" min="50" max="120" step="5" />
+          <div class="chip" id="planFactorLabel">80%</div>
+        </div>
+        <div class="field-help">
+          Hiermee kun je plannen op bv. 80% van de beschikbare uren (buffer). Later uitbreidbaar met meer regels.
+        </div>
+      </label>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" id="btnSettingsCancel">Annuleren</button>
+      <button class="btn primary" id="btnSettingsSave">Opslaan</button>
+    </div>
+  </div>
+</div>
+    
+  <script type="module" src="planning.js"></script>
+  
+</body>
+</html>
+
+
+
+
