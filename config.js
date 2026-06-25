@@ -11,8 +11,8 @@ export const DB = {
     employees: "werknemers",
     capacityEntries: "capacity_entries",
     sectionWork: "section_work",
-    projectPlans: "project_plan",
-    projectOrders: "project_orders",
+    projectPlan: "projecten_planner",
+    projectOrders: "section_orders",
   },
 
   projectPkCol: "project_id",
