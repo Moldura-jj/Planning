@@ -3,7 +3,6 @@
 export const SUPABASE_URL = "https://astwstyzesyjgzotvahz.supabase.co";
 export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzdHdzdHl6ZXN5amd6b3R2YWh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzY5MzksImV4cCI6MjA5Nzk1MjkzOX0.5FYI98q7JrkaHlUmFqtZ3XZOvQeXfNIBYq2T30JiqGs";
 
-
 export const DB = {
   tables: {
     customers: null,
