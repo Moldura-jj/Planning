@@ -1282,13 +1282,12 @@ if (!pidArr.length) {
   // ✅ NU/VOORUIT: jouw huidige “actief” filter blijft
   const cutoffISO = (startISO > todayISO) ? todayISO : startISO;
 
-  const { data: pData, error: pErr2 } = await sb
-    .from("projecten_planner")
-    .select("*")
-    .in("salesstatus", [3,4,5,6,7,8])
-    .or(`completiondate_d.is.null,completiondate_d.gte.${cutoffISO}`)
-    .order("offerno", { ascending: true })
-    .limit(500);
+const { data: pData, error: pErr2 } = await sb
+  .from("projecten")
+  .select("*")
+  .in("salesstatus", [2,3,4,5,6,7,8])
+  .order("offerno", { ascending: true })
+  .limit(500);
 
   if (pErr2) { statusEl.textContent = "Fout projecten: " + pErr2.message; return; }
   projecten = pData || [];
