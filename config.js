@@ -1,7 +1,7 @@
 // config.js
 // 1) Vul je Supabase gegevens in
-export const SUPABASE_URL = "https://zdtkxbacdchsyfxuknxk.supabase.co";
-export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpkdGt4YmFjZGNoc3lmeHVrbnhrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njg1ODUxNTcsImV4cCI6MjA4NDE2MTE1N30.bIOBrjUq4jKFaUxH79OznuGS3BvBxrdsPZaLSJHlizw";
+export const SUPABASE_URL = "https://astwstyzesyjgzotvahz.supabase.co";
+export const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFzdHdzdHl6ZXN5amd6b3R2YWh6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzNzY5MzksImV4cCI6MjA5Nzk1MjkzOX0.5FYI98q7JrkaHlUmFqtZ3XZOvQeXfNIBYq2T30JiqGs";
 
 // 2) Pas dit aan naar je schema als kolomnamen anders zijn
 export const DB = {
