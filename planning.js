@@ -3750,33 +3750,25 @@ formEl.innerHTML = `
   return;
 }
 
-    // click op medewerkernaam (capaciteit) => popup week-invoer
-    const empTd = ev.target.closest("td.cap-emp-click");
-    if (empTd) {
-      const empId = String(empTd.dataset.empId || "");
-      const empName = String(empTd.dataset.empName || empId);
-      if (!empId) return;
+// klik op medewerkernaam links => open eerste dagcel van dezelfde medewerker
+const empTd = ev.target.closest("td.cap-emp-click");
+if (empTd) {
+  ev.stopPropagation();
 
-      const modal = ensureCapModal();
-      const subEl = modal.wrap.querySelector("#capModalSub");
-      const weekLabelEl = modal.wrap.querySelector("#capWeekLabel");
-      const formEl = modal.wrap.querySelector("#capForm");
-      const btnPrevW = modal.wrap.querySelector("#capPrevWeek");
-      const btnNextW = modal.wrap.querySelector("#capNextWeek");
-      const btnSave  = modal.wrap.querySelector("#capSave");
-      const btnApplyEven = modal.wrap.querySelector("#capApplyEven");
-      const btnApplyOdd  = modal.wrap.querySelector("#capApplyOdd");
-      const btnApplyAll  = modal.wrap.querySelector("#capApplyAll");
+  const empId = String(empTd.dataset.empId || "");
+  if (!empId) return;
 
+  const row = empTd.closest("tr");
+  const firstCell = row?.querySelector("td.cap-cell-click[data-work-date]");
 
-      // start bij week van huidige view
-      let wkStart = startOfISOWeek(new Date(rangeStart));
+  if (firstCell) {
+    firstCell.click();
+  } else {
+    console.warn("Geen cap-cell-click gevonden voor medewerker:", empId);
+  }
 
-      const buildWeekDays = () => {
-        const days = [];
-        for (let i=0;i<7;i++) days.push(addDays(wkStart, i));
-        return days;
-      };
+  return;
+}
 
       const renderWeek = () => {
         const days = buildWeekDays();
