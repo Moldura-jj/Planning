@@ -365,10 +365,6 @@ function buildPlannedSetsByDay(planningItems){
     return s.replace(".", ",").replace(/,00$/, "");
   }
 
-    function formatHoursCell(n){
-    return fmtHours(n);
-  }
-
   // Dit is de "haak" die jij straks laat verwijzen naar je eigen render-functie
   function refreshAfterSettingsChange(){
     // VERVANG DIT door jouw bestaande functie(s):
@@ -569,124 +565,31 @@ function asISODate(v){
     return secModal;
   }
 
-  function openSectionDetailsModal({ sid, dateISO, sectie, totals, complTxt, projectId, sectionObj }){
-  const modal = ensureSecModal();
-  if (!modal) return;
+  function openSectionDetailsModal({ sid, dateISO, sectie, totals, complTxt }){
+    const modal = ensureSecModal();
+    if (!modal) return;
 
-  const sub = document.getElementById("secModalSub");
-  const body = document.getElementById("secModalBody");
+    const sub = document.getElementById("secModalSub");
+    const body = document.getElementById("secModalBody");
 
-  if (sub) sub.textContent = `${sectie || "sectie"} • ${sid}`;
-
-  const para = sectionObj?.paragraaf ?? sectionObj?.paragraph ?? "";
-  const tekst = sectionObj?.tekst ?? sectionObj?.text ?? sectionObj?.omschrijving ?? "";
-
-  if (body) {
-    body.innerHTML = `
-      <div class="sec-modal-grid">
-        <div>
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Gegevens</div>
-
-          <div class="fieldgrid" style="grid-template-columns:170px 1fr;">
-            <div class="label">Paragraaf</div><div class="value">${escapeHtml(para || "-")}</div>
+    if (sub) sub.textContent = `${dateISO} • ${sectie || "sectie"} • ${sid}`;
+    if (body) {
+        body.innerHTML = `
+          <div class="fieldgrid" style="grid-template-columns: 170px 1fr;">
             <div class="label">Opleverdatum</div><div class="value">${escapeHtml(complTxt || "-")}</div>
 
-            <div class="label">WVB</div><div class="value">${escapeHtml(fmtHours(totals.prep))} uur</div>
-            <div class="label">Productie</div><div class="value">${escapeHtml(fmtHours(totals.prod))} uur</div>
-            <div class="label">CNC</div><div class="value">${escapeHtml(fmtHours(totals.cnc))} uur</div>
-            <div class="label">Montage</div><div class="value">${escapeHtml(fmtHours(totals.mont))} uur</div>
-            <div class="label">Reis</div><div class="value">${escapeHtml(fmtHours(totals.reis))} uur</div>
+            <div class="label">Werkvoorbereiding</div><div class="value">${escapeHtml(formatHoursCell(totals.prep))} uur</div>
+            <div class="label">Productie</div><div class="value">${escapeHtml(formatHoursCell(totals.prod))} uur</div>
+            <div class="label">CNC</div><div class="value">${escapeHtml(formatHoursCell(totals.cnc))} uur</div>
+
+            <div class="label">Montage</div><div class="value">${escapeHtml(formatHoursCell(totals.mont))} uur</div>
+            <div class="label">Reis</div><div class="value">${escapeHtml(formatHoursCell(totals.reis))} uur</div>
           </div>
+        `;
+    }
 
-          ${tekst ? `
-            <div class="muted" style="font-weight:800; margin:14px 0 8px;">Tekst</div>
-            <div class="value" style="white-space:pre-line">${escapeHtml(tekst)}</div>
-          ` : ""}
-        </div>
-
-        <div>
-          <div class="muted" style="font-weight:800; margin-bottom:8px;">Bestanden</div>
-
-          <div class="row" style="justify-content:space-between; gap:10px; align-items:center;">
-            <div class="muted" style="font-weight:700;">Uploads</div>
-            <label class="btn small" style="cursor:pointer;">
-              + Upload
-              <input id="secModalFileInput" type="file" multiple hidden />
-            </label>
-          </div>
-
-          <div id="secModalFilesList" style="margin-top:10px;"></div>
-        </div>
-      </div>
-    `;
+    modal.wrap.classList.add("show");
   }
-
-  modal.wrap.classList.add("show");
-
-  // === Files wiring (per open modal) ===
-  const listEl = document.getElementById("secModalFilesList");
-  const inputEl = document.getElementById("secModalFileInput");
-
-  if (!listEl || !inputEl) return;
-
-  // initial load
-  renderSectionFilesInto(listEl, String(projectId), String(sid));
-
-  inputEl.onchange = async () => {
-    try{
-      await uploadFilesToSection(String(projectId), String(sid), inputEl.files);
-      inputEl.value = "";
-      await renderSectionFilesInto(listEl, String(projectId), String(sid));
-    }catch(e){
-      console.error(e);
-      alert("Upload ging mis (zie console).");
-    }
-  };
-
-  // actions
-  listEl.onclick = async (e) => {
-    const btn = e.target.closest("button[data-act]");
-    if(!btn) return;
-
-    const act = btn.dataset.act;
-    const row = btn.closest(".file-row");
-    const fileId = row?.dataset?.fileId;
-    if(!fileId) return;
-
-    const files = listEl._filesCache || [];
-    const file = files.find(x => String(x.id) === String(fileId));
-    if(!file) return;
-
-    if(act === "open" || act === "download"){
-      const { data, error } = await sb.storage.from(FILES_BUCKET).createSignedUrl(file.file_path, 120);
-      if(error){ console.error(error); alert("Kon geen link maken."); return; }
-      const url = data?.signedUrl;
-      if(!url) return;
-
-      if(act === "open") window.open(url, "_blank", "noopener,noreferrer");
-      else {
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = file.file_name || "download";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-      }
-    }
-
-    if(act === "delete"){
-      if(!confirm(`Bestand verwijderen?\n\n${file.file_name}`)) return;
-
-      const { error: stErr } = await sb.storage.from(FILES_BUCKET).remove([file.file_path]);
-      if(stErr){ console.error(stErr); alert("Kon storage bestand niet verwijderen."); return; }
-
-      const { error: dbErr } = await sb.from(FILES_TABLE).delete().eq("id", file.id);
-      if(dbErr){ console.error(dbErr); alert("Kon database record niet verwijderen."); return; }
-
-      await renderSectionFilesInto(listEl, String(projectId), String(sid));
-    }
-  };
-}
 
   // -------- ASSIGNMENTS MODAL (productie/montage + collega's) --------
   let assignModal = null;
@@ -1137,42 +1040,6 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
   modal.wrap.classList.add("show");
 }
 
-async function fetchSectiesInChunks(colName, ids){
-  if (!Array.isArray(ids) || ids.length === 0) return [];
-
-  const out = [];
-  const CHUNK = 700;
-
-  // fallback volgorde als kolom niet bestaat of mismatch
-  const tryCols = [colName, "section_id", "id"].filter((v,i,a)=>v && a.indexOf(v)===i);
-
-  for (let i = 0; i < ids.length; i += CHUNK){
-    const chunk = ids.slice(i, i + CHUNK);
-
-    let ok = false;
-    let lastErr = null;
-
-    for (const c of tryCols){
-      const { data, error } = await sb
-        .from("secties")
-        .select("section_id, project_id") // ✅ GEEN id selecteren
-        .in(c, chunk)
-        .limit(5000);
-
-      if (!error) {
-        out.push(...(data || []));
-        ok = true;
-        break;
-      }
-      lastErr = error;
-    }
-
-    if (!ok) throw lastErr;
-  }
-
-  return out;
-}
-
   // -------- DATA LOAD --------
   async function loadAndRender(){
     const start = new Date(rangeStart);
@@ -1186,115 +1053,17 @@ async function fetchSectiesInChunks(colName, ids){
 
     statusEl.textContent = `Laden… (${startISO} t/m ${endISO})`;
 
-const viewingPast = (endISO < todayISO); // terugkijken?
-
-let projecten = [];
-
-if (viewingPast) {
-  // ✅ TERUGKIJKEN: haal projecten op die activiteit hebben in dit bereik
-  const secIds = new Set();
-
-  // 1) section_assignments -> section_id’s
-  const { data: aSecs, error: aErr2 } = await sb
-    .from("section_assignments")
-    .select("section_id, work_date")
-    .gte("work_date", startISO)
-    .lte("work_date", endISO)
-    .limit(200000);
-
-  if (!aErr2) for (const r of (aSecs || [])) if (r.section_id) secIds.add(String(r.section_id));
-
-  // 2) (optioneel) section_work -> section_id’s (als je die ook als bron wil)
-  const { data: wSecs, error: wErr2 } = await sb
-    .from("section_work")
-    .select("section_id, work_date")
-    .gte("work_date", startISO)
-    .lte("work_date", endISO)
-    .limit(200000);
-
-  if (!wErr2) for (const r of (wSecs || [])) if (r.section_id) secIds.add(String(r.section_id));
-
-  // 3) secIds -> projectIds via secties
-  let projectIdsSet = new Set();
-  const secArr = Array.from(secIds);
-
-let secsInRange = [];
-
-try {
-  // ✅ eerst section_id proberen (jouw tabel heeft dit wél)
-  secsInRange = await fetchSectiesInChunks("section_id", secArr);
-} catch (e1) {
-  // fallback: als het toch ooit "id" is in een andere omgeving
-  try {
-    secsInRange = await fetchSectiesInChunks("id", secArr);
-  } catch (e2) {
-    console.warn("Fout secties lookup (section_id/id):", e1?.message || e1, e2?.message || e2);
-    secsInRange = [];
-  }
-}
-
-  // 4) project_assignments (projectniveau planning) -> projectIds
-  const { data: pAs, error: pAsErr } = await sb
-    .from("project_assignments")
-    .select("project_id, work_date")
-    .gte("work_date", startISO)
-    .lte("work_date", endISO)
-    .limit(200000);
-
-  if (!pAsErr) for (const r of (pAs || [])) if (r.project_id) projectIdsSet.add(String(r.project_id));
-
-  const pidArr = Array.from(projectIdsSet).filter(Boolean);
-
-if (!pidArr.length) {
-  console.warn("[viewingPast] Geen projectIds uit assignments/work in range. Val terug op brede projecten-lijst.");
-
-  const { data: pDataAll, error: pErrAll } = await sb
-    .from("projecten_planner")
-    .select("*")
-    .order("offerno", { ascending: true })
-    .limit(5000);
-
-  if (pErrAll) { statusEl.textContent = "Fout projecten (fallback): " + pErrAll.message; return; }
-  projecten = pDataAll || [];
-} else {
-  const { data: pData, error: pErr2 } = await sb
-    .from("projecten_planner")
-    .select("*")
-    .in("project_id", pidArr)
-    .order("offerno", { ascending: true })
-    .limit(5000);
-
-  if (pErr2) { statusEl.textContent = "Fout projecten: " + pErr2.message; return; }
-  projecten = pData || [];
-}
-
-  const { data: pData, error: pErr2 } = await sb
-    .from("projecten_planner")
-    .select("*")
-    .in("project_id", pidArr)     // ✅ jouw view gebruikt project_id
-    .order("offerno", { ascending: true })
-    .limit(5000);
-
-  if (pErr2) { statusEl.textContent = "Fout projecten: " + pErr2.message; return; }
-  projecten = pData || [];
-
-} else {
-  // ✅ NU/VOORUIT: jouw huidige “actief” filter blijft
-  const cutoffISO = (startISO > todayISO) ? todayISO : startISO;
-
-const { data: pData, error: pErr2 } = await sb
-  .from("projecten")
-  .select("*")
-  .in("salesstatus", [2,3,4,5,6,7,8])
-  .order("offerno", { ascending: true })
-  .limit(500);
-
-  if (pErr2) { statusEl.textContent = "Fout projecten: " + pErr2.message; return; }
-  projecten = pData || [];
-}
+    // 1) projecten
+    const { data: projecten, error: pErr } = await sb
+      .from("projecten_planner")
+      .select("*")
+      .in("salesstatus", [3,4,5,6,7,8])
+      .gte("completiondate_d", todayISO)
+      .order("offerno", { ascending: true })
+      .limit(500);
 
 
-
+    if (pErr) { statusEl.textContent = "Fout projecten: " + pErr.message; return; }
 
     // 2) secties
     const projectIds = (projecten || []).map(p => p.project_id ?? p.id).filter(Boolean);
@@ -1403,7 +1172,7 @@ const { data: pData, error: pErr2 } = await sb
     
       .from("werknemers")
       .select("*")
-      .order("naam", { ascending: true })
+      .order("name", { ascending: true })
       .limit(500);
 
     if (eErr) { statusEl.textContent = "Fout werknemers: " + eErr.message; return; }
@@ -3461,15 +3230,13 @@ const totals = {
         // datum voor in de header van popup (ik pak de start van je range)
         const dateISO = toISODate(start);
 
-      openSectionDetailsModal({
-        sid,
-        dateISO,
-        sectie: sectieNaam,
-        totals,
-        complTxt,
-        projectId: pid,
-        sectionObj: sObj
-      });
+        openSectionDetailsModal({
+          sid,
+          dateISO,
+          sectie: sectieNaam,
+          totals,
+          complTxt
+        });
         return;
       }
 
@@ -3750,25 +3517,33 @@ formEl.innerHTML = `
   return;
 }
 
-// klik op medewerkernaam links => open eerste dagcel van dezelfde medewerker
-const empTd = ev.target.closest("td.cap-emp-click");
-if (empTd) {
-  ev.stopPropagation();
+    // click op medewerkernaam (capaciteit) => popup week-invoer
+    const empTd = ev.target.closest("td.cap-emp-click");
+    if (empTd) {
+      const empId = String(empTd.dataset.empId || "");
+      const empName = String(empTd.dataset.empName || empId);
+      if (!empId) return;
 
-  const empId = String(empTd.dataset.empId || "");
-  if (!empId) return;
+      const modal = ensureCapModal();
+      const subEl = modal.wrap.querySelector("#capModalSub");
+      const weekLabelEl = modal.wrap.querySelector("#capWeekLabel");
+      const formEl = modal.wrap.querySelector("#capForm");
+      const btnPrevW = modal.wrap.querySelector("#capPrevWeek");
+      const btnNextW = modal.wrap.querySelector("#capNextWeek");
+      const btnSave  = modal.wrap.querySelector("#capSave");
+      const btnApplyEven = modal.wrap.querySelector("#capApplyEven");
+      const btnApplyOdd  = modal.wrap.querySelector("#capApplyOdd");
+      const btnApplyAll  = modal.wrap.querySelector("#capApplyAll");
 
-  const row = empTd.closest("tr");
-  const firstCell = row?.querySelector("td.cap-cell-click[data-work-date]");
 
-  if (firstCell) {
-    firstCell.click();
-  } else {
-    console.warn("Geen cap-cell-click gevonden voor medewerker:", empId);
-  }
+      // start bij week van huidige view
+      let wkStart = startOfISOWeek(new Date(rangeStart));
 
-  return;
-}
+      const buildWeekDays = () => {
+        const days = [];
+        for (let i=0;i<7;i++) days.push(addDays(wkStart, i));
+        return days;
+      };
 
       const renderWeek = () => {
         const days = buildWeekDays();
@@ -5132,6 +4907,13 @@ function infoRow(text, cols){
     return tr;
   }
 
+  function formatHoursCell(n){
+    const v = Number(n||0);
+    if(!v) return "0";
+    // 2 decimal NL met komma, maar kort
+    const s = (Math.round(v*100)/100).toString().replace(".", ",");
+    return s;
+  }
 
   function pickKey(obj, keys){
     if(!obj) return keys[0];
@@ -5218,6 +5000,15 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
   });
 }
 
+
+  function escapeHtml(s){
+    return String(s ?? "")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#039;");
+  }
   function escapeAttr(s){
     return escapeHtml(String(s ?? "")).replaceAll('"', "&quot;");
   }
@@ -6283,109 +6074,4 @@ function getContiguousRunFromCell(td){
 
   return { startISO, endISO };
 }
-}
-
-// =========================
-// SECTION FILES in MODAL
-// =========================
-const FILES_BUCKET = "project-files";
-const FILES_TABLE  = "section_files";
-
-function formatBytes(n){
-  if(n === null || n === undefined) return "";
-  const u = ["B","KB","MB","GB","TB"];
-  let i=0, v=Number(n)||0;
-  while(v>=1024 && i<u.length-1){ v/=1024; i++; }
-  return `${v.toFixed(v>=10 || i===0 ? 0 : 1)} ${u[i]}`;
-}
-function safeName(name){
-  return String(name||"bestand").replace(/[^\w.\- ]+/g,"_").trim();
-}
-
-async function listSectionFiles(projectId, sectionId){
-  const { data, error } = await sb
-    .from(FILES_TABLE)
-    .select("*")
-    .eq("project_id", projectId)
-    .eq("section_id", sectionId)
-    .order("created_at", { ascending:false });
-  if(error) throw error;
-  return data || [];
-}
-
-async function renderSectionFilesInto(listEl, projectId, sectionId){
-  listEl.innerHTML = `<div class="muted">Laden…</div>`;
-
-  let files = [];
-  try { files = await listSectionFiles(projectId, sectionId); }
-  catch(err){
-    console.error("[FILES] list error", err);
-    listEl.innerHTML = `<div class="muted">Kon bestanden niet laden.</div>`;
-    return;
-  }
-
-  if(!files.length){
-    listEl.innerHTML = `<div class="muted">Nog geen bestanden.</div>`;
-    return;
-  }
-
-  listEl.innerHTML = files.map(f => `
-    <div class="file-row" data-file-id="${f.id}">
-      <div class="file-meta">
-        <div class="file-name" title="${escapeHtml(f.file_name||"")}">${escapeHtml(f.file_name||"")}</div>
-        <div class="file-sub">${escapeHtml(formatBytes(f.size_bytes))}${f.content_type ? " • " + escapeHtml(f.content_type) : ""}</div>
-      </div>
-      <div class="file-actions">
-        <button class="btn small" type="button" data-act="open">Open</button>
-        <button class="btn small" type="button" data-act="download">Download</button>
-        <button class="btn small danger" type="button" data-act="delete">Verwijder</button>
-      </div>
-    </div>
-  `).join("");
-
-  // store current list in DOM for click handler
-  listEl._filesCache = files;
-}
-
-async function uploadFilesToSection(projectId, sectionId, fileList){
-  const files = Array.from(fileList || []);
-  if(!files.length) return;
-
-  const userRes = await sb.auth.getUser();
-  const userId = userRes?.data?.user?.id || null;
-
-  for(const file of files){
-    const original = safeName(file.name);
-    const ts = new Date().toISOString().replace(/[:.]/g,"-");
-    const path = `projects/${projectId}/sections/${sectionId}/${ts}_${original}`;
-
-    const { data: up, error: upErr } = await sb.storage
-      .from(FILES_BUCKET)
-      .upload(path, file, { contentType: file.type || "application/octet-stream", upsert:false });
-
-    if(upErr){
-      console.error("[UPLOAD] storage error", upErr);
-      alert(`Upload mislukt: ${upErr.message || upErr}`);
-      continue;
-    }
-
-    const { error: insErr } = await sb
-      .from(FILES_TABLE)
-      .insert({
-        project_id: projectId,
-        section_id: sectionId,
-        file_path: up.path,
-        file_name: original,
-        content_type: file.type || null,
-        size_bytes: file.size || null,
-        uploaded_by: userId
-      });
-
-    if(insErr){
-      console.error("[UPLOAD] db error", insErr);
-      alert(`Opslaan in database mislukt: ${insErr.message || insErr}`);
-      await sb.storage.from(FILES_BUCKET).remove([up.path]);
-      continue;
-    }
-  }
 }
