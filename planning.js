@@ -1404,7 +1404,7 @@ if (!pidArr.length) {
     
       .from("werknemers")
       .select("*")
-      .order("name", { ascending: true })
+      .order("naam", { ascending: true })
       .limit(500);
 
     if (eErr) { statusEl.textContent = "Fout werknemers: " + eErr.message; return; }
