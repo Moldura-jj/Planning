@@ -5132,13 +5132,6 @@ function infoRow(text, cols){
     return tr;
   }
 
-  function formatHoursCell(n){
-    const v = Number(n||0);
-    if(!v) return "0";
-    // 2 decimal NL met komma, maar kort
-    const s = (Math.round(v*100)/100).toString().replace(".", ",");
-    return s;
-  }
 
   function pickKey(obj, keys){
     if(!obj) return keys[0];
