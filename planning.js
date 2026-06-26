@@ -1054,12 +1054,13 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
     statusEl.textContent = `Laden… (${startISO} t/m ${endISO})`;
 
     // 1) projecten
-const { data: pData, error: pErr2 } = await sb
-  .from("projecten")
-  .select("*")
-  .in("salesstatus", [2,3,4,5,6,7,8])
-  .order("offerno", { ascending: true })
-  .limit(500);
+    const { data: projecten, error: pErr } = await sb
+      .from("projecten_planner")
+      .select("*")
+      .in("salesstatus", [3,4,5,6,7,8])
+      .gte("completiondate_d", todayISO)
+      .order("offerno", { ascending: true })
+      .limit(500);
 
 
     if (pErr) { statusEl.textContent = "Fout projecten: " + pErr.message; return; }
