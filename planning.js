@@ -2827,12 +2827,31 @@ plS.reis += Number(e.dummyReis || 0) * HOURS_PER_PERSON_DAY * pfS;
   tbody.appendChild(trTotal);
 
     // ---- medewerker rijen (standaard verborgen) ----
-    const empIdKey = "id";
-    const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), ["naam","name","fullname","display_name"]);
+const empIdKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
+  "werknemer_id",
+  "id",
+  "employee_id",
+  "user_id"
+]);
 
+const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
+  "naam",
+  "name",
+  "fullname",
+  "display_name"
+]);
+
+console.log("werknemersCap keys:", Object.keys(werknemersCap?.[0] || {}), "empIdKey:", empIdKey, "empNameKey:", empNameKey);
     for (const w of (werknemersCap || [])) {
-      const empId = w?.[empIdKey];                 // <-- vaste naam
-      const empName = w?.[empNameKey] ?? String(empId ?? "");
+const empId =
+  w?.[empIdKey] ??
+  w?.werknemer_id ??
+  w?.id ??
+  w?.employee_id ??
+  w?.user_id ??
+  "";
+
+const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
 
       const tr = document.createElement("tr");
       tr.className = "cap-emp-row hidden";
