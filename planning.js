@@ -3511,6 +3511,13 @@ formEl.innerHTML = `
       if (!iso) continue;
       if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: "werk" });
     }
+    
+console.log("CAP SAVE", {
+  empId,
+  empIdNumber: Number(empId),
+  empName,
+  rows
+});
 
     const del = await sb
       .from("capacity_entries")
