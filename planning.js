@@ -3243,6 +3243,7 @@ const totals = {
       // ✅ click op capaciteit-cel => open modal (zelfde als klik op medewerkernaam)
 const capCell = ev.target.closest("td.cap-cell-click");
 if (capCell) {
+  console.log("CAP CELL CLICK", capCell.dataset);
   const empId = String(capCell.dataset.empId || "");
   const empName = String(capCell.dataset.empName || empId);
   const dateISO = String(capCell.dataset.workDate || "");
@@ -4961,8 +4962,19 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
 
 
 function appendSectionDayCells(tr, dates, labels, sectionId, projectId, assignCountByDay, assignMap, werknemers, inhuurById) {
-  const empIdKey = "id";
-  const empNameKey = pickKey(werknemers?.[0], ["naam","name","fullname","display_name"]);
+const empIdKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
+  "id",
+  "werknemer_id",
+  "employee_id",
+  "user_id"
+]);
+
+const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
+  "naam",
+  "name",
+  "fullname",
+  "display_name"
+]);
   const empNameById = new Map((werknemers || []).map(w => [
     String(w?.[empIdKey] ?? "").trim(),
     String(w?.[empNameKey] || w?.[empIdKey] || "")
