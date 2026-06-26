@@ -1055,7 +1055,7 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
 
     // 1) projecten
     const { data: projecten, error: pErr } = await sb
-      .from("projecten_planner")
+      .from("projecten")
       .select("*")
       .in("salesstatus", [3,4,5,6,7,8])
       .gte("completiondate_d", todayISO)
