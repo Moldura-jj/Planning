@@ -13,7 +13,7 @@ export const DB = {
     capacityEntries: "capacity_entries",
     sectionWork: "section_work",
     projectPlan: "projecten_planner",
-    projectOrders: "project_orders",
+    projectOrders: "section_orders",
   },
 
   // Primary keys (pas aan naar jouw schema)
