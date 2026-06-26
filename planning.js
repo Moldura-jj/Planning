@@ -3484,27 +3484,12 @@ formEl.innerHTML = `
         .gte("work_date", r.startISO)
         .lte("work_date", r.endISO);
 
-    if (del.error) {
-      console.error("CAP DELETE ERROR", del.error);
-      alert("Fout verwijderen: " + del.error.message);
-      return;
+      if (del.error) { alert("Fout verwijderen: " + del.error.message); return; }
     }
 
-    if (rows.length) {
-      console.log("CAP INSERT ROWS", rows);
-
-      const ins = await sb
-        .from("capacity_entries")
-        .insert(rows)
-        .select();
-
-      if (ins.error) {
-        console.error("CAP INSERT ERROR", ins.error);
-        alert("Fout opslaan: " + ins.error.message);
-        return;
-      }
-
-      console.log("CAP INSERT OK", ins.data);
+    if (allInsertRows.length) {
+      const ins = await sb.from("capacity_entries").insert(allInsertRows);
+      if (ins.error) { alert("Fout opslaan: " + ins.error.message); return; }
     }
 
     //modal.close();
@@ -3526,7 +3511,7 @@ formEl.innerHTML = `
       if (!iso) continue;
       if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: "werk" });
     }
-
+    
 console.log("CAP SAVE", {
   empId,
   empIdNumber: Number(empId),
