@@ -1812,7 +1812,7 @@ function parseSectionNo(v){
       entry.rows.push(a);
 
       const rowHours = Number(a.hours ?? 1);
-      const entry = dmA.get(d);
+
 
       const isDummy = (emp === String(DUMMY_SEC_ID)); // ✅ sectie dummy alleen
 
@@ -1830,7 +1830,7 @@ const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
           entry.prodHours += rowHours;
         }
         }
-      }
+
 
       if (wt === "montage") {
         if (isDummy && note.startsWith("inhuur:")) {
@@ -6041,3 +6041,4 @@ function getContiguousRunFromCell(td){
 
   return { startISO, endISO };
 }
+    }
