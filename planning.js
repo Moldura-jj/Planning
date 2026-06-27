@@ -4249,12 +4249,15 @@ const countM = rowM.querySelector(".concept-count");
 
       montFullDay.onchange = () => {
         if (montFullDay.checked) {
-          const empCap = capByEmp.get(String(eid)) || new Map();
-          const dayHours = Number(empCap.get(dateISO) || 0);
+          const remaining = getEmployeeRemainingCapacityHours(eid, dateISO, {
+            sectionId: sid
+          });
 
-          const fullHours = dayHours > 0 ? dayHours : HOURS_PER_PERSON_DAY;
+          // Omdat je met planFactor rekent, is dit de echte taakduur die nog past.
+          const pf = Number(settings.planFactor || 1);
+          const fullHours = remaining * pf;
 
-          montHoursInp.value = String(fullHours).replace(".", ",");
+          montHoursInp.value = String(Math.round(fullHours * 100) / 100).replace(".", ",");
           selected.montHours.set(eid, fullHours);
         }
       };
