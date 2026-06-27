@@ -108,10 +108,11 @@ sectionRowCols: [
   // Welke detailvelden tonen we als je een sectie openklapt?
   sectionDetailCols: [
     { label: "Tekst", col: "salestextrtf" },
-    { label: "Werkvoorbereiding uren", col: "uren_wvb" },
-    { label: "Productie uren", col: "uren_prod" },
-    { label: "Montage uren", col: ["uren_montage", "uren_mont"] },
-    { label: "Reis uren", col: "uren_reis" },
+    { label: "Werkvoorbereiding", col: "uren_wvb" },
+    { label: "Werkvoorbereiding", col: "uren_wvb" },
+    { label: "Productie", col: "uren_prod" },
+    { label: "Montage", col: ["uren_montage", "uren_mont"] },
+    { label: "Reis", col: "uren_reis" },
   ],
 
   // Planning regels

@@ -150,6 +150,7 @@ let orders = [];
   // Kolomnamen van uren kunnen per omgeving verschillen; we volgen config.js
 const totalsObj = {
   total_wvb: sumNums(sections, "uren_wvb"),
+  total_cnc: sumNums(sections, "uren_cnc"),
   total_prod: sumNums(sections, "uren_prod"),
   total_mont: sumNums(sections, "uren_montage") || sumNums(sections, "uren_mont"),
   total_reis: sumNums(sections, "uren_reis"),
@@ -524,6 +525,7 @@ async function saveSection(sectionId) {
     if ([
       "aantal",
       "uren_wvb",
+      "uren_cnc",
       "uren_prod",
       "uren_montage",
       "uren_mont",
@@ -658,6 +660,7 @@ function ensureAddSectionButton(projectId) {
       aantal: 1,
       salestextrtf: "",
       uren_wvb: 0,
+      uren_cnc: 0,
       uren_prod: 0,
       uren_montage: 0,
       uren_reis: 0,

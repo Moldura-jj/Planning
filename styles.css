@@ -1773,3 +1773,21 @@ td.hourscol{
 .page-project h2{
   line-height: 1.15;
 }
+.section-action-btn{
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d9e2ec;
+  background: #fff;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-left: 6px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.section-action-btn:hover{
+  background: #f6f8fb;
+}
