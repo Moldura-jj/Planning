@@ -1623,11 +1623,7 @@ function parseSectionNo(v){
     resetZebra(); // ✅ hier
 
     // indexes
-// Legacy ID = oude numerieke project_id, gebruikt voor secties
-const projIdKey = pickKey(projecten[0], ["project_id", "id"]);
-
-// UUID = echte Supabase id, gebruikt voor project_assignments
-const projUuidKey = pickKey(projecten[0], ["id"]);
+const projIdKey = pickKey(projecten[0], ["project_id","id"]);
 
 const projNrKey = pickKey(projecten[0], ["offerno","projectnr","project_nr","nummer","nr"]);
 const projNameKey = pickKey(projecten[0], ["projectname","naam","name","omschrijving","titel","title"]);
@@ -1717,19 +1713,16 @@ const klantKey = pickKey(projecten[0], ["deliveryname", "klantnaam","klant_name"
     // snelle lookup: projectId -> { complTxt }
 const projById = new Map();
 for (const p of projecten || []) {
-  const pidLegacy = String(p?.[projIdKey] ?? "").trim();
-  const pidUuid = String(p?.[projUuidKey] ?? "").trim();
+  const pid = String(p?.[projIdKey] ?? "").trim();
+  if (!pid) continue;
 
   const complRaw = p?.[completionKey] ?? "";
 
-  const meta = {
+  projById.set(pid, {
     nr: String(p?.[projNrKey] ?? "").trim(),
     nm: String(p?.[projNameKey] ?? "").trim(),
     complTxt: formatDateNL(complRaw),
-  };
-
-  if (pidLegacy) projById.set(pidLegacy, meta);
-  if (pidUuid) projById.set(pidUuid, meta);
+  });
 }
 
     // helper: totals per sectie (op basis van workMap + huidige dates)
@@ -2141,16 +2134,13 @@ if (wt === "montage") {
       // --- project meta voor labels (offerno + projectnaam)
 const projMetaById = new Map();
 for (const p of (projecten || [])) {
-  const pidLegacy = String(p?.[projIdKey] ?? "").trim();
-  const pidUuid = String(p?.[projUuidKey] ?? "").trim();
+  const pid = String(p?.[projIdKey] ?? "").trim();
+  if (!pid) continue;
 
-  const meta = {
+  projMetaById.set(pid, {
     nr: String(p?.[projNrKey] ?? "").trim(),
     nm: String(p?.[projNameKey] ?? "").trim(),
-  };
-
-  if (pidLegacy) projMetaById.set(pidLegacy, meta);
-  if (pidUuid) projMetaById.set(pidUuid, meta);
+  });
 }
 
     // capacity: per werknemer per dag  (KEYS ALS STRING!)
@@ -2422,8 +2412,7 @@ trMonth.appendChild(hdrCell("", `hdr-cell hourscol sticky-top sticky-left2 ${hou
 
     // Projects + sections (expand/collapse)
 for(const p of projecten || []){
-  const pid = p?.[projIdKey];              // legacy/numeriek, voor secties
-  const projectUuid = p?.[projUuidKey];    // uuid, voor project_assignments
+  const pid = p?.[projIdKey];
 
   const nr  = p?.[projNrKey] ?? "";
       const isDebugProj = String(nr).includes(DEBUG_OFFNR);
@@ -2525,7 +2514,7 @@ for (const dd of dates) {
   }
 
   // 2) projectniveau ook meenemen
-  const pe = projectAssignMap.get(String(projectUuid))?.get(iso);
+  const pe = projectAssignMap.get(String(pid)))?.get(iso);
   if (pe) {
     for (const emp of (pe.productie || [])) plP.prod += HOURS_PER_PERSON_DAY * pfP;
     for (const emp of (pe.cnc || []))       plP.cnc  += HOURS_PER_PERSON_DAY * pfP;
@@ -2579,7 +2568,7 @@ for (const dd of dates) {
   }
 
   // 2) project-niveau (project_assignments)  ✅ dit miste
-  const pe = projectAssignMap.get(String(projectUuid))?.get(iso);
+  const pe = projectAssignMap.get(String(pid)))?.get(iso);
     if (pe) {
       prod += Number(pe.prodHours || 0)
           + Number(pe.dummyProd || 0)
@@ -2870,7 +2859,7 @@ for (const dd of dates) {
       const iso = toISODate(dd);
 
       // 1) projectniveau montage (project_assignments)
-      const pe = projectAssignMap.get(String(projectUuid))?.get(iso);
+      const pe = projectAssignMap.get(String(pid)))?.get(iso);
       const projMont = pe ? (pe.montage.size + Number(pe.dummyMont || 0)) : 0;
       const projDummyMont = pe ? Number(pe.dummyMont || 0) : 0;
 
@@ -3726,9 +3715,15 @@ console.log("CAP SAVE", {
 const ptd = ev.target.closest("td.project-montage-click");
 if (ptd) {
   if (__wasDragging) return;
-  const projectId = String(ptd.dataset.projectId || "");
-  const dateISO   = String(ptd.dataset.workDate || "");
-  if (!projectId || !dateISO) return;
+
+  
+const projectId = String(ptd.dataset.projectId || "").trim();
+const dateISO   = String(ptd.dataset.workDate || "").trim();
+
+if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO) {
+  alert("Geen geldig project-id gevonden voor deze projectregel.");
+  return;
+}
 
   const modal = ensureAssignModal();
   modal.wrap.classList.add("show");
