@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Moldura — Projecten</title>
+  <title>LOVD Planning — Projecten</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="page-project">
@@ -13,12 +13,12 @@
         <a class="btn ghost" href="index.html">← Menu</a>
         <div class="brand"><span class="dot"></span> Projecten</div>
       </div>
-      <div class="row">
-        <input id="q" class="input" style="width:420px; max-width:60vw" placeholder="Zoek op projectnr / klant / projectnaam..." />
-        <button id="btnReload" class="btn">Ververs</button>
-        <button id="btnLogout" class="btn">Uitloggen</button>
-      </div>
-    </div>
+        <div class="row">
+          <input id="q" class="input" style="width:420px; max-width:60vw" placeholder="Zoek op projectnr / klant / projectnaam..." />
+          <button id="btnAddProject" class="btn primary" type="button">+ Project</button>
+          <button id="btnReload" class="btn" type="button">Ververs</button>
+          <button id="btnLogout" class="btn" type="button">Uitloggen</button>
+        </div>
 
     <div class="card">
       <div class="hd">
@@ -41,6 +41,45 @@
       </div>
     </div>
   </div>
+  
+<div id="projectModalBackdrop" class="modal-backdrop" hidden></div>
+
+<div id="projectModal" class="modal" hidden>
+  <div class="modal-head">
+    <div>
+      <h2>Project toevoegen</h2>
+      <div class="muted">Nieuw project handmatig aanmaken</div>
+    </div>
+    <button id="btnProjectModalClose" class="btn small" type="button">✕</button>
+  </div>
+
+  <div class="modal-body">
+    <label class="field">
+      <span>Projectnummer</span>
+      <input id="pmProjectNr" class="input" type="text" placeholder="Bijv. 2600104" />
+    </label>
+
+    <label class="field">
+      <span>Klant</span>
+      <input id="pmKlant" class="input" type="text" placeholder="Klantnaam" />
+    </label>
+
+    <label class="field">
+      <span>Projectnaam</span>
+      <input id="pmProjectNaam" class="input" type="text" placeholder="Projectomschrijving" />
+    </label>
+
+    <label class="field">
+      <span>Status</span>
+      <input id="pmStatus" class="input" type="number" value="2" />
+    </label>
+  </div>
+
+  <div class="modal-foot">
+    <button id="btnProjectCancel" class="btn" type="button">Annuleren</button>
+    <button id="btnProjectSave" class="btn primary" type="button">Opslaan</button>
+  </div>
+</div>
 
   <script type="module" src="projects.js"></script>
 </body>
