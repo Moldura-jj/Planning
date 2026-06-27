@@ -164,156 +164,244 @@ renderBlock("blkTotals", DB.projectBlocks.totals, totalsObj, totalsObj);
     + `<th style="width:170px">In planning</th>`
     + `<th style="width:70px"></th>`;
     
-  el("secBody").innerHTML = sections.map((s, idx)=>{
-    const sid = String(s?.[DB.sectionPkCol] ?? "");
+el("secBody").innerHTML = sections.map((s, idx) => {
+  const sid = String(s?.[DB.sectionPkCol] ?? "");
+  const ords = ordersBySection.get(sid) || [];
+  const includeInPlanning = getIncludePlanningValue(s);
 
-    const cols = DB.sectionRowCols.map(c=>{
-      const v = Array.isArray(c.col)
-        ? c.col.map(k => valFrom(s, k)).find(x => x !== null && x !== undefined && x !== "")
-        : valFrom(s, c.col);
+  const cols = DB.sectionRowCols.map(c => {
+    const v = Array.isArray(c.col)
+      ? c.col.map(k => valFrom(s, k)).find(x => x !== null && x !== undefined && x !== "")
+      : valFrom(s, c.col);
 
-      return `<td>${escapeHtml(v ?? "")}</td>`;
+    return `<td>${escapeHtml(v ?? "")}</td>`;
+  }).join("");
+
+  // Bewerkbare hoofdgegevens van sectie
+  const sectionMainFields = `
+    <div class="fieldgrid" style="grid-template-columns:220px 1fr; margin-top:8px">
+      <div class="label">Paragraaf</div>
+      <input
+        class="value section-edit"
+        data-sid="${escapeHtml(sid)}"
+        data-col="paragraaf"
+        type="text"
+        value="${escapeHtml(valFrom(s, "paragraaf") ?? "")}"
+      >
+    </div>
+
+    <div class="fieldgrid" style="grid-template-columns:220px 1fr; margin-top:8px">
+      <div class="label">Omschrijving</div>
+      <input
+        class="value section-edit"
+        data-sid="${escapeHtml(sid)}"
+        data-col="omschrijving"
+        type="text"
+        value="${escapeHtml(valFrom(s, "omschrijving") ?? "")}"
+      >
+    </div>
+
+    <div class="fieldgrid" style="grid-template-columns:220px 1fr; margin-top:8px">
+      <div class="label">Aantal</div>
+      <input
+        class="value section-edit"
+        data-sid="${escapeHtml(sid)}"
+        data-col="aantal"
+        type="number"
+        step="1"
+        value="${escapeHtml(valFrom(s, "aantal") ?? 0)}"
+      >
+    </div>
+  `;
+
+  // Detailvelden zonder uren
+  const detailText = DB.sectionDetailCols
+    .filter(d => !String(Array.isArray(d.col) ? d.col[0] : d.col).includes("uren_"))
+    .map(d => {
+      const col = Array.isArray(d.col) ? d.col[0] : d.col;
+
+      const raw = Array.isArray(d.col)
+        ? d.col.map(c => valFrom(s, c)).find(v => v !== null && v !== undefined && v !== "")
+        : valFrom(s, d.col);
+
+      const v = raw ?? "";
+
+      return `
+        <div class="fieldgrid" style="grid-template-columns:220px 1fr; margin-top:8px">
+          <div class="label">${escapeHtml(d.label)}</div>
+          <input
+            class="value section-edit"
+            data-sid="${escapeHtml(sid)}"
+            data-col="${escapeHtml(col)}"
+            type="text"
+            value="${escapeHtml(v)}"
+          >
+        </div>
+      `;
     }).join("");
 
-// ===== detail opsplitsen: tekst/beschrijving boven, uren links =====
-const detailText = DB.sectionDetailCols
-  .filter(d => !String(Array.isArray(d.col) ? d.col[0] : d.col).includes("uren_"))
-  .map(d => {
-    const col = Array.isArray(d.col) ? d.col[0] : d.col;
+  // Urenvelden
+  const detailHours = DB.sectionDetailCols
+    .filter(d => String(Array.isArray(d.col) ? d.col[0] : d.col).includes("uren_"))
+    .map(d => {
+      const col = Array.isArray(d.col) ? d.col[0] : d.col;
 
-    const raw = Array.isArray(d.col)
-      ? d.col.map(c => valFrom(s, c)).find(v => v !== null && v !== undefined && v !== "")
-      : valFrom(s, d.col);
+      const raw = Array.isArray(d.col)
+        ? d.col.map(c => valFrom(s, c)).find(v => v !== null && v !== undefined && v !== "")
+        : valFrom(s, d.col);
 
-    const v = raw ?? "";
+      const v = raw ?? 0;
 
-    return `
-      <div class="fieldgrid" style="grid-template-columns:220px 1fr; margin-top:8px">
-        <div class="label">${escapeHtml(d.label)}</div>
-        <input
-          class="value section-edit"
-          data-sid="${escapeHtml(sid)}"
-          data-col="${escapeHtml(col)}"
-          type="text"
-          value="${escapeHtml(v)}"
-        >
-      </div>
-    `;
-  }).join("");
+      return `
+        <div class="fieldgrid" style="grid-template-columns:190px 1fr; margin-top:8px">
+          <div class="label">${escapeHtml(d.label)}</div>
+          <input
+            class="value section-edit"
+            data-sid="${escapeHtml(sid)}"
+            data-col="${escapeHtml(col)}"
+            type="number"
+            step="0.25"
+            value="${escapeHtml(v)}"
+          >
+        </div>
+      `;
+    }).join("");
 
-const detailHours = DB.sectionDetailCols
-  .filter(d => String(Array.isArray(d.col) ? d.col[0] : d.col).includes("uren_"))
-  .map(d => {
-    const col = Array.isArray(d.col) ? d.col[0] : d.col;
+  const ordersHtml = `
+    <div class="muted" style="font-weight:800; margin:14px 0 8px">Bestellingen</div>
+    ${renderOrdersAccordionHtml(ords)}
+  `;
 
-    const raw = Array.isArray(d.col)
-      ? d.col.map(c => valFrom(s, c)).find(v => v !== null && v !== undefined && v !== "")
-      : valFrom(s, d.col);
+  return `
+    <tr class="accordion-row" data-i="${idx}">
+      ${cols}
 
-    const v = raw ?? 0;
+      <td>
+        <label class="row" style="gap:8px; justify-content:flex-start" title="Sectie opnemen in planning">
+          <input
+            type="checkbox"
+            class="js-include-planning"
+            data-sid="${escapeHtml(sid)}"
+            ${includeInPlanning ? "checked" : ""}
+          >
+          <span class="muted" style="font-size:12px">Opnemen</span>
+        </label>
+      </td>
 
-    return `
-      <div class="fieldgrid" style="grid-template-columns:190px 1fr; margin-top:8px">
-        <div class="label">${escapeHtml(d.label)}</div>
-        <input
-          class="value section-edit"
-          data-sid="${escapeHtml(sid)}"
-          data-col="${escapeHtml(col)}"
-          type="number"
-          step="0.25"
-          value="${escapeHtml(v)}"
-        >
-      </div>
-    `;
-  }).join("");
+      <td style="text-align:right; white-space:nowrap">
+        <button
+          type="button"
+          class="section-action-btn js-edit-section"
+          data-i="${idx}"
+          title="Sectie bewerken"
+        >✎</button>
 
+        <button
+          type="button"
+          class="section-action-btn js-toggle-section"
+          data-i="${idx}"
+          title="Sectie open/dicht"
+        >▾</button>
+      </td>
+    </tr>
 
-// ===== Orders HTML voor deze sectie (accordion per bestel_nummer) =====
-const ords = ordersBySection.get(sid) || [];
+    <tr class="section-details" data-i="${idx}" style="display:none">
+      <td colspan="${DB.sectionRowCols.length + 2}">
+        <div class="inner">
+          <div class="muted" style="font-weight:800; margin-bottom:8px">Sectie details</div>
 
-const ordersHtml = `
-  <div class="muted" style="font-weight:800; margin:14px 0 8px">Bestellingen</div>
-  ${renderOrdersAccordionHtml(ords)}
-`;
+          ${sectionMainFields}
+          ${detailText}
 
+          <div class="sec-split" style="display:grid; grid-template-columns: 260px 1fr; gap:16px; margin-top:14px;">
+            <div class="sec-left">
+              ${detailHours}
 
-const includeInPlanning = getIncludePlanningValue(s);
-return `
-  <tr class="accordion-row" data-i="${idx}">
-    ${cols}
-
-    <td>
-      <label class="row" style="gap:8px; justify-content:flex-start" title="Sectie opnemen in planning">
-        <input type="checkbox" class="js-include-planning" data-sid="${escapeHtml(sid)}" ${includeInPlanning ? "checked" : ""}>
-        <span class="muted" style="font-size:12px">Opnemen</span>
-      </label>
-    </td>
-
-    <td style="text-align:right"><span class="pill">▾</span></td>
-  </tr>
-      <tr class="section-details" data-i="${idx}" style="display:none">
-        <td colspan="${DB.sectionRowCols.length + 2}">
-          <div class="inner">
-            <div class="inner">
-              <div class="muted" style="font-weight:800; margin-bottom:8px">Sectie details</div>
-
-              <!-- 1) Tekst/beschrijving boven (volledige breedte) -->
-              ${detailText}
-
-              <!-- 2) Uren links + Bestellingen rechts -->
-              <div class="sec-split" style="display:grid; grid-template-columns: 260px 1fr; gap:16px; margin-top:14px;">
-                <div class="sec-left">
-                  ${detailHours}
-
-                  <button
-                    type="button"
-                    class="btn primary js-save-section"
-                    data-sid="${escapeHtml(sid)}"
-                    style="margin-top:14px"
-                  >
-                    Sectie opslaan
-                  </button>
-                </div>
-
-                <div class="sec-right">
-                  ${ordersHtml}
-                </div>
-              </div>
+              <button
+                type="button"
+                class="btn primary js-save-section"
+                data-sid="${escapeHtml(sid)}"
+                style="margin-top:14px"
+              >
+                Sectie opslaan
+              </button>
             </div>
 
-        </td>
-      </tr>
-    `;
-  }).join("");
+            <div class="sec-right">
+              ${ordersHtml}
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `;
+}).join("");
 
-  // Accordion behavior
-  [...el("secBody").querySelectorAll(".accordion-row")].forEach(tr=>{
-    tr.addEventListener("click", ()=>{
-      const i = tr.getAttribute("data-i");
-      const detailRow = el("secBody").querySelector(`.section-details[data-i="${i}"]`);
-      const open = detailRow.style.display !== "none";
-      detailRow.style.display = open ? "none" : "table-row";
-      tr.querySelector(".pill").textContent = open ? "▾" : "▴";
-    });
+
+// Accordion behavior
+function setSectionOpen(i, forceOpen = null) {
+  const row = el("secBody").querySelector(`.accordion-row[data-i="${i}"]`);
+  const detailRow = el("secBody").querySelector(`.section-details[data-i="${i}"]`);
+  if (!row || !detailRow) return;
+
+  const toggleBtn = row.querySelector(".js-toggle-section");
+  const isOpen = detailRow.style.display !== "none";
+  const nextOpen = forceOpen === null ? !isOpen : forceOpen;
+
+  detailRow.style.display = nextOpen ? "table-row" : "none";
+  if (toggleBtn) toggleBtn.textContent = nextOpen ? "▴" : "▾";
+}
+
+[...el("secBody").querySelectorAll(".accordion-row")].forEach(tr => {
+  tr.addEventListener("click", () => {
+    const i = tr.getAttribute("data-i");
+    setSectionOpen(i);
   });
+});
 
-  // Checkbox: opnemen in planning
-  [...el("secBody").querySelectorAll(".js-include-planning")].forEach(cb => {
-    cb.addEventListener("click", (e) => e.stopPropagation()); // voorkomt sectie open/dicht
-    cb.addEventListener("change", async (e) => {
-      e.stopPropagation();
-      const sectionId = cb.getAttribute("data-sid");
-      const checked = cb.checked;
+[...el("secBody").querySelectorAll(".js-toggle-section")].forEach(btn => {
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
 
-      cb.disabled = true;
-      const ok = await saveIncludeInPlanning(sectionId, checked);
-      cb.disabled = false;
-
-      if (!ok) cb.checked = !checked; // revert bij fout
-    });
+    const i = btn.getAttribute("data-i");
+    setSectionOpen(i);
   });
+});
 
-  // Sectie opslaan
+[...el("secBody").querySelectorAll(".js-edit-section")].forEach(btn => {
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const i = btn.getAttribute("data-i");
+    setSectionOpen(i, true);
+
+    const detailRow = el("secBody").querySelector(`.section-details[data-i="${i}"]`);
+    const firstInput = detailRow?.querySelector(".section-edit");
+    if (firstInput) firstInput.focus();
+  });
+});
+
+// Checkbox: opnemen in planning
+[...el("secBody").querySelectorAll(".js-include-planning")].forEach(cb => {
+  cb.addEventListener("click", (e) => e.stopPropagation());
+
+  cb.addEventListener("change", async (e) => {
+    e.stopPropagation();
+
+    const sectionId = cb.getAttribute("data-sid");
+    const checked = cb.checked;
+
+    cb.disabled = true;
+    const ok = await saveIncludeInPlanning(sectionId, checked);
+    cb.disabled = false;
+
+    if (!ok) cb.checked = !checked;
+  });
+});
+
+// Sectie opslaan
 [...el("secBody").querySelectorAll(".js-save-section")].forEach(btn => {
   btn.addEventListener("click", async (e) => {
     e.preventDefault();
