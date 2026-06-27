@@ -456,21 +456,33 @@ async function saveProject(projectId) {
 
 
 function ensureAddSectionButton(projectId) {
-  const secTitle = document.querySelector("#secMeta")?.parentElement;
-  if (!secTitle) return;
+  const secMeta = document.getElementById("secMeta");
+  if (!secMeta) {
+    console.warn("secMeta niet gevonden");
+    return;
+  }
 
-  if (document.getElementById("btnAddSection")) return;
+  const secTitle = secMeta.parentElement;
+  if (!secTitle) {
+    console.warn("parent van secMeta niet gevonden");
+    return;
+  }
 
-  const btn = document.createElement("button");
-  btn.id = "btnAddSection";
-  btn.type = "button";
-  btn.className = "btn primary";
-  btn.textContent = "+ Sectie";
-  btn.style.marginRight = "10px";
+  let btn = document.getElementById("btnAddSection");
 
-  secTitle.insertBefore(btn, document.getElementById("secMeta"));
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.id = "btnAddSection";
+    btn.type = "button";
+    btn.className = "btn primary";
+    btn.textContent = "+ Sectie";
+    btn.style.marginRight = "10px";
 
-  btn.addEventListener("click", async (e) => {
+    secTitle.insertBefore(btn, secMeta);
+  }
+
+  // Belangrijk: altijd opnieuw koppelen, ook als de knop al bestond
+  btn.onclick = async (e) => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -487,11 +499,12 @@ function ensureAddSectionButton(projectId) {
       paragraaf: paragraaf.trim(),
       omschrijving: omschrijving.trim(),
       aantal: 1,
-      in_planning: false,
+      salestextrtf: "",
       uren_wvb: 0,
       uren_prod: 0,
       uren_montage: 0,
       uren_reis: 0,
+      in_planning: true
     };
 
     console.log("INSERT SECTION", row);
@@ -501,13 +514,15 @@ function ensureAddSectionButton(projectId) {
       .insert(row);
 
     if (error) {
-      console.error(error);
-      alert("Fout bij sectie toevoegen: " + error.message);
+      console.error("Sectie toevoegen mislukt:", error);
+      setStatus(el("status"), "Sectie toevoegen mislukt: " + error.message, "error");
+      alert("Sectie toevoegen mislukt: " + error.message);
       return;
     }
 
+    setStatus(el("status"), "Sectie toegevoegd.");
     await loadProject(projectId);
-  });
+  };
 }
 
 async function addSection(projectId){
