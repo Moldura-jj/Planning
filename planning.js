@@ -4030,7 +4030,7 @@ const countM = rowM.querySelector(".concept-count");
                 type="checkbox"
                 class="full-day-prod"
                 data-eid="${escapeAttr(eid)}"
-                ${prodHours === 7.75 ? "checked" : ""}
+                ${prodHours === availHours && availHours > 0 ? "checked" : ""}
               />
               <span class="muted" style="font-size:12px;">hele dag</span>
             </label>
@@ -4077,8 +4077,13 @@ const countM = rowM.querySelector(".concept-count");
 
       prodFullDay.onchange = () => {
         if (prodFullDay.checked) {
-          prodHoursInp.value = "7,75";
-          selected.prodHours.set(eid, 7.75);
+          const empCap = capByEmp.get(String(eid)) || new Map();
+          const dayHours = Number(empCap.get(dateISO) || 0);
+
+          const fullHours = dayHours > 0 ? dayHours : HOURS_PER_PERSON_DAY;
+
+          prodHoursInp.value = String(fullHours).replace(".", ",");
+          selected.prodHours.set(eid, fullHours);
         }
       };
 
@@ -4100,7 +4105,7 @@ const countM = rowM.querySelector(".concept-count");
                 type="checkbox"
                 class="full-day-mont"
                 data-eid="${escapeAttr(eid)}"
-                ${montHours === 7.75 ? "checked" : ""}
+                ${montHours === availHours && availHours > 0 ? "checked" : ""}
               />
               <span class="muted" style="font-size:12px;">hele dag</span>
             </label>
@@ -4147,8 +4152,13 @@ const countM = rowM.querySelector(".concept-count");
 
       montFullDay.onchange = () => {
         if (montFullDay.checked) {
-          montHoursInp.value = "7,75";
-          selected.montHours.set(eid, 7.75);
+          const empCap = capByEmp.get(String(eid)) || new Map();
+          const dayHours = Number(empCap.get(dateISO) || 0);
+
+          const fullHours = dayHours > 0 ? dayHours : HOURS_PER_PERSON_DAY;
+
+          montHoursInp.value = String(fullHours).replace(".", ",");
+          selected.montHours.set(eid, fullHours);
         }
       };
           listMont.appendChild(rowM);
