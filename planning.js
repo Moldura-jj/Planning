@@ -1623,11 +1623,15 @@ function parseSectionNo(v){
     resetZebra(); // ✅ hier
 
     // indexes
-    const projIdKey = pickKey(projecten[0], ["project_id","id"]);
-    const projNrKey = pickKey(projecten[0], ["offerno","projectnr","project_nr","nummer","nr"]);
-    const projNameKey = pickKey(projecten[0], ["projectname","naam","name","omschrijving","titel","title"]);
-    const klantKey = pickKey(projecten[0], ["deliveryname", "klantnaam","klant_name","klant","customer","relatie"]);
+// Legacy ID = oude numerieke project_id, gebruikt voor secties
+const projIdKey = pickKey(projecten[0], ["project_id", "id"]);
 
+// UUID = echte Supabase id, gebruikt voor project_assignments
+const projUuidKey = pickKey(projecten[0], ["id"]);
+
+const projNrKey = pickKey(projecten[0], ["offerno","projectnr","project_nr","nummer","nr"]);
+const projNameKey = pickKey(projecten[0], ["projectname","naam","name","omschrijving","titel","title"]);
+const klantKey = pickKey(projecten[0], ["deliveryname", "klantnaam","klant_name","klant","customer","relatie"]);
 
     const completionKey = pickKey(projecten[0], ["completiondate_d","completiondate","completion_date","opleverdatum","end_date"]);
     const deliveryKey   = pickKey(projecten[0], ["deliverydate_d","deliverydate","delivery_date","leverdatum"]);
@@ -1711,17 +1715,22 @@ function parseSectionNo(v){
     }
 
     // snelle lookup: projectId -> { complTxt }
-    const projById = new Map();
-    for (const p of projecten || []) {
-      const pid = p?.[projIdKey];
-      if (!pid) continue;
-      const complRaw = p?.[completionKey] ?? "";
-      projById.set(String(pid), {
-        nr: String(p?.[projNrKey] ?? "").trim(),
-        nm: String(p?.[projNameKey] ?? "").trim(),
-        complTxt: formatDateNL(complRaw),
-      });
-    }
+const projById = new Map();
+for (const p of projecten || []) {
+  const pidLegacy = String(p?.[projIdKey] ?? "").trim();
+  const pidUuid = String(p?.[projUuidKey] ?? "").trim();
+
+  const complRaw = p?.[completionKey] ?? "";
+
+  const meta = {
+    nr: String(p?.[projNrKey] ?? "").trim(),
+    nm: String(p?.[projNameKey] ?? "").trim(),
+    complTxt: formatDateNL(complRaw),
+  };
+
+  if (pidLegacy) projById.set(pidLegacy, meta);
+  if (pidUuid) projById.set(pidUuid, meta);
+}
 
     // helper: totals per sectie (op basis van workMap + huidige dates)
     function calcSectionTotals(sid){
@@ -2130,15 +2139,19 @@ if (wt === "montage") {
 })();
 
       // --- project meta voor labels (offerno + projectnaam)
-      const projMetaById = new Map();
-      for (const p of (projecten || [])) {
-        const pid = String(p?.[projIdKey] ?? "").trim();
-        if (!pid) continue;
-        projMetaById.set(pid, {
-          nr: String(p?.[projNrKey] ?? "").trim(),
-          nm: String(p?.[projNameKey] ?? "").trim(),
-        });
-      }
+const projMetaById = new Map();
+for (const p of (projecten || [])) {
+  const pidLegacy = String(p?.[projIdKey] ?? "").trim();
+  const pidUuid = String(p?.[projUuidKey] ?? "").trim();
+
+  const meta = {
+    nr: String(p?.[projNrKey] ?? "").trim(),
+    nm: String(p?.[projNameKey] ?? "").trim(),
+  };
+
+  if (pidLegacy) projMetaById.set(pidLegacy, meta);
+  if (pidUuid) projMetaById.set(pidUuid, meta);
+}
 
     // capacity: per werknemer per dag  (KEYS ALS STRING!)
     const capByEmp = new Map(); // empIdStr -> dateISO -> sumHours
@@ -2408,9 +2421,11 @@ trMonth.appendChild(hdrCell("", `hdr-cell hourscol sticky-top sticky-left2 ${hou
 
 
     // Projects + sections (expand/collapse)
-    for(const p of projecten || []){
-      const pid = p?.[projIdKey];
-      const nr  = p?.[projNrKey] ?? "";
+for(const p of projecten || []){
+  const pid = p?.[projIdKey];              // legacy/numeriek, voor secties
+  const projectUuid = p?.[projUuidKey];    // uuid, voor project_assignments
+
+  const nr  = p?.[projNrKey] ?? "";
       const isDebugProj = String(nr).includes(DEBUG_OFFNR);
       if (isDebugProj) dbgSectionKeysForProject(String(pid));
 
@@ -2510,7 +2525,7 @@ for (const dd of dates) {
   }
 
   // 2) projectniveau ook meenemen
-  const pe = projectAssignMap.get(String(pid))?.get(iso);
+  const pe = projectAssignMap.get(String(projectUuid))?.get(iso);
   if (pe) {
     for (const emp of (pe.productie || [])) plP.prod += HOURS_PER_PERSON_DAY * pfP;
     for (const emp of (pe.cnc || []))       plP.cnc  += HOURS_PER_PERSON_DAY * pfP;
@@ -2564,7 +2579,7 @@ for (const dd of dates) {
   }
 
   // 2) project-niveau (project_assignments)  ✅ dit miste
-  const pe = projectAssignMap.get(String(pid))?.get(iso);
+  const pe = projectAssignMap.get(String(projectUuid))?.get(iso);
     if (pe) {
       prod += Number(pe.prodHours || 0)
           + Number(pe.dummyProd || 0)
@@ -2855,7 +2870,7 @@ for (const dd of dates) {
       const iso = toISODate(dd);
 
       // 1) projectniveau montage (project_assignments)
-      const pe = projectAssignMap.get(String(pid))?.get(iso);
+      const pe = projectAssignMap.get(String(projectUuid))?.get(iso);
       const projMont = pe ? (pe.montage.size + Number(pe.dummyMont || 0)) : 0;
       const projDummyMont = pe ? Number(pe.dummyMont || 0) : 0;
 
@@ -2907,7 +2922,7 @@ for (const dd of dates) {
       montRow.appendChild(hoursTdM);
 
 
-      appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid));
+     appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(projectUuid));
 
 
       tbody.appendChild(montRow);
