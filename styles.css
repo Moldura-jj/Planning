@@ -1708,3 +1708,78 @@ td.hourscol{
 #blkTotals .fieldgrid {
   grid-column: 1 / -1;
 }
+/* ==============================
+   Project detailpagina compacter
+   ============================== */
+
+.project-grid {
+  gap: 10px;
+}
+
+.block,
+.cardblock,
+.info-block {
+  margin-bottom: 10px;
+}
+
+.block h2,
+.cardblock h2,
+.info-block h2 {
+  padding: 10px 14px;
+  font-size: 16px;
+}
+
+.fieldgrid {
+  grid-template-columns: 170px 1fr !important;
+  gap: 6px 12px !important;
+  margin-top: 6px !important;
+  align-items: center;
+}
+
+.fieldgrid .label,
+.label {
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.fieldgrid .value,
+.value {
+  min-height: 30px;
+  padding: 6px 10px;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.value input,
+.value textarea,
+.value select,
+.project-edit-input {
+  height: 30px;
+  min-height: 30px;
+  padding: 5px 10px;
+  font-size: 14px;
+}
+
+input.project-edit-input[type="date"] {
+  height: 30px;
+}
+
+#blkProject,
+#blkCustomer,
+#blkDelivery,
+#blkOrder,
+#blkTotals {
+  padding-bottom: 10px;
+}
+
+#blkProject .fieldgrid,
+#blkCustomer .fieldgrid,
+#blkDelivery .fieldgrid,
+#blkOrder .fieldgrid,
+#blkTotals .fieldgrid {
+  margin-top: 5px !important;
+}
+
+#cardMain {
+  padding-bottom: 14px;
+}
