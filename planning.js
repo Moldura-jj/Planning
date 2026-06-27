@@ -1190,7 +1190,7 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
         // 6) section_assignments in range (collega's per sectie/dag + type)
     const { data: assigns, error: aErr } = await sb
       .from("section_assignments")
-      .select("section_id, work_date, werknemer_id, work_type, note")
+      .select("section_id, work_date, werknemer_id, work_type, note, hours")
       .gte("work_date", startISO)
       .lte("work_date", endISO)
       .limit(200000);
@@ -1785,13 +1785,33 @@ function parseSectionNo(v){
       const dmA = assignMap.get(sid);
 
       if (!dmA.has(d)) dmA.set(d, {
-        productie: new Set(), cnc: new Set(), montage: new Set(), reis: new Set(),
-        dummyProd: 0, dummyCnc: 0, dummyMont: 0, dummyReis: 0,
-        dummySub: 0, subcNames: [],
+        productie: new Set(),
+        cnc: new Set(),
+        montage: new Set(),
+        reis: new Set(),
+
+        prodHours: 0,
+        cncHours: 0,
+        montHours: 0,
+        reisHours: 0,
+
+        dummyProd: 0,
+        dummyCnc: 0,
+        dummyMont: 0,
+        dummyReis: 0,
+
+        dummySub: 0,
+        subcNames: [],
         inhuurProdIds: new Set(),
         inhuurMontIds: new Set(),
-        
+
+        rows: []
       });
+
+      const entry = dmA.get(d);
+      entry.rows.push(a);
+
+      const rowHours = Number(a.hours ?? 1);
       const entry = dmA.get(d);
 
       const isDummy = (emp === String(DUMMY_SEC_ID)); // ✅ sectie dummy alleen
@@ -1807,6 +1827,8 @@ const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
           entry.dummyProd += 1;                      // ✅ echte concept
         } else {
           entry.productie.add(emp);
+          entry.prodHours += rowHours;
+        }
         }
       }
 
@@ -1818,15 +1840,23 @@ const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
           entry.dummyMont += 1;                      // ✅ echte concept
         } else {
           entry.montage.add(emp);
+          entry.montHours += rowHours;
         }
       }
       if (wt === "cnc") {
         if (isDummy) entry.dummyCnc += 1;
-        else entry.cnc.add(emp);
+        else {
+          entry.cnc.add(emp);
+          entry.cncHours += rowHours;
+        }
       }
+
       if (wt === "reis") {
         if (isDummy) entry.dummyReis += 1;
-        else entry.reis.add(emp);
+        else {
+          entry.reis.add(emp);
+          entry.reisHours += rowHours;
+        }
       }
       if (wt === "onderaanneming") {
         if (isDummy) {
@@ -2596,8 +2626,8 @@ plS.reis += Number(e.dummyReis || 0) * HOURS_PER_PERSON_DAY * pfS;
           const iso = toISODate(dd);
           const entry = dmA?.get(iso);
         assignByDay[iso] = {
-          prod: entry ? (entry.productie.size + (entry.dummyProd || 0) + (entry.inhuurProdIds?.size || 0)) : 0,
-          mont: entry ? (entry.montage.size + (entry.dummyMont || 0) + (entry.inhuurMontIds?.size || 0)) : 0,
+          prod: entry ? (Number(entry.prodHours || 0) + Number(entry.dummyProd || 0)) : 0,
+          mont: entry ? (Number(entry.montHours || 0) + Number(entry.dummyMont || 0)) : 0,
           subc: entry ? Number(entry.subcNames?.length || 0) : 0,
         };
 
@@ -6010,5 +6040,4 @@ function getContiguousRunFromCell(td){
   }
 
   return { startISO, endISO };
-}
 }
