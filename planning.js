@@ -2514,7 +2514,7 @@ for (const dd of dates) {
   }
 
   // 2) projectniveau ook meenemen
-  projectAssignMap.get(String(pid))?.get(iso)
+  const pe = projectAssignMap.get(String(pid))?.get(iso);
   
   if (pe) {
     for (const emp of (pe.productie || [])) plP.prod += HOURS_PER_PERSON_DAY * pfP;
@@ -2569,7 +2569,7 @@ for (const dd of dates) {
   }
 
   // 2) project-niveau (project_assignments)  ✅ dit miste
-  projectAssignMap.get(String(pid))?.get(iso)
+  const pe = projectAssignMap.get(String(pid))?.get(iso);
     if (pe) {
       prod += Number(pe.prodHours || 0)
           + Number(pe.dummyProd || 0)
@@ -2860,7 +2860,7 @@ for (const dd of dates) {
       const iso = toISODate(dd);
 
       // 1) projectniveau montage (project_assignments)
-      projectAssignMap.get(String(pid))?.get(iso)
+      const pe = projectAssignMap.get(String(pid))?.get(iso);
       const projMont = pe ? (pe.montage.size + Number(pe.dummyMont || 0)) : 0;
       const projDummyMont = pe ? Number(pe.dummyMont || 0) : 0;
 
