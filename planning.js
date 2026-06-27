@@ -1081,7 +1081,11 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
 
     // 2b) section_orders voor alle zichtbare secties in dit project
     const sectionIds = visibleSecties
-      .map(s => String(s.id ?? s.section_id ?? ""))   // pak id/section_id (wat er is)
+      .map(s => {
+        const uuidId = s?.id ? String(s.id) : "";
+        const oldId  = s?.section_id ? String(s.section_id) : "";
+        return uuidId || oldId;
+      })
       .filter(Boolean);
 
     let orders = [];
@@ -1644,11 +1648,19 @@ function parseSectionNo(v){
 
 
 
-    // Map: secties lookup zodat we altijd een juiste key hebben (id <-> section_id)
-    const sectLookup = new Map(); // anyKey -> canonicalIdUsedInWork
+    // Map: secties lookup zodat elke key naar de juiste UUID gaat
+    // Als secties.id bestaat, gebruiken we die als hoofd-ID.
+    // section_id zoals 1,2,3 wordt dan vertaald naar de uuid.
+    const sectLookup = new Map();
+
     for (const s of secties || []) {
-      if (s?.id) sectLookup.set(String(s.id), String(s.id));
-      if (s?.section_id) sectLookup.set(String(s.section_id), String(s.section_id));
+      const uuidId = s?.id ? String(s.id) : "";
+      const oldId  = s?.section_id ? String(s.section_id) : "";
+
+      const canon = uuidId || oldId;
+
+      if (uuidId) sectLookup.set(uuidId, canon);
+      if (oldId)  sectLookup.set(oldId, canon);
     }
 
     // ✅ ordersBySection: section_id -> Map(bestel_nummer -> rows[])
