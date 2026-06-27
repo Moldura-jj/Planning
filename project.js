@@ -26,11 +26,6 @@ const EDITABLE_PROJECT_COLS = new Set([
   "deliverycity",
   "deliveryphone",
   "deliveryemail",
-
-  "total_wvb",
-  "total_prod",
-  "total_mont",
-  "total_reis"
 ]);
 
 const NUMBER_PROJECT_COLS = new Set([
@@ -153,16 +148,14 @@ let orders = [];
 
   // Totals: use project totals if present, else compute from sections
   // Kolomnamen van uren kunnen per omgeving verschillen; we volgen config.js
-  const computed = {
-    total_wvb: sumNums(sections, "uren_wvb"),
-    total_prod: sumNums(sections, "uren_prod"),
-    total_mont: sumNums(sections, "uren_montage") || sumNums(sections, "uren_mont"),
-    total_reis: sumNums(sections, "uren_reis"),
-  };
+const totalsObj = {
+  total_wvb: sumNums(sections, "uren_wvb"),
+  total_prod: sumNums(sections, "uren_prod"),
+  total_mont: sumNums(sections, "uren_montage") || sumNums(sections, "uren_mont"),
+  total_reis: sumNums(sections, "uren_reis"),
+};
 
-  const totalsObj = { ...computed, ...project }; // project overrides computed if filled
-  renderBlock("blkTotals", DB.projectBlocks.totals, totalsObj, totalsObj);
-
+renderBlock("blkTotals", DB.projectBlocks.totals, totalsObj, totalsObj);
   // Render sections table
   el("secMeta").textContent = `${sections.length} secties`;
 
@@ -431,6 +424,7 @@ async function saveSection(sectionId) {
   for (const inp of inputs) {
     const col = inp.dataset.col;
     if (!col) continue;
+    if (String(col).startsWith("total_")) continue;
 
     let value = String(inp.value ?? "").trim();
 
@@ -668,17 +662,28 @@ function renderBlock(targetId, fields, obj = {}, fallbackObj = {}) {
 
     const inputType = f.type === "date" ? "date" : "text";
 
-    return `
-      <div class="fieldgrid">
-        <div class="label">${escapeHtml(f.label)}</div>
-        <input 
-          class="value project-edit"
-          data-col="${escapeHtml(saveCol)}"
-          type="${inputType}"
-          value="${escapeHtml(value ?? "")}"
-        >
-      </div>
-    `;
+const isTotalField = String(saveCol || "").startsWith("total_");
+
+if (isTotalField) {
+  return `
+    <div class="fieldgrid">
+      <div class="label">${escapeHtml(f.label)}</div>
+      <div class="value">${escapeHtml(value ?? 0)}</div>
+    </div>
+  `;
+}
+
+return `
+  <div class="fieldgrid">
+    <div class="label">${escapeHtml(f.label)}</div>
+    <input 
+      class="value project-edit"
+      data-col="${escapeHtml(saveCol)}"
+      type="${inputType}"
+      value="${escapeHtml(value ?? "")}"
+    >
+  </div>
+`;
   }).join("");
 }
 
