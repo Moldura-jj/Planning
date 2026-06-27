@@ -2393,8 +2393,7 @@ for (const s of secsForProj) {
   req.reis += Number(s?.uren_reis ?? 0);
 }
  
- 
-// ===== planned (gepland) uren voor project (uit assignments) =====
+ // ===== planned (gepland) uren voor project (uit assignments) =====
 const pfP = (settings.planFactor ?? 1);
 const plP = { prod: 0, cnc: 0, mont: 0, reis: 0 };
 
@@ -2403,10 +2402,12 @@ const secsP = (sectiesByProject.get(pid) || []);
 for (const dd of dates) {
   const iso = toISODate(dd);
 
+  // 1) sectieniveau optellen
   for (const s of secsP) {
     const sidRaw = s?.[sectIdKey]
       ? String(s[sectIdKey])
       : (s?.section_id ? String(s.section_id) : null);
+
     if (!sidRaw) continue;
 
     const sidC = sectLookup.get(String(sidRaw)) || String(sidRaw);
@@ -2428,8 +2429,9 @@ for (const dd of dates) {
     // inhuur blijft voorlopig als dag rekenen
     plP.prod += Number(e.inhuurProdIds?.size || 0) * HOURS_PER_PERSON_DAY * pfP;
     plP.mont += Number(e.inhuurMontIds?.size || 0) * HOURS_PER_PERSON_DAY * pfP;
+  }
 
-  // projectniveau (↳ regels) ook meenemen
+  // 2) projectniveau ook meenemen
   const pe = projectAssignMap.get(String(pid))?.get(iso);
   if (pe) {
     for (const emp of (pe.productie || [])) plP.prod += HOURS_PER_PERSON_DAY * pfP;
@@ -2449,7 +2451,6 @@ for (const dd of dates) {
 
 // vullen!
 hoursTd.innerHTML = miniHoursHtml(req, plP);
-
   // tel ingeplande mensen per dag op over alle secties van dit project
   const projAssignByDay = {};
   const secs = sectiesByProject.get(pid) || [];
