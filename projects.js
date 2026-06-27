@@ -1,7 +1,7 @@
 // projects.js
 import { makeSupabaseClient, requireSession, signOut } from "./auth.js";
 import { DB } from "./config.js";
-import { el, escapeHtml, setStatus, valFrom } from "./utils.js";
+import { el, escapeHtml, setStatus } from "./utils.js";
 
 const sb = makeSupabaseClient();
 
@@ -31,58 +31,26 @@ async function load(){
   setStatus(el("status"), "Laden...");
   el("tbody").innerHTML = "";
 
-  // We proberen eerst via relationship select (als FK relaties in Supabase staan)
-  // Verwachte FK: projecten.(DB.projectCustomerFk) -> klanten.id
-  // Als jouw FK anders heet: pas aan in config.js
   const tProj = DB.tables.projects;
-  const tCust = DB.tables.customers;
 
-  // 1) Probeer join via select
-  const joinName = "klant"; // alias
   const { data, error } = await sb
     .from(tProj)
-    // alias de PK naar 'id' zodat de rest van de code hetzelfde kan blijven
-    .select(`id:${DB.projectPkCol}, ${DB.projectNoCol}, ${DB.projectNameCol}, salesstatus, ${DB.projectCustomerFk}, ${joinName}:${tCust}(id:${DB.customerPkCol}, ${DB.customerNameCol})`)
+    .select(`
+      id:${DB.projectPkCol},
+      ${DB.projectNoCol},
+      ${DB.projectNameCol},
+      deliveryname,
+      salesstatus
+    `)
     .order(DB.projectNoCol, { ascending: false })
     .limit(500);
 
   if(error){
-    console.warn("Join query failed, fallback to 2-step", error.message);
-    // 2) Fallback: haal projecten op, dan klanten in tweede query
-    const a = await sb
-      .from(tProj)
-      .select(`id:${DB.projectPkCol}, ${DB.projectNoCol}, ${DB.projectNameCol}, salesstatus, ${DB.projectCustomerFk}`)
-      .order(DB.projectNoCol, { ascending: false })
-      .limit(500);
-
-    if(a.error){
-      setStatus(el("status"), a.error.message, "error");
-      return;
-    }
-
-    const custIds = [...new Set((a.data||[]).map(r=>r[DB.projectCustomerFk]).filter(Boolean))];
-    const custMap = new Map();
-
-    if(custIds.length){
-      const b = await sb
-        .from(tCust)
-        .select(`id:${DB.customerPkCol}, ${DB.customerNameCol}`)
-        .in(DB.customerPkCol, custIds);
-
-      if(b.error){
-        setStatus(el("status"), b.error.message, "error");
-        return;
-      }
-      (b.data||[]).forEach(c=> custMap.set(c.id, c));
-    }
-
-    rows = (a.data||[]).map(p=> ({
-      ...p,
-      klant: custMap.get(p[DB.projectCustomerFk]) || null
-    }));
-  }else{
-    rows = data || [];
+    setStatus(el("status"), error.message, "error");
+    return;
   }
+
+  rows = data || [];
 
   setStatus(el("status"), "");
   render();
@@ -90,10 +58,12 @@ async function load(){
 
 function render(){
   const q = (el("q").value || "").trim().toLowerCase();
+
   const filtered = !q ? rows : rows.filter(r=>{
     const no = (r[DB.projectNoCol] ?? "").toString().toLowerCase();
     const pr = (r[DB.projectNameCol] ?? "").toString().toLowerCase();
-    const kn = (r.klant?.[DB.customerNameCol] ?? "").toString().toLowerCase();
+    const kn = (r.deliveryname ?? "").toString().toLowerCase();
+
     return no.includes(q) || pr.includes(q) || kn.includes(q);
   });
 
@@ -103,8 +73,9 @@ function render(){
     const id = r.id;
     const projectNo = escapeHtml(r[DB.projectNoCol] ?? "");
     const projectName = escapeHtml(r[DB.projectNameCol] ?? "");
-    const klant = escapeHtml(r.klant?.[DB.customerNameCol] ?? "");
+    const klant = escapeHtml(r.deliveryname ?? "");
     const status = escapeHtml(r.salesstatus ?? "");
+
     return `
       <tr>
         <td><a class="pill" href="project.html?id=${encodeURIComponent(id)}">${projectNo}</a></td>
@@ -131,43 +102,6 @@ function openProjectModal(){
 function closeProjectModal(){
   el("projectModalBackdrop").hidden = true;
   el("projectModal").hidden = true;
-}
-
-async function getOrCreateCustomerId(customerName){
-  const tCust = DB.tables.customers;
-
-  const name = String(customerName || "").trim();
-  if (!name) return null;
-
-  // 1) Eerst zoeken of klant al bestaat
-  const found = await sb
-    .from(tCust)
-    .select(`${DB.customerPkCol}, ${DB.customerNameCol}`)
-    .eq(DB.customerNameCol, name)
-    .limit(1);
-
-  if (found.error) {
-    throw new Error("Klant zoeken mislukt: " + found.error.message);
-  }
-
-  if (found.data && found.data.length) {
-    return found.data[0][DB.customerPkCol];
-  }
-
-  // 2) Bestaat niet? Dan nieuwe klant aanmaken
-  const ins = await sb
-    .from(tCust)
-    .insert({
-      [DB.customerNameCol]: name
-    })
-    .select(`${DB.customerPkCol}, ${DB.customerNameCol}`)
-    .single();
-
-  if (ins.error) {
-    throw new Error("Klant aanmaken mislukt: " + ins.error.message);
-  }
-
-  return ins.data[DB.customerPkCol];
 }
 
 async function saveNewProject(){
@@ -199,19 +133,12 @@ async function saveNewProject(){
   try {
     const tProj = DB.tables.projects;
 
-    // klant zoeken of aanmaken
-    const customerId = await getOrCreateCustomerId(klantNaam);
-
     const projectRow = {
       [DB.projectNoCol]: projectNo,
       [DB.projectNameCol]: projectName,
+      deliveryname: klantNaam,
       salesstatus: salesstatus
     };
-
-    // klant-koppeling vullen als deze in config staat
-    if (DB.projectCustomerFk && customerId !== null && customerId !== undefined) {
-      projectRow[DB.projectCustomerFk] = customerId;
-    }
 
     const { error } = await sb
       .from(tProj)
