@@ -2132,7 +2132,9 @@ if (wt === "montage") {
 
     // planned prod/mont per day (unieke medewerkers per dag * 7,75 * planFactor)
     const plannedProdByDay = {};
+    const plannedCncByDay = {};
     const plannedMontByDay = {};
+    const plannedReisByDay = {};
 
     // ✅ ook projectniveau mee nemen (↳ Montage / ↳ Productie)
     const plannedSetsByDay = buildPlannedSetsByDay([...(assigns || []), ...(pAssigns || [])]);
@@ -2160,7 +2162,9 @@ if (wt === "montage") {
     for (const d of dates) {
       const iso = toISODate(d);
       plannedProdByDay[iso] = 0;
+      plannedCncByDay[iso] = 0;
       plannedMontByDay[iso] = 0;
+      plannedReisByDay[iso] = 0;
     }
 
     for (const [sid, dm] of assignMap) {
