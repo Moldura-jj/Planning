@@ -1791,3 +1791,16 @@ td.hourscol{
 .section-action-btn:hover{
   background: #f6f8fb;
 }
+
+.cap-left-info {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.assign-item {
+  min-height: 34px;
+}

@@ -1971,6 +1971,75 @@ function dbgSectionKeysForProject(pid){
       return out;
     }
 
+    function getEmployeeAvailableHours(empId, dateISO){
+      const empMap = capByEmp.get(String(empId)) || new Map();
+      return Number(empMap.get(dateISO) || 0);
+    }
+
+    function getEmployeePlannedHours(empId, dateISO, exclude = {}) {
+      const eid = String(empId).trim();
+      const iso = String(dateISO).trim();
+
+      const excludeSectionId = exclude.sectionId ? String(exclude.sectionId) : "";
+      const excludeProjectId = exclude.projectId ? String(exclude.projectId) : "";
+
+      let total = 0;
+
+      // Sectieplanning
+      for (const [sid, dm] of (assignMap || new Map())) {
+        if (excludeSectionId && String(sid) === excludeSectionId) continue;
+
+        const entry = dm?.get(iso);
+        if (!entry?.rows) continue;
+
+        for (const r of entry.rows) {
+          const rEmp = String(r.werknemer_id ?? "").trim();
+          const wt = String(r.work_type || "").toLowerCase();
+
+          if (rEmp !== eid) continue;
+          if (!["productie", "montage", "cnc", "reis"].includes(wt)) continue;
+
+          total += Number(r.hours || 0);
+        }
+      }
+
+      // Projectniveau planning
+      for (const [pid, dm] of (projectAssignMap || new Map())) {
+        if (excludeProjectId && String(pid) === excludeProjectId) continue;
+
+        const entry = dm?.get(iso);
+        if (!entry?.rows) continue;
+
+        for (const r of entry.rows) {
+          const rEmp = String(r.werknemer_id ?? "").trim();
+          const wt = String(r.work_type || "").toLowerCase();
+
+          if (rEmp !== eid) continue;
+          if (!["productie", "montage", "cnc", "reis"].includes(wt)) continue;
+
+          total += Number(r.hours || HOURS_PER_PERSON_DAY);
+        }
+      }
+
+  return total;
+}
+
+function toCapacityHours(realHours){
+  const pf = Number(settings.planFactor || 1);
+  return pf > 0 ? Number(realHours || 0) / pf : Number(realHours || 0);
+}
+
+function getEmployeeRemainingCapacityHours(empId, dateISO, exclude = {}) {
+  const available = getEmployeeAvailableHours(empId, dateISO);
+  const plannedReal = getEmployeePlannedHours(empId, dateISO, exclude);
+  const plannedCapacity = toCapacityHours(plannedReal);
+
+  return Math.max(0, available - plannedCapacity);
+}
+
+function fmt1(n){
+  return String(Math.round(Number(n || 0) * 10) / 10).replace(".", ",");
+}
 
     // ======================
 // projectAssignMap: project_id -> dateISO -> { productie:Set, montage:Set, dummyProd:number, dummyMont:number }
@@ -1987,7 +2056,7 @@ for (const a of (pAssigns || [])) {
   if (!projectAssignMap.has(pid)) projectAssignMap.set(pid, new Map());
   const dmP = projectAssignMap.get(pid);
 
-  if (!dmA.has(d)) dmA.set(d, {
+  if (!dmP.has(d)) dmP.set(d, {
     productie: new Set(), cnc: new Set(), montage: new Set(), reis: new Set(),
     dummyProd: 0, dummyCnc: 0, dummyMont: 0, dummyReis: 0,
     dummySub: 0, subcNames: [],
@@ -1998,7 +2067,7 @@ for (const a of (pAssigns || [])) {
     rows: []
   });
 
-  const entry = dmA.get(d);
+  const entry = dmP.get(d);
   entry.rows.push(a);
 
   const isDummy = (emp === String(DUMMY_EMP_ID)); // ✅ project dummy alleen
@@ -3938,12 +4007,27 @@ const countM = rowM.querySelector(".concept-count");
           const empCap = capByEmp.get(String(eid)) || new Map();
           const availHours = Number(empCap.get(dateISO) || 0);
 
-          const isAvailable = availHours > 0;
-          const isBusy = busySet.has(eid);
+          const availableHours = getEmployeeAvailableHours(eid, dateISO);
+
+          const remainingCapacityHours = getEmployeeRemainingCapacityHours(eid, dateISO, {
+            sectionId: sid
+          });
+
+          const alreadyPlannedRealHours = getEmployeePlannedHours(eid, dateISO, {
+            sectionId: sid
+          });
+
           const mustShow = keepVisible.has(eid);
 
-          // Dummy nooit verbergen; rest: alleen tonen als beschikbaar of al geselecteerd, en niet busy
-          const shouldHide = (!isDummy(eid)) && (!mustShow) && (!isAvailable || isBusy);
+          // Dummy nooit verbergen.
+          // Echte medewerkers tonen als:
+          // - ze nog capaciteit hebben
+          // - of al geselecteerd zijn in deze modal
+          const shouldHide =
+            (!isDummy(eid)) &&
+            (!mustShow) &&
+            (availableHours <= 0 || remainingCapacityHours <= 0);
+
           if (shouldHide) continue;
 
           
@@ -4023,14 +4107,19 @@ const countM = rowM.querySelector(".concept-count");
 
           rowP.innerHTML = `
             <input type="checkbox" ${prodChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="productie" />
-            <span style="flex:1;">${escapeHtml(name)}</span>
+            <span style="flex:1;">
+              ${escapeHtml(name)}
+              <small class="cap-left-info">
+                ${fmt1(remainingCapacityHours)}u vrij / ${fmt1(availableHours)}u beschikbaar
+              </small>
+            </span>
 
             <label style="display:flex; align-items:center; gap:4px;">
               <input
                 type="checkbox"
                 class="full-day-prod"
                 data-eid="${escapeAttr(eid)}"
-                ${prodHours === availHours && availHours > 0 ? "checked" : ""}
+                ${prodHours === availableHours && availableHours > 0 ? "checked" : ""}
               />
               <span class="muted" style="font-size:12px;">hele dag</span>
             </label>
@@ -4077,12 +4166,15 @@ const countM = rowM.querySelector(".concept-count");
 
       prodFullDay.onchange = () => {
         if (prodFullDay.checked) {
-          const empCap = capByEmp.get(String(eid)) || new Map();
-          const dayHours = Number(empCap.get(dateISO) || 0);
+          const remaining = getEmployeeRemainingCapacityHours(eid, dateISO, {
+            sectionId: sid
+          });
 
-          const fullHours = dayHours > 0 ? dayHours : HOURS_PER_PERSON_DAY;
+          // Omdat je met planFactor rekent, is dit de echte taakduur die nog past.
+          const pf = Number(settings.planFactor || 1);
+          const fullHours = remaining * pf;
 
-          prodHoursInp.value = String(fullHours).replace(".", ",");
+          prodHoursInp.value = String(Math.round(fullHours * 100) / 100).replace(".", ",");
           selected.prodHours.set(eid, fullHours);
         }
       };
@@ -4098,14 +4190,19 @@ const countM = rowM.querySelector(".concept-count");
 
           rowM.innerHTML = `
             <input type="checkbox" ${montChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="montage" />
-            <span style="flex:1;">${escapeHtml(name)}</span>
+            <span style="flex:1;">
+              ${escapeHtml(name)}
+              <small class="cap-left-info">
+                ${fmt1(remainingCapacityHours)}u vrij / ${fmt1(availableHours)}u beschikbaar
+              </small>
+            </span>
 
             <label style="display:flex; align-items:center; gap:4px;">
               <input
                 type="checkbox"
                 class="full-day-mont"
                 data-eid="${escapeAttr(eid)}"
-                ${montHours === availHours && availHours > 0 ? "checked" : ""}
+                ${montHours === availableHours && availableHours > 0 ? "checked" : ""}
               />
               <span class="muted" style="font-size:12px;">hele dag</span>
             </label>
@@ -4290,6 +4387,55 @@ if (listSubc) {
       renderBothLists();
  
       saveBtn.onclick = async () => {
+                const capacityErrors = [];
+
+        // Productie controleren
+        for (const eid of selected.productie) {
+          const werknemerId = Number(eid);
+          if (!Number.isFinite(werknemerId)) continue; // inhuur overslaan
+
+          const h = Number(selected.prodHours.get(eid) || 0);
+          const neededCapacity = toCapacityHours(h);
+          const remaining = getEmployeeRemainingCapacityHours(eid, dateISO, {
+            sectionId: sid
+          });
+
+          if (neededCapacity > remaining + 0.001) {
+            const w = werknemers.find(x => String(x?.[empIdKey] ?? "") === String(eid));
+            const name = String(w?.[empNameKey] || eid);
+
+            capacityErrors.push(
+              `${name}: productie ${fmt1(h)}u vraagt ${fmt1(neededCapacity)}u capaciteit, maar er is nog ${fmt1(remaining)}u vrij.`
+            );
+          }
+        }
+
+        // Montage controleren
+        for (const eid of selected.montage) {
+          const werknemerId = Number(eid);
+          if (!Number.isFinite(werknemerId)) continue; // inhuur overslaan
+
+          const h = Number(selected.montHours.get(eid) || 0);
+          const neededCapacity = toCapacityHours(h);
+          const remaining = getEmployeeRemainingCapacityHours(eid, dateISO, {
+            sectionId: sid
+          });
+
+          if (neededCapacity > remaining + 0.001) {
+            const w = werknemers.find(x => String(x?.[empIdKey] ?? "") === String(eid));
+            const name = String(w?.[empNameKey] || eid);
+
+            capacityErrors.push(
+              `${name}: montage ${fmt1(h)}u vraagt ${fmt1(neededCapacity)}u capaciteit, maar er is nog ${fmt1(remaining)}u vrij.`
+            );
+          }
+        }
+
+        if (capacityErrors.length) {
+          alert("Niet genoeg capaciteit:\n\n" + capacityErrors.join("\n"));
+          return;
+        }
+
         // delete existing for this section+day
         const del = await sb
           .from("section_assignments")
