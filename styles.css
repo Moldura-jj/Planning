@@ -786,7 +786,7 @@ td.section-click{
 
 /* assignment modal variant */
 .modal.assign-modal{
-  width:460px;
+  width:760px;
   max-width:calc(100vw - 24px);
 }
 .assign-modal .hd{
