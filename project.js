@@ -410,54 +410,24 @@ async function saveProject(projectId) {
     const col = inp.dataset.col;
     if (!col) continue;
 
-    let value = inp.value;
-
-    // lege datums als null opslaan
-    if (inp.type === "date" && !value) {
-      value = null;
-    }
-
-    payload[col] = value;
-  }
-
-  console.log("PROJECT SAVE", { projectId, payload });
-
-  const res = await sb
-    .from(DB.tables.projects)
-    .update(payload)
-    .eq(DB.projectPkCol, projectId)
-    .select()
-    .maybeSingle();
-
-  if (res.error) {
-    console.error("Project opslaan fout:", res.error);
-    alert("Fout bij opslaan: " + res.error.message);
-    return;
-  }
-
-  alert("Project opgeslagen");
-
-  await loadProject(projectId);
-}
-
-async function saveProject(projectId){
-  const inputs = Array.from(document.querySelectorAll(".project-field[data-col]"));
-  const payload = {};
-
-  for(const inp of inputs){
-    const col = inp.dataset.col;
-    if(!col) continue;
-
     let value = String(inp.value ?? "").trim();
 
-    if(value === ""){
+    // Lege velden als null opslaan
+    if (value === "") {
       payload[col] = null;
       continue;
     }
 
-    if(NUMBER_PROJECT_COLS.has(col)){
+    // Getallen goed opslaan
+    if (NUMBER_PROJECT_COLS.has(col)) {
       value = value.replace(",", ".");
       payload[col] = Number(value);
+      continue;
+    }
+
+    // Datums blijven yyyy-mm-dd
+    if (DATE_PROJECT_COLS.has(col)) {
+      payload[col] = value;
       continue;
     }
 
@@ -471,7 +441,7 @@ async function saveProject(projectId){
     .update(payload)
     .eq(DB.projectPkCol, projectId);
 
-  if(error){
+  if (error) {
     console.error("Project opslaan mislukt:", error);
     setStatus(el("status"), "Project opslaan mislukt: " + error.message, "error");
     alert("Project opslaan mislukt: " + error.message);
@@ -480,8 +450,10 @@ async function saveProject(projectId){
 
   setStatus(el("status"), "Project opgeslagen.");
   alert("Project opgeslagen.");
+
   await loadProject(projectId);
 }
+
 
 function ensureAddSectionButton(projectId){
   if(document.getElementById("btnAddSection")) return;
