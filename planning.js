@@ -1957,15 +1957,19 @@ for (const a of (pAssigns || [])) {
   if (!projectAssignMap.has(pid)) projectAssignMap.set(pid, new Map());
   const dmP = projectAssignMap.get(pid);
 
-    if (!dmP.has(d)) dmP.set(d, {
-      productie: new Set(), cnc: new Set(), montage: new Set(), reis: new Set(),
-      dummyProd: 0, dummyCnc: 0, dummyMont: 0, dummyReis: 0,
-      dummySub: 0,
-      inhuurProdIds: new Set(),
-      inhuurMontIds: new Set()
-    });
+  if (!dmA.has(d)) dmA.set(d, {
+    productie: new Set(), cnc: new Set(), montage: new Set(), reis: new Set(),
+    dummyProd: 0, dummyCnc: 0, dummyMont: 0, dummyReis: 0,
+    dummySub: 0, subcNames: [],
+    inhuurProdIds: new Set(),
+    inhuurMontIds: new Set(),
 
-  const entry = dmP.get(d);
+    // ✅ volledige database rows bewaren, inclusief hours
+    rows: []
+  });
+
+  const entry = dmA.get(d);
+  entry.rows.push(a);
 
   const isDummy = (emp === String(DUMMY_EMP_ID)); // ✅ project dummy alleen
 
@@ -2334,7 +2338,7 @@ for (const s of secsForProj) {
   req.reis += Number(s?.uren_reis ?? 0);
 }
  
-
+ 
 // ===== planned (gepland) uren voor project (uit assignments) =====
 const pfP = (settings.planFactor ?? 1);
 const plP = { prod: 0, cnc: 0, mont: 0, reis: 0 };
@@ -3802,12 +3806,29 @@ const countM = rowM.querySelector(".concept-count");
       const selected = {
         productie: new Set(cur.productie),
         montage: new Set(cur.montage),
+
+        // uren per medewerker
+        prodHours: new Map(),
+        montHours: new Map(),
+
         dummyProd: Number(cur.dummyProd || 0),
         dummyMont: Number(cur.dummyMont || 0),
 
         // ✅ onderaanneming: meerdere namen
         subcNames: Array.isArray(cur.subcNames) ? [...cur.subcNames] : []
       };
+
+      // bestaande uren uit database terugzetten
+      if (cur.rows) {
+        for (const r of cur.rows) {
+          const eid = String(r.werknemer_id ?? "").trim();
+          const wt = String(r.work_type || "").toLowerCase();
+          const h = Number(r.hours || 1);
+
+          if (wt === "productie") selected.prodHours.set(eid, h);
+          if (wt === "montage") selected.montHours.set(eid, h);
+        }
+      }
 
       // ✅ Inhuur die in assignMap zit ook meenemen als selectie, zodat checkboxes aangevinkt zijn
       for (const iid of (cur.inhuurProdIds || [])) selected.productie.add(String(iid));
@@ -3928,45 +3949,140 @@ const countM = rowM.querySelector(".concept-count");
           // --- Productie rij ---
           const rowP = document.createElement("label");
           rowP.className = "assign-item";
-          rowP.innerHTML = `
-            <input type="checkbox" ${selected.productie.has(eid) ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="productie" />
-            <span>${escapeHtml(name)}</span>
-          `;
-          rowP.querySelector("input").onchange = (e) => {
-            const id = String(e.target.dataset.eid || "");
-            if (!id) return;
 
-            if (e.target.checked) {
-              selected.montage.delete(id);
-              const other = listMont?.querySelector(`input[data-eid="${cssEsc(id)}"]`);
-              if (other) other.checked = false;
-              selected.productie.add(id);
-            } else {
-              selected.productie.delete(id);
-            }
-          };
+          const prodChecked = selected.productie.has(eid);
+          const prodHours = selected.prodHours.get(eid) ?? 1;
+
+          rowP.innerHTML = `
+            <input type="checkbox" ${prodChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="productie" />
+            <span style="flex:1;">${escapeHtml(name)}</span>
+
+            <label style="display:flex; align-items:center; gap:4px;">
+              <input
+                type="checkbox"
+                class="full-day-prod"
+                data-eid="${escapeAttr(eid)}"
+                ${prodHours === 7.75 ? "checked" : ""}
+              />
+              <span class="muted" style="font-size:12px;">hele dag</span>
+            </label>
+
+            <input
+              class="input assign-hours-prod"
+              type="text"
+              inputmode="decimal"
+              data-eid="${escapeAttr(eid)}"
+              value="${String(prodHours).replace(".", ",")}"
+              style="width:58px;"
+            />
+          `;
+
+      const prodChk = rowP.querySelector('input[data-type="productie"]');
+      const prodHoursInp = rowP.querySelector(".assign-hours-prod");
+      const prodFullDay = rowP.querySelector(".full-day-prod");
+
+      prodChk.onchange = (e) => {
+        const id = String(e.target.dataset.eid || "");
+        if (!id) return;
+
+        if (e.target.checked) {
+          selected.montage.delete(id);
+          const other = listMont?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="montage"]`);
+          if (other) other.checked = false;
+
+          selected.productie.add(id);
+
+          const hRaw = String(prodHoursInp.value || "1").replace(",", ".");
+          const h = Number(hRaw) || 1;
+          selected.prodHours.set(id, h);
+        } else {
+          selected.productie.delete(id);
+          selected.prodHours.delete(id);
+        }
+      };
+
+      prodHoursInp.oninput = () => {
+        prodHoursInp.value = prodHoursInp.value.replace(/[^0-9.,]/g, "");
+        const h = Number(String(prodHoursInp.value || "0").replace(",", "."));
+        if (selected.productie.has(eid)) selected.prodHours.set(eid, h || 0);
+      };
+
+      prodFullDay.onchange = () => {
+        if (prodFullDay.checked) {
+          prodHoursInp.value = "7,75";
+          selected.prodHours.set(eid, 7.75);
+        }
+      };
+
           listProd.appendChild(rowP);
 
           // --- Montage rij ---
           const rowM = document.createElement("label");
           rowM.className = "assign-item";
-          rowM.innerHTML = `
-            <input type="checkbox" ${selected.montage.has(eid) ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="montage" />
-            <span>${escapeHtml(name)}</span>
-          `;
-          rowM.querySelector("input").onchange = (e) => {
-            const id = String(e.target.dataset.eid || "");
-            if (!id) return;
 
-            if (e.target.checked) {
-              selected.productie.delete(id);
-              const other = listProd?.querySelector(`input[data-eid="${cssEsc(id)}"]`);
-              if (other) other.checked = false;
-              selected.montage.add(id);
-            } else {
-              selected.montage.delete(id);
-            }
-          };
+          const montChecked = selected.montage.has(eid);
+          const montHours = selected.montHours.get(eid) ?? 1;
+
+          rowM.innerHTML = `
+            <input type="checkbox" ${montChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="montage" />
+            <span style="flex:1;">${escapeHtml(name)}</span>
+
+            <label style="display:flex; align-items:center; gap:4px;">
+              <input
+                type="checkbox"
+                class="full-day-mont"
+                data-eid="${escapeAttr(eid)}"
+                ${montHours === 7.75 ? "checked" : ""}
+              />
+              <span class="muted" style="font-size:12px;">hele dag</span>
+            </label>
+
+            <input
+              class="input assign-hours-mont"
+              type="text"
+              inputmode="decimal"
+              data-eid="${escapeAttr(eid)}"
+              value="${String(montHours).replace(".", ",")}"
+              style="width:58px;"
+            />
+          `;
+
+      const montChk = rowM.querySelector('input[data-type="montage"]');
+      const montHoursInp = rowM.querySelector(".assign-hours-mont");
+      const montFullDay = rowM.querySelector(".full-day-mont");
+
+      montChk.onchange = (e) => {
+        const id = String(e.target.dataset.eid || "");
+        if (!id) return;
+
+        if (e.target.checked) {
+          selected.productie.delete(id);
+          const other = listProd?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="productie"]`);
+          if (other) other.checked = false;
+
+          selected.montage.add(id);
+
+          const hRaw = String(montHoursInp.value || "1").replace(",", ".");
+          const h = Number(hRaw) || 1;
+          selected.montHours.set(id, h);
+        } else {
+          selected.montage.delete(id);
+          selected.montHours.delete(id);
+        }
+      };
+
+      montHoursInp.oninput = () => {
+        montHoursInp.value = montHoursInp.value.replace(/[^0-9.,]/g, "");
+        const h = Number(String(montHoursInp.value || "0").replace(",", "."));
+        if (selected.montage.has(eid)) selected.montHours.set(eid, h || 0);
+      };
+
+      montFullDay.onchange = () => {
+        if (montFullDay.checked) {
+          montHoursInp.value = "7,75";
+          selected.montHours.set(eid, 7.75);
+        }
+      };
           listMont.appendChild(rowM);
         }
 
@@ -4114,7 +4230,13 @@ if (listSubc) {
         const werknemerId = Number(eid);
 
         if (Number.isFinite(werknemerId)) {
-          rows.push({ section_id: sid, work_date: dateISO, werknemer_id: werknemerId, work_type: "productie" });
+          rows.push({
+            section_id: sid,
+            work_date: dateISO,
+            werknemer_id: werknemerId,
+            work_type: "productie",
+            hours: Number(selected.prodHours.get(eid) || 1)
+          });
         } else {
           // inhuur -> opslaan als dummy met herkenbare note
           rows.push({
@@ -4132,7 +4254,13 @@ if (listSubc) {
         const werknemerId = Number(eid);
 
         if (Number.isFinite(werknemerId)) {
-          rows.push({ section_id: sid, work_date: dateISO, werknemer_id: werknemerId, work_type: "montage" });
+          rows.push({
+            section_id: sid,
+            work_date: dateISO,
+            werknemer_id: werknemerId,
+            work_type: "montage",
+            hours: Number(selected.montHours.get(eid) || 1)
+          });
         } else {
           // inhuur -> opslaan als dummy met herkenbare note
           rows.push({
