@@ -5764,7 +5764,38 @@ async function dbgProjectDummyMontageCount(projectId, dateISO){
 }
 
 
+async function addOneProjectDummyProductie(projectId, dateISO) {
+  const ins = await sb.from("project_assignments").insert([{
+    project_id: String(projectId),
+    work_date: String(dateISO),
+    werknemer_id: DUMMY_EMP_ID,
+    work_type: "productie",
+  }]);
 
+  if (ins.error) console.warn("addOneProjectDummyProductie insert error:", ins.error.message);
+}
+
+async function removeOneProjectDummyProductie(projectId, dateISO) {
+  const { data, error } = await sb
+    .from("project_assignments")
+    .select("id")
+    .eq("project_id", String(projectId))
+    .eq("work_date", String(dateISO))
+    .eq("work_type", "productie")
+    .eq("werknemer_id", DUMMY_EMP_ID)
+    .limit(1);
+
+  if (error) {
+    console.warn("removeOneProjectDummyProductie select error:", error.message);
+    return;
+  }
+
+  const id = data?.[0]?.id;
+  if (!id) return;
+
+  const del = await sb.from("project_assignments").delete().eq("id", id);
+  if (del.error) console.warn("removeOneProjectDummyProductie delete error:", del.error.message);
+}
 
 function renderOrdersAccordion(byBN){
   if(!byBN || !byBN.size) return `<div class="muted" style="padding:6px 0;">Geen bestellingen</div>`;
