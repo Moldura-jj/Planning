@@ -455,24 +455,59 @@ async function saveProject(projectId) {
 }
 
 
-function ensureAddSectionButton(projectId){
-  if(document.getElementById("btnAddSection")) return;
+function ensureAddSectionButton(projectId) {
+  const secTitle = document.querySelector("#secMeta")?.parentElement;
+  if (!secTitle) return;
+
+  if (document.getElementById("btnAddSection")) return;
 
   const btn = document.createElement("button");
   btn.id = "btnAddSection";
   btn.type = "button";
   btn.className = "btn primary";
   btn.textContent = "+ Sectie";
-  btn.style.marginLeft = "10px";
+  btn.style.marginRight = "10px";
 
-  btn.addEventListener("click", async () => {
-    await addSection(projectId);
+  secTitle.insertBefore(btn, document.getElementById("secMeta"));
+
+  btn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    console.log("ADD SECTION CLICK", projectId);
+
+    const paragraaf = prompt("Paragraaf / sectienummer:", "01.");
+    if (paragraaf === null) return;
+
+    const omschrijving = prompt("Omschrijving:", "");
+    if (omschrijving === null) return;
+
+    const row = {
+      [DB.sectionProjectFk]: Number(projectId),
+      paragraaf: paragraaf.trim(),
+      omschrijving: omschrijving.trim(),
+      aantal: 1,
+      in_planning: false,
+      uren_wvb: 0,
+      uren_prod: 0,
+      uren_montage: 0,
+      uren_reis: 0,
+    };
+
+    console.log("INSERT SECTION", row);
+
+    const { error } = await sb
+      .from(DB.tables.sections)
+      .insert(row);
+
+    if (error) {
+      console.error(error);
+      alert("Fout bij sectie toevoegen: " + error.message);
+      return;
+    }
+
+    await loadProject(projectId);
   });
-
-  const target = el("secMeta");
-  if(target){
-    target.insertAdjacentElement("afterend", btn);
-  }
 }
 
 async function addSection(projectId){
