@@ -119,28 +119,9 @@ project.klant = project;
 
     
 
-  // Orders (bestellingen) voor alle secties van dit project
-  const sectionIds = sections
-    .map(s => s?.[DB.sectionPkCol])
-    .filter(Boolean);
-
-  let orders = [];
-  if (sectionIds.length) {
-    const oRes = await sb
-      .from("section_orders")
-      .select("id, section_id, bestel_nummer, leverdatum, omschrijving, aantal, leverancier, soort, created_at")
-      .in("section_id", sectionIds)
-      .order("bestel_nummer", { ascending: true })
-      .order("leverdatum", { ascending: true })
-      .order("created_at", { ascending: true });
-
-    if (oRes.error) {
-      console.warn("section_orders laden faalde:", oRes.error.message);
-      orders = [];
-    } else {
-      orders = oRes.data || [];
-    }
-  }
+// Orders tijdelijk uitgeschakeld.
+// section_orders.section_id lijkt UUID te verwachten, terwijl secties.section_id een nummer is.
+let orders = [];
 
   // Map: section_id -> orders[]
   const ordersBySection = new Map();
@@ -191,6 +172,8 @@ project.klant = project;
     + `<th style="width:70px"></th>`;
     
   el("secBody").innerHTML = sections.map((s, idx)=>{
+    const sid = String(s?.[DB.sectionPkCol] ?? "");
+
     const cols = DB.sectionRowCols.map(c=>{
       const v = Array.isArray(c.col)
         ? c.col.map(k => valFrom(s, k)).find(x => x !== null && x !== undefined && x !== "")
@@ -253,7 +236,6 @@ const detailHours = DB.sectionDetailCols
 
 
 // ===== Orders HTML voor deze sectie (accordion per bestel_nummer) =====
-const sid = String(s?.[DB.sectionPkCol] ?? "");
 const ords = ordersBySection.get(sid) || [];
 
 const ordersHtml = `
