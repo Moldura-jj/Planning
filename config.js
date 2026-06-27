@@ -89,6 +89,7 @@ export const DB = {
     // Totalen (als je ze in projecten hebt, toon je ze hier; anders laten we ze berekenen uit secties)
     totals: [
       { label: "Totaal werkvoorbereiding uren", col: "total_wvb" },
+      { label: "Totaal CNC uren", col: "total_cnc" },
       { label: "Totaal productie uren", col: "total_prod" },
       { label: "Totaal montage uren", col: "total_mont" },
       { label: "Totaal reis uren", col: "total_reis" },
@@ -106,14 +107,14 @@ sectionRowCols: [
 
 
   // Welke detailvelden tonen we als je een sectie openklapt?
-  sectionDetailCols: [
-    { label: "Tekst", col: "salestextrtf" },
-    { label: "Werkvoorbereiding", col: "uren_wvb" },
-    { label: "Werkvoorbereiding", col: "uren_wvb" },
-    { label: "Productie", col: "uren_prod" },
-    { label: "Montage", col: ["uren_montage", "uren_mont"] },
-    { label: "Reis", col: "uren_reis" },
-  ],
+sectionDetailCols: [
+  { label: "Tekst", col: "salestextrtf" },
+  { label: "Werkvoorbereiding uren", col: "uren_wvb" },
+  { label: "CNC uren", col: "uren_cnc" },
+  { label: "Productie uren", col: "uren_prod" },
+  { label: "Montage uren", col: ["uren_montage", "uren_mont"] },
+  { label: "Reis uren", col: "uren_reis" },
+],
 
   // Planning regels
   planning: {
