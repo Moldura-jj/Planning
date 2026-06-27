@@ -2147,7 +2147,32 @@ if (wt === "montage") {
       plannedMontByDay[dayISO]  = (sets.mo.size + (sets.dummyMo  || 0)) * HOURS_PER_PERSON_DAY * pf;
     }
 
+    // ✅ echte geplande uren per dag uit section_assignments
+    for (const [sid, dm] of assignMap) {
+      for (const [iso, entry] of dm) {
+        plannedProdByDay[iso] = Number(plannedProdByDay[iso] || 0);
+        plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0);
 
+        // trek oude persoon-factor er niet bij op, maar overschrijf met echte uren
+      }
+    }
+
+    for (const d of dates) {
+      const iso = toISODate(d);
+      plannedProdByDay[iso] = 0;
+      plannedMontByDay[iso] = 0;
+    }
+
+    for (const [sid, dm] of assignMap) {
+      for (const [iso, entry] of dm) {
+        plannedProdByDay[iso] = Number(plannedProdByDay[iso] || 0) + Number(entry.prodHours || 0);
+        plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0) + Number(entry.montHours || 0);
+
+        // concept/dummy blijft als dag tellen
+        plannedProdByDay[iso] += Number(entry.dummyProd || 0) * HOURS_PER_PERSON_DAY * pf;
+        plannedMontByDay[iso] += Number(entry.dummyMont || 0) * HOURS_PER_PERSON_DAY * pf;
+      }
+    }
 
     // per dag: welke medewerkers ingepland zijn (gebruik dezelfde bron als plannedProd/Mont)
     const empAssignByDay = Object.create(null);
@@ -2388,30 +2413,21 @@ for (const dd of dates) {
     const e = assignMap.get(sidC)?.get(iso);
     if (!e) continue;
 
-    // echte medewerkers (splitten binnen project)
-    for (const emp of (e.productie || [])) {
-      plP.prod += (HOURS_PER_PERSON_DAY * pfP) / getSplit(String(pid), iso, "productie", String(emp));
-    }
-    for (const emp of (e.cnc || [])) {
-      plP.cnc += (HOURS_PER_PERSON_DAY * pfP) / getSplit(String(pid), iso, "cnc", String(emp));
-    }
-    for (const emp of (e.montage || [])) {
-      plP.mont += (HOURS_PER_PERSON_DAY * pfP) / getSplit(String(pid), iso, "montage", String(emp));
-    }
-    for (const emp of (e.reis || [])) {
-      plP.reis += (HOURS_PER_PERSON_DAY * pfP) / getSplit(String(pid), iso, "reis", String(emp));
-    }
+    // echte ingevoerde uren uit section_assignments
+    plP.prod += Number(e.prodHours || 0);
+    plP.cnc  += Number(e.cncHours || 0);
+    plP.mont += Number(e.montHours || 0);
+    plP.reis += Number(e.reisHours || 0);
 
-    // concept (dummy) telt gewoon als “personen”
+    // concept / dummy blijft als 1 dag rekenen
     plP.prod += Number(e.dummyProd || 0) * HOURS_PER_PERSON_DAY * pfP;
     plP.cnc  += Number(e.dummyCnc  || 0) * HOURS_PER_PERSON_DAY * pfP;
     plP.mont += Number(e.dummyMont || 0) * HOURS_PER_PERSON_DAY * pfP;
     plP.reis += Number(e.dummyReis || 0) * HOURS_PER_PERSON_DAY * pfP;
 
-    // inhuur telt ook als “personen” (zelfde factor)
+    // inhuur blijft voorlopig als dag rekenen
     plP.prod += Number(e.inhuurProdIds?.size || 0) * HOURS_PER_PERSON_DAY * pfP;
     plP.mont += Number(e.inhuurMontIds?.size || 0) * HOURS_PER_PERSON_DAY * pfP;
-  }
 
   // projectniveau (↳ regels) ook meenemen
   const pe = projectAssignMap.get(String(pid))?.get(iso);
