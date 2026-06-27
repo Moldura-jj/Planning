@@ -2514,7 +2514,8 @@ for (const dd of dates) {
   }
 
   // 2) projectniveau ook meenemen
-  const pe = projectAssignMap.get(String(pid)))?.get(iso);
+  projectAssignMap.get(String(pid))?.get(iso)
+  
   if (pe) {
     for (const emp of (pe.productie || [])) plP.prod += HOURS_PER_PERSON_DAY * pfP;
     for (const emp of (pe.cnc || []))       plP.cnc  += HOURS_PER_PERSON_DAY * pfP;
@@ -2568,7 +2569,7 @@ for (const dd of dates) {
   }
 
   // 2) project-niveau (project_assignments)  ✅ dit miste
-  const pe = projectAssignMap.get(String(pid)))?.get(iso);
+  projectAssignMap.get(String(pid))?.get(iso)
     if (pe) {
       prod += Number(pe.prodHours || 0)
           + Number(pe.dummyProd || 0)
@@ -2859,7 +2860,7 @@ for (const dd of dates) {
       const iso = toISODate(dd);
 
       // 1) projectniveau montage (project_assignments)
-      const pe = projectAssignMap.get(String(pid)))?.get(iso);
+      projectAssignMap.get(String(pid))?.get(iso)
       const projMont = pe ? (pe.montage.size + Number(pe.dummyMont || 0)) : 0;
       const projDummyMont = pe ? Number(pe.dummyMont || 0) : 0;
 
@@ -3716,7 +3717,7 @@ const ptd = ev.target.closest("td.project-montage-click");
 if (ptd) {
   if (__wasDragging) return;
 
-  
+
 const projectId = String(ptd.dataset.projectId || "").trim();
 const dateISO   = String(ptd.dataset.workDate || "").trim();
 
