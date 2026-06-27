@@ -375,22 +375,69 @@ async function saveIncludeInPlanning(sectionId, includeInPlanning){
   return true;
 }
 
-function ensureProjectSaveButton(projectId){
-  if(document.getElementById("btnSaveProject")) return;
+function ensureProjectSaveButton(projectId) {
+  let btn = document.getElementById("btnSaveProject");
 
-  const btn = document.createElement("button");
-  btn.id = "btnSaveProject";
-  btn.type = "button";
-  btn.className = "btn primary";
-  btn.textContent = "Project opslaan";
-  btn.style.marginLeft = "10px";
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.id = "btnSaveProject";
+    btn.className = "btn";
+    btn.textContent = "Opslaan";
 
-  btn.addEventListener("click", async () => {
+    const head = document.querySelector(".topbar, .header, .row");
+    const target = document.getElementById("cardMain")?.parentElement || document.body;
+
+    // Bij voorkeur naast de bestaande knoppen zetten
+    const logoutBtn = document.querySelector("button, .btn");
+    if (logoutBtn?.parentElement) {
+      logoutBtn.parentElement.appendChild(btn);
+    } else {
+      target.prepend(btn);
+    }
+  }
+
+  btn.onclick = async () => {
     await saveProject(projectId);
-  });
+  };
+}
 
-  const target = el("pillMeta") || el("chipHead") || el("title");
-  target.insertAdjacentElement("afterend", btn);
+async function saveProject(projectId) {
+  const inputs = [...document.querySelectorAll(".project-edit[data-col]")];
+
+  const payload = {};
+
+  for (const inp of inputs) {
+    const col = inp.dataset.col;
+    if (!col) continue;
+
+    let value = inp.value;
+
+    // lege datums als null opslaan
+    if (inp.type === "date" && !value) {
+      value = null;
+    }
+
+    payload[col] = value;
+  }
+
+  console.log("PROJECT SAVE", { projectId, payload });
+
+  const res = await sb
+    .from(DB.tables.projects)
+    .update(payload)
+    .eq(DB.projectPkCol, projectId)
+    .select()
+    .maybeSingle();
+
+  if (res.error) {
+    console.error("Project opslaan fout:", res.error);
+    alert("Fout bij opslaan: " + res.error.message);
+    return;
+  }
+
+  alert("Project opgeslagen");
+
+  await loadProject(projectId);
 }
 
 async function saveProject(projectId){
@@ -493,59 +540,47 @@ async function addSection(projectId){
   await loadProject(projectId);
 }
 
-function renderBlock(targetId, fields, primaryObj, fallbackObj){
-  const node = el(targetId);
+function renderBlock(targetId, fields, obj = {}, fallbackObj = {}) {
+  const box = el(targetId);
+  if (!box) return;
 
-  node.innerHTML = fields.map(f=>{
-    const cols = f.col;
-    let raw;
-    let editCol = null;
+  box.innerHTML = fields.map(f => {
+    const cols = Array.isArray(f.col) ? f.col : [f.col];
 
-    if(Array.isArray(cols)){
-      raw = cols
-        .map(c=> (primaryObj?.[c] ?? fallbackObj?.[c]))
-        .filter(Boolean)
-        .join(f.joiner || " ");
-    } else {
-      editCol = cols;
-      raw = (primaryObj?.[cols] ?? fallbackObj?.[cols]);
-    }
+    // Alleen het eerste veld gebruiken om op te slaan
+    const saveCol = cols[0];
 
-    const label = escapeHtml(f.label);
-    const title = escapeHtml(raw ?? "");
-
-    // Alleen simpele projectkolommen bewerkbaar maken
-    if(editCol && EDITABLE_PROJECT_COLS.has(editCol)){
-      let inputType = "text";
-      let value = raw ?? "";
-
-      if(DATE_PROJECT_COLS.has(editCol)){
-        inputType = "date";
-        value = toDateInputValue(raw);
+    let value = "";
+    for (const c of cols) {
+      const v = valFrom(obj, c);
+      if (v !== null && v !== undefined && v !== "") {
+        value = v;
+        break;
       }
 
-      if(NUMBER_PROJECT_COLS.has(editCol)){
-        inputType = "number";
-        value = raw ?? "";
+      const fv = valFrom(fallbackObj, c);
+      if (fv !== null && fv !== undefined && fv !== "") {
+        value = fv;
+        break;
       }
-
-      return `
-        <div class="label">${label}</div>
-        <input 
-          class="value project-field" 
-          data-col="${escapeHtml(editCol)}" 
-          type="${inputType}" 
-          value="${escapeHtml(value)}"
-          title="${title}"
-        >
-      `;
     }
 
-    if(f.type === "date") raw = fmtDate(raw);
+    if (f.type === "date" && value) {
+      value = String(value).slice(0, 10);
+    }
+
+    const inputType = f.type === "date" ? "date" : "text";
 
     return `
-      <div class="label">${label}</div>
-      <div class="value" title="${escapeHtml(raw ?? "")}">${escapeHtml(raw ?? "")}</div>
+      <div class="fieldgrid">
+        <div class="label">${escapeHtml(f.label)}</div>
+        <input 
+          class="value project-edit"
+          data-col="${escapeHtml(saveCol)}"
+          type="${inputType}"
+          value="${escapeHtml(value ?? "")}"
+        >
+      </div>
     `;
   }).join("");
 }
