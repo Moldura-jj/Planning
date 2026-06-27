@@ -77,51 +77,31 @@ async function init(){
 async function loadProject(id){
   setStatus(el("status"), "Project laden...");
   el("cardMain").style.display = "none";
+const tProj = DB.tables.projects;
+const tSec  = DB.tables.sections;
 
-  const tProj = DB.tables.projects;
-  const tCust = DB.tables.customers;
-  const tSec  = DB.tables.sections;
+// Project laden
+const a = await sb
+  .from(tProj)
+  .select("*")
+  .eq(DB.projectPkCol, id)
+  .maybeSingle();
 
-  // Project + klant (join als FK bekend is)
-  const joinName = "klant";
-  let project = null;
+if (a.error) {
+  setStatus(el("status"), a.error.message, "error");
+  return;
+}
 
-  // Probeer project + klant via relationship select; als dat faalt: 2-step fallback
-  let a = await sb
-    .from(tProj)
-    .select(`*, ${joinName}:${tCust}(*)`)
-    .eq(DB.projectPkCol, id)
-    .maybeSingle();
+const project = a.data;
 
-  if(a.error){
-    console.warn("Project join failed, fallback to 2-step", a.error.message);
-    a = await sb
-      .from(tProj)
-      .select("*")
-      .eq(DB.projectPkCol, id)
-      .maybeSingle();
-    if(a.error){
-      setStatus(el("status"), a.error.message, "error");
-      return;
-    }
-    project = a.data;
-    const custId = project?.[DB.projectCustomerFk];
-    if(custId){
-      const k = await sb
-        .from(tCust)
-        .select("*")
-        .eq(DB.customerPkCol, custId)
-        .maybeSingle();
-      if(!k.error) project.klant = k.data;
-    }
-  } else {
-    project = a.data;
-  }
+if (!project) {
+  setStatus(el("status"), "Project niet gevonden.", "error");
+  return;
+}
 
-  if(!project){
-    setStatus(el("status"), "Project niet gevonden.", "error");
-    return;
-  }
+// In jouw database staan klantgegevens direct in projecten.
+// Daarom gebruiken we project zelf ook als klant-object.
+project.klant = project;
 
   // Secties
   const b = await sb
