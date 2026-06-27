@@ -2922,7 +2922,7 @@ for (const dd of dates) {
       montRow.appendChild(hoursTdM);
 
 
-     appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(projectUuid));
+    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid));
 
 
       tbody.appendChild(montRow);
