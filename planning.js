@@ -2165,9 +2165,12 @@ if (wt === "montage") {
 
     for (const [sid, dm] of assignMap) {
       for (const [iso, entry] of dm) {
-        plannedProdByDay[iso] = Number(plannedProdByDay[iso] || 0) + Number(entry.prodHours || 0);
-        plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0) + Number(entry.montHours || 0);
+        const capFactor = pf || 1;
 
+        plannedProdByDay[iso] = Number(plannedProdByDay[iso] || 0) + (Number(entry.prodHours || 0) / capFactor);
+        plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0) + (Number(entry.montHours || 0) / capFactor);
+        plannedCncByDay[iso] = Number(plannedCncByDay[iso] || 0) + (Number(entry.cncHours || 0) / capFactor);
+        plannedReisByDay[iso] = Number(plannedReisByDay[iso] || 0) + (Number(entry.reisHours || 0) / capFactor);
         // concept/dummy blijft als dag tellen
         plannedProdByDay[iso] += Number(entry.dummyProd || 0) * HOURS_PER_PERSON_DAY * pf;
         plannedMontByDay[iso] += Number(entry.dummyMont || 0) * HOURS_PER_PERSON_DAY * pf;
@@ -2415,10 +2418,12 @@ for (const dd of dates) {
     if (!e) continue;
 
     // echte ingevoerde uren uit section_assignments
-    plP.prod += Number(e.prodHours || 0);
-    plP.cnc  += Number(e.cncHours || 0);
-    plP.mont += Number(e.montHours || 0);
-    plP.reis += Number(e.reisHours || 0);
+    const capFactorP = pfP || 1;
+
+    plP.prod += Number(e.prodHours || 0) / capFactorP;
+    plP.cnc  += Number(e.cncHours || 0) / capFactorP;
+    plP.mont += Number(e.montHours || 0) / capFactorP;
+    plP.reis += Number(e.reisHours || 0) / capFactorP;
 
     // concept / dummy blijft als 1 dag rekenen
     plP.prod += Number(e.dummyProd || 0) * HOURS_PER_PERSON_DAY * pfP;
@@ -2611,31 +2616,33 @@ for (const dd of dates) {
           const e = dmSec.get(iso);
           if (!e) continue;
 
-// ✅ split per medewerker (alleen echte medewerkers)
-const pidS = String(pid || "").trim();
+          // ✅ split per medewerker (alleen echte medewerkers)
+          const pidS = String(pid || "").trim();
 
-for (const emp of (e.productie || [])) {
-  const div = getSplit(pidS, iso, "productie", String(emp));
-  plS.prod += (HOURS_PER_PERSON_DAY * pfS) / div;
-}
-for (const emp of (e.cnc || [])) {
-  const div = getSplit(pidS, iso, "cnc", String(emp));
-  plS.cnc += (HOURS_PER_PERSON_DAY * pfS) / div;
-}
-for (const emp of (e.montage || [])) {
-  const div = getSplit(pidS, iso, "montage", String(emp));
-  plS.mont += (HOURS_PER_PERSON_DAY * pfS) / div;
-}
-for (const emp of (e.reis || [])) {
-  const div = getSplit(pidS, iso, "reis", String(emp));
-  plS.reis += (HOURS_PER_PERSON_DAY * pfS) / div;
-}
+          for (const emp of (e.productie || [])) {
+            const div = getSplit(pidS, iso, "productie", String(emp));
+            plS.prod += (HOURS_PER_PERSON_DAY * pfS) / div;
+          }
+          for (const emp of (e.cnc || [])) {
+            const div = getSplit(pidS, iso, "cnc", String(emp));
+            plS.cnc += (HOURS_PER_PERSON_DAY * pfS) / div;
+          }
+          for (const emp of (e.montage || [])) {
+            const div = getSplit(pidS, iso, "montage", String(emp));
+            plS.mont += (HOURS_PER_PERSON_DAY * pfS) / div;
+          }
+          for (const emp of (e.reis || [])) {
+            const div = getSplit(pidS, iso, "reis", String(emp));
+            plS.reis += (HOURS_PER_PERSON_DAY * pfS) / div;
+          }
 
-// concept (dummy) zoals het was
-plS.prod += Number(e.dummyProd || 0) * HOURS_PER_PERSON_DAY * pfS;
-plS.cnc  += Number(e.dummyCnc  || 0) * HOURS_PER_PERSON_DAY * pfS;
-plS.mont += Number(e.dummyMont || 0) * HOURS_PER_PERSON_DAY * pfS;
-plS.reis += Number(e.dummyReis || 0) * HOURS_PER_PERSON_DAY * pfS;
+          // concept (dummy) zoals het was
+          const capFactorP = pfP || 1;
+
+          plP.prod += Number(e.prodHours || 0) / capFactorP;
+          plP.cnc  += Number(e.cncHours || 0) / capFactorP;
+          plP.mont += Number(e.montHours || 0) / capFactorP;
+          plP.reis += Number(e.reisHours || 0) / capFactorP;
         }
       }
 
