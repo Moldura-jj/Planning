@@ -203,15 +203,24 @@ project.klant = project;
 const detailText = DB.sectionDetailCols
   .filter(d => !String(Array.isArray(d.col) ? d.col[0] : d.col).includes("uren_"))
   .map(d => {
+    const col = Array.isArray(d.col) ? d.col[0] : d.col;
+
     const raw = Array.isArray(d.col)
       ? d.col.map(c => valFrom(s, c)).find(v => v !== null && v !== undefined && v !== "")
       : valFrom(s, d.col);
 
     const v = raw ?? "";
+
     return `
       <div class="fieldgrid" style="grid-template-columns:220px 1fr; margin-top:8px">
         <div class="label">${escapeHtml(d.label)}</div>
-        <div class="value" style="white-space:normal">${escapeHtml(v)}</div>
+        <input
+          class="value section-edit"
+          data-sid="${escapeHtml(sid)}"
+          data-col="${escapeHtml(col)}"
+          type="text"
+          value="${escapeHtml(v)}"
+        >
       </div>
     `;
   }).join("");
@@ -219,15 +228,25 @@ const detailText = DB.sectionDetailCols
 const detailHours = DB.sectionDetailCols
   .filter(d => String(Array.isArray(d.col) ? d.col[0] : d.col).includes("uren_"))
   .map(d => {
+    const col = Array.isArray(d.col) ? d.col[0] : d.col;
+
     const raw = Array.isArray(d.col)
       ? d.col.map(c => valFrom(s, c)).find(v => v !== null && v !== undefined && v !== "")
       : valFrom(s, d.col);
 
-    const v = (raw ?? 0);
+    const v = raw ?? 0;
+
     return `
       <div class="fieldgrid" style="grid-template-columns:190px 1fr; margin-top:8px">
         <div class="label">${escapeHtml(d.label)}</div>
-        <div class="value">${escapeHtml(v)}</div>
+        <input
+          class="value section-edit"
+          data-sid="${escapeHtml(sid)}"
+          data-col="${escapeHtml(col)}"
+          type="number"
+          step="0.25"
+          value="${escapeHtml(v)}"
+        >
       </div>
     `;
   }).join("");
@@ -270,6 +289,15 @@ return `
               <div class="sec-split" style="display:grid; grid-template-columns: 260px 1fr; gap:16px; margin-top:14px;">
                 <div class="sec-left">
                   ${detailHours}
+
+                  <button
+                    type="button"
+                    class="btn primary js-save-section"
+                    data-sid="${escapeHtml(sid)}"
+                    style="margin-top:14px"
+                  >
+                    Sectie opslaan
+                  </button>
                 </div>
 
                 <div class="sec-right">
@@ -309,6 +337,19 @@ return `
       if (!ok) cb.checked = !checked; // revert bij fout
     });
   });
+
+  // Sectie opslaan
+[...el("secBody").querySelectorAll(".js-save-section")].forEach(btn => {
+  btn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const sectionId = btn.getAttribute("data-sid");
+    if (!sectionId) return;
+
+    await saveSection(sectionId);
+  });
+});
 
   // Bestellingen accordion (binnen sectie-details) - delegated
   el("secBody").addEventListener("click", (e) => {
@@ -399,6 +440,58 @@ function ensureProjectSaveButton(projectId) {
   btn.onclick = async () => {
     await saveProject(projectId);
   };
+}
+async function saveSection(sectionId) {
+  const inputs = [...document.querySelectorAll(`.section-edit[data-sid="${CSS.escape(sectionId)}"]`)];
+
+  const payload = {};
+
+  for (const inp of inputs) {
+    const col = inp.dataset.col;
+    if (!col) continue;
+
+    let value = String(inp.value ?? "").trim();
+
+    if (value === "") {
+      payload[col] = null;
+      continue;
+    }
+
+    if ([
+      "aantal",
+      "uren_wvb",
+      "uren_prod",
+      "uren_montage",
+      "uren_mont",
+      "uren_reis"
+    ].includes(col)) {
+      value = value.replace(",", ".");
+      payload[col] = Number(value);
+      continue;
+    }
+
+    payload[col] = value;
+  }
+
+  console.log("SECTION SAVE", { sectionId, payload });
+
+  const { error } = await sb
+    .from(DB.tables.sections)
+    .update(payload)
+    .eq(DB.sectionPkCol, sectionId);
+
+  if (error) {
+    console.error("Sectie opslaan mislukt:", error);
+    setStatus(el("status"), "Sectie opslaan mislukt: " + error.message, "error");
+    alert("Sectie opslaan mislukt: " + error.message);
+    return;
+  }
+
+  setStatus(el("status"), "Sectie opgeslagen.");
+  alert("Sectie opgeslagen.");
+
+  const projectId = new URL(location.href).searchParams.get("id");
+  await loadProject(projectId);
 }
 
 async function saveProject(projectId) {
