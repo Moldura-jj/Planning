@@ -2684,40 +2684,30 @@ for (const dd of dates) {
       const dmSec = assignMap.get(sidC);
 
       if (dmSec) {
-        for (const dd of dates) {
-          const iso = toISODate(dd);
-          const e = dmSec.get(iso);
-          if (!e) continue;
+  for (const dd of dates) {
+    const iso = toISODate(dd);
+    const e = dmSec.get(iso);
+    if (!e) continue;
 
-          // ✅ split per medewerker (alleen echte medewerkers)
-          const pidS = String(pid || "").trim();
+    const capFactorS = pfS || 1;
 
-          for (const emp of (e.productie || [])) {
-            const div = getSplit(pidS, iso, "productie", String(emp));
-            plS.prod += (HOURS_PER_PERSON_DAY * pfS) / div;
-          }
-          for (const emp of (e.cnc || [])) {
-            const div = getSplit(pidS, iso, "cnc", String(emp));
-            plS.cnc += (HOURS_PER_PERSON_DAY * pfS) / div;
-          }
-          for (const emp of (e.montage || [])) {
-            const div = getSplit(pidS, iso, "montage", String(emp));
-            plS.mont += (HOURS_PER_PERSON_DAY * pfS) / div;
-          }
-          for (const emp of (e.reis || [])) {
-            const div = getSplit(pidS, iso, "reis", String(emp));
-            plS.reis += (HOURS_PER_PERSON_DAY * pfS) / div;
-          }
+    // ✅ echte ingevoerde uren gebruiken, net als bij de projectregel
+    plS.prod += Number(e.prodHours || 0) / capFactorS;
+    plS.cnc  += Number(e.cncHours || 0) / capFactorS;
+    plS.mont += Number(e.montHours || 0) / capFactorS;
+    plS.reis += Number(e.reisHours || 0) / capFactorS;
 
-          // concept (dummy) zoals het was
-          const capFactorP = pfP || 1;
+    // ✅ concept/dummy blijft als dag tellen
+    plS.prod += Number(e.dummyProd || 0) * HOURS_PER_PERSON_DAY * pfS;
+    plS.cnc  += Number(e.dummyCnc  || 0) * HOURS_PER_PERSON_DAY * pfS;
+    plS.mont += Number(e.dummyMont || 0) * HOURS_PER_PERSON_DAY * pfS;
+    plS.reis += Number(e.dummyReis || 0) * HOURS_PER_PERSON_DAY * pfS;
 
-          plP.prod += Number(e.prodHours || 0) / capFactorP;
-          plP.cnc  += Number(e.cncHours || 0) / capFactorP;
-          plP.mont += Number(e.montHours || 0) / capFactorP;
-          plP.reis += Number(e.reisHours || 0) / capFactorP;
-        }
-      }
+    // ✅ inhuur voorlopig als dag tellen
+    plS.prod += Number(e.inhuurProdIds?.size || 0) * HOURS_PER_PERSON_DAY * pfS;
+    plS.mont += Number(e.inhuurMontIds?.size || 0) * HOURS_PER_PERSON_DAY * pfS;
+  }
+}
 
       hoursTdS.innerHTML = miniHoursHtml(reqS, plS);
       secRow.appendChild(hoursTdS);
