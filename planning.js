@@ -2455,8 +2455,13 @@ for (const dd of dates) {
     const entry = assignMap.get(sidC)?.get(iso);
 
     if (entry) {
-      prod += entry.productie.size + (entry.dummyProd || 0) + (entry.inhuurProdIds?.size || 0);
-      mont += entry.montage.size + (entry.dummyMont || 0) + (entry.inhuurMontIds?.size || 0);
+      prod += Number(entry.prodHours || 0)
+          + Number(entry.dummyProd || 0)
+          + Number(entry.inhuurProdIds?.size || 0);
+
+      mont += Number(entry.montHours || 0)
+          + Number(entry.dummyMont || 0)
+          + Number(entry.inhuurMontIds?.size || 0);
 
       if ((entry.dummyProd || 0) > 0) dummyProd = true;
       if ((entry.dummyMont || 0) > 0) dummyMont = true;
@@ -2465,13 +2470,18 @@ for (const dd of dates) {
 
   // 2) project-niveau (project_assignments)  ✅ dit miste
   const pe = projectAssignMap.get(String(pid))?.get(iso);
-  if (pe) {
-    prod += pe.productie.size + (pe.dummyProd || 0) + (pe.inhuurProdIds?.size || 0);
-    mont += pe.montage.size + (pe.dummyMont || 0) + (pe.inhuurMontIds?.size || 0);
+    if (pe) {
+      prod += Number(pe.prodHours || 0)
+          + Number(pe.dummyProd || 0)
+          + Number(pe.inhuurProdIds?.size || 0);
 
-    if ((pe.dummyProd || 0) > 0) dummyProd = true;
-    if ((pe.dummyMont || 0) > 0) dummyMont = true;
-  }
+      mont += Number(pe.montHours || 0)
+          + Number(pe.dummyMont || 0)
+          + Number(pe.inhuurMontIds?.size || 0);
+
+      if ((pe.dummyProd || 0) > 0) dummyProd = true;
+      if ((pe.dummyMont || 0) > 0) dummyMont = true;
+    }
 
   projAssignByDay[iso] = { prod, mont, dummyProd, dummyMont };
 }
