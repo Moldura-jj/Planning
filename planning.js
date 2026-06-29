@@ -2879,11 +2879,59 @@ for (const dd of dates) {
       }
 
 
+    const totalProjectProdHours = Number(req.prod || 0) + Number(req.cnc || 0);
+    const totalProjectMontHours = Number(req.mont || 0) + Number(req.reis || 0);
+
+    const plannedProjectTotals = { prod: 0, mont: 0 };
+    for (const dd of dates) {
+      const iso = toISODate(dd);
+
+      for (const s of (sectiesByProject.get(pid) || [])) {
+        const sidRaw = s?.[sectIdKey]
+          ? String(s[sectIdKey])
+          : (s?.section_id ? String(s.section_id) : null);
+        if (!sidRaw) continue;
+
+        const sid = sectLookup.get(String(sidRaw)) || String(sidRaw);
+        const se = assignMap.get(String(sid))?.get(iso);
+        if (!se) continue;
+
+        plannedProjectTotals.prod += Number(se.prodHours || 0)
+          + Number(se.cncHours || 0)
+          + (Number(se.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+          + (Number(se.dummyCnc || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+          + (Number(se.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+
+        plannedProjectTotals.mont += Number(se.montHours || 0)
+          + Number(se.reisHours || 0)
+          + (Number(se.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+          + (Number(se.dummyReis || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+          + (Number(se.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+      }
+
+      const pe = projectAssignMap.get(String(pid))?.get(iso);
+      if (pe) {
+        plannedProjectTotals.prod += Number(pe.prodHours || 0)
+          + Number(pe.cncHours || 0)
+          + Number(pe.dummyProdHours || (Number(pe.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + Number(pe.dummyCncHours || (Number(pe.dummyCnc || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + (Number(pe.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+
+        plannedProjectTotals.mont += Number(pe.montHours || 0)
+          + Number(pe.reisHours || 0)
+          + Number(pe.dummyMontHours || (Number(pe.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + Number(pe.dummyReisHours || (Number(pe.dummyReis || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + (Number(pe.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+      }
+    }
+
+    const remainingProjectProdHours = Math.max(0, Math.round((totalProjectProdHours - plannedProjectTotals.prod) * 100) / 100);
+    const remainingProjectMontHours = Math.max(0, Math.round((totalProjectMontHours - plannedProjectTotals.mont) * 100) / 100);
+
     // ======================
     // ✅ EXTRA "↳ Productie" SAMENVATTINGSREGEL PER PROJECT
     // (concept/dummy productie op projectniveau, voor verder vooruit plannen)
     // ======================
-    const totalProjectProdHours = Number(req.prod || 0) + Number(req.cnc || 0);
     const hasProductieHours = totalProjectProdHours > 0;
 
     const hasProductiePlanned = dates.some(dd => {
@@ -2952,7 +3000,7 @@ for (const dd of dates) {
       hoursTdP.innerHTML = "";
       prodRow.appendChild(hoursTdP);
 
-      appendProjectProductieSummaryDayCells(prodRow, dates, projProdByDay, String(pid), totalProjectProdHours);
+      appendProjectProductieSummaryDayCells(prodRow, dates, projProdByDay, String(pid), remainingProjectProdHours);
 
       tbody.appendChild(prodRow);
       lastRowOfProject = prodRow;
@@ -2962,7 +3010,6 @@ for (const dd of dates) {
     // ✅ EXTRA "↳ Montage" SAMENVATTINGSREGEL PER PROJECT
     // (alleen tonen als er montage-uren bestaan in dit project)
     // ======================
-    const totalProjectMontHours = Number(req.mont || 0) + Number(req.reis || 0);
     const hasMontageHours = (secList || []).some(s => {
       const v =
         Number(s?.uren_montage ?? s?.uren_mont ?? s?.uren_montage_prod ?? 0);
@@ -3052,7 +3099,7 @@ for (const dd of dates) {
       montRow.appendChild(hoursTdM);
 
 
-    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid), totalProjectMontHours);
+    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid), remainingProjectMontHours);
 
 
       tbody.appendChild(montRow);
