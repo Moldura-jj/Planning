@@ -3920,11 +3920,17 @@ if (autoPlanTd) {
   const typeLabel = workType === "montage" ? "montage" : "productie";
 
   if (plannedHours > 0) {
+    const run = getContiguousRunFromCell(autoPlanTd);
+    const limitedRun = limitRunToMaxWorkdays(run.startISO || dateISO, run.endISO || dateISO, 5);
+    const deleteStart = limitedRun.startISO || dateISO;
+    const deleteEnd = limitedRun.endISO || dateISO;
+    const deleteHours = getRunHoursBetweenFromDom(autoPlanTd, deleteStart, deleteEnd);
+    const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
     const msg =
-      `${formatHoursCell(plannedHours)} uur ${typeLabel} verwijderen op ${dateISO}?`;
+      `${formatHoursCell(deleteHours || plannedHours)} uur ${typeLabel} verwijderen van ${dateTxt}?`;
     if (!confirm(msg)) return;
 
-    const ok = await removeProjectDummyForDate(projectId, dateISO, workType);
+    const ok = await removeProjectDummyRange(projectId, deleteStart, deleteEnd, workType);
     if (ok) await loadAndRender();
     return;
   }
@@ -6261,6 +6267,58 @@ async function removeProjectDummyForDate(projectId, dateISO, workType){
     .eq("work_date", d)
     .eq("work_type", type)
     .eq("werknemer_id", DUMMY_EMP_ID);
+
+  if (del.error) {
+    alert("Fout verwijderen conceptplanning: " + del.error.message);
+    return false;
+  }
+
+  return true;
+}
+
+function limitRunToMaxWorkdays(startISO, endISO, maxDays = 5){
+  const days = getPlannerWorkdaysBetween(startISO, endISO).slice(0, maxDays);
+  if (!days.length) return { startISO, endISO: startISO, days: [] };
+  return {
+    startISO: days[0],
+    endISO: days[days.length - 1],
+    days
+  };
+}
+
+function getRunHoursBetweenFromDom(td, startISO, endISO){
+  const tr = td.closest("tr");
+  if (!tr || !startISO || !endISO) return Number(td.dataset.plannedHours || 0);
+
+  let total = 0;
+  for (const cell of Array.from(tr.querySelectorAll("td.project-auto-plan-click"))) {
+    const iso = String(cell.dataset.workDate || "");
+    if (!iso || iso < startISO || iso > endISO) continue;
+    total += Number(cell.dataset.plannedHours || 0);
+  }
+
+  return Math.round((total + Number.EPSILON) * 100) / 100;
+}
+
+async function removeProjectDummyRange(projectId, startISO, endISO, workType){
+  const pid = String(projectId || "").trim();
+  const start = String(startISO || "").trim();
+  const end = String(endISO || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+
+  if (!pid || !start || !end || !["productie", "montage"].includes(type)) {
+    alert("Geen geldig project, datum of planningstype gevonden.");
+    return false;
+  }
+
+  const del = await sb
+    .from("project_assignments")
+    .delete()
+    .eq("project_id", pid)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_EMP_ID)
+    .gte("work_date", start)
+    .lte("work_date", end);
 
   if (del.error) {
     alert("Fout verwijderen conceptplanning: " + del.error.message);
