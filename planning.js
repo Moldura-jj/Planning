@@ -2656,6 +2656,7 @@ for (const dd of dates) {
   });
 
   appendProjectDayCells(projRow, dates, projLabels, complISO, deliveryISO, projAssignByDay);
+  applyProjectDateColumnClasses(projRow, dates, deliveryISO, complISO);
   tbody.appendChild(projRow);
   lastRowOfProject = projRow;     // ✅ alleen assignen (mag ook weg, is al projRow)
 
@@ -2788,6 +2789,7 @@ for (const dd of dates) {
         }
 
         appendSectionDayCells(secRow, dates, labels, sid, String(pid), assignByDay, assignMap, werknemers, inhuurById);
+        applyProjectDateColumnClasses(secRow, dates, deliveryISO, complISO);
 
 
 
@@ -2832,6 +2834,7 @@ for (const dd of dates) {
       orderRow.appendChild(hoursTdO);
 
       appendOrderDayCells(orderRow, dates, oh.leverISO, secIdsForProject, assignMap);
+      applyProjectDateColumnClasses(orderRow, dates, deliveryISO, complISO);
       tbody.appendChild(orderRow);
       lastRowOfProject = orderRow;
 
@@ -2869,6 +2872,7 @@ for (const dd of dates) {
 
       const leverLineISO = it.leverdatum ? asISODate(it.leverdatum) : oh.leverISO;
       appendOrderDayCells(lineRow, dates, leverLineISO, [String(sid)], assignMap);
+      applyProjectDateColumnClasses(lineRow, dates, deliveryISO, complISO);
 
       tbody.appendChild(lineRow);
       lastRowOfProject = lineRow;
@@ -3001,6 +3005,7 @@ for (const dd of dates) {
       prodRow.appendChild(hoursTdP);
 
       appendProjectProductieSummaryDayCells(prodRow, dates, projProdByDay, String(pid), remainingProjectProdHours, deliveryISO);
+      applyProjectDateColumnClasses(prodRow, dates, deliveryISO, complISO);
 
       tbody.appendChild(prodRow);
       lastRowOfProject = prodRow;
@@ -3100,6 +3105,7 @@ for (const dd of dates) {
 
 
     appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid), remainingProjectMontHours, deliveryISO);
+    applyProjectDateColumnClasses(montRow, dates, deliveryISO, complISO);
 
 
       tbody.appendChild(montRow);
@@ -5551,10 +5557,10 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     // markers samen op 1 regel
     html += `<div class="marker-row">`;
     html += isDelivery
-      ? `<div class="marker delivery project-date-marker" draggable="true" data-marker-type="delivery" title="Leverdatum verslepen">lever</div>`
+      ? `<div class="marker delivery project-date-marker" draggable="true" data-marker-type="delivery" title="Leverdatum verslepen"></div>`
       : `<div class="marker delivery placeholder">lever</div>`;
     html += isMarker
-      ? `<div class="marker deadline project-date-marker" draggable="true" data-marker-type="completion" title="Opleverdatum verslepen">oplever</div>`
+      ? `<div class="marker deadline project-date-marker" draggable="true" data-marker-type="completion" title="Opleverdatum verslepen"></div>`
       : `<div class="marker deadline placeholder">oplever</div>`;
 
     html += `</div>`;
@@ -5598,9 +5604,20 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
   }
 }
 
+function applyProjectDateColumnClasses(tr, dates, deliveryISO = "", completionISO = ""){
+  if (!tr) return;
 
+  const cells = Array.from(tr.querySelectorAll("td.cell"))
+    .filter(td => !td.classList.contains("hourscol"));
 
+  for (let i = 0; i < dates.length && i < cells.length; i++) {
+    const iso = toISODate(dates[i]);
+    const td = cells[i];
 
+    td.classList.toggle("project-delivery-col", !!deliveryISO && iso === deliveryISO);
+    td.classList.toggle("project-completion-col", !!completionISO && iso === completionISO);
+  }
+}
 
 function appendSectionDayCells(tr, dates, labels, sectionId, projectId, assignCountByDay, assignMap, werknemers, inhuurById) {
 const empIdKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
