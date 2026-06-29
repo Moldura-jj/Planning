@@ -98,20 +98,22 @@ async function undoLast(){
       }
     }
 
-    if (action.kind === "project-montage") {
+    if (action.kind === "project-montage" || action.kind === "project-productie") {
+      const workType = action.kind === "project-productie" ? "productie" : "montage";
       await sb
         .from("project_assignments")
         .delete()
         .eq("project_id", action.project_id)
         .eq("work_date", action.to_date)
-        .eq("work_type", "montage");
+        .eq("work_type", workType);
 
       if (action.rows?.length) {
         const backRows = action.rows.map(r => ({
           project_id: action.project_id,
           work_date: action.from_date,
           werknemer_id: r.werknemer_id,
-          work_type: r.work_type
+          work_type: r.work_type,
+          note: r.note || null
         }));
         await sb.from("project_assignments").insert(backRows);
       }
@@ -5771,6 +5773,15 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
         td.dataset.totalHours = String(Number(totalHours || 0));
         td.dataset.plannedHours = String(displayProd);
 
+        td.classList.add("dd-dropzone");
+        td.dataset.ddKind = "project-productie";
+        td.dataset.ddKey = key || "";
+
+        if (displayProd > 0) {
+          td.setAttribute("draggable", "true");
+          td.classList.add("dd-draggable");
+        }
+
         let html = `<div class="plan-stack">`;
         html += `<div class="marker-row">
           <div class="marker delivery placeholder">lever</div>
@@ -6371,18 +6382,20 @@ function wireDragDrop(root){
         return;
       }
 
-      if (kind === "project-montage") {
+      if (kind === "project-montage" || kind === "project-productie") {
         const fromPid = String(payload.projectId || "");
         const toPid   = String(cell.dataset.projectId || "");
         if (!fromPid || !toPid || fromPid !== toPid) return;
+
+        const workType = kind === "project-productie" ? "productie" : "montage";
 
         if (payload.isRange) {
           const startISO = String(payload.fromStart || fromDate);
           const endISO   = String(payload.fromEnd   || fromDate);
           const delta    = daysBetweenISO(startISO, toDate);
-          await moveProjectMontageRange(fromPid, startISO, endISO, delta);
+          await moveProjectAssignmentRange(fromPid, workType, startISO, endISO, delta);
         } else {
-          await moveProjectMontageDay(fromPid, fromDate, toDate);
+          await moveProjectAssignmentDay(fromPid, workType, fromDate, toDate);
         }
 
         loadAndRender();
@@ -6548,6 +6561,95 @@ pushUndo({
   if (insErr) { alert("Insert fout: " + insErr.message); return; }
 
   console.log("moveProjectMontageDay OK:", rows.length, { pid, f, t });
+}
+
+async function moveProjectAssignmentDay(projectId, workType, fromDate, toDate){
+  const pid = String(projectId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const f = String(fromDate || "").trim();
+  const t = String(toDate || "").trim();
+  if (!pid || !type || !f || !t || f === t) return;
+
+  const { data: rows, error: selErr } = await sb
+    .from("project_assignments")
+    .select("id, project_id, werknemer_id, work_type, note")
+    .eq("project_id", pid)
+    .eq("work_date", f)
+    .eq("work_type", type);
+
+  if (selErr) { alert("Select fout: " + selErr.message); return; }
+  if (!rows || rows.length === 0) { alert("Er is niets verplaatst (0 regels)."); return; }
+
+  pushUndo({
+    kind: type === "productie" ? "project-productie" : "project-montage",
+    project_id: pid,
+    from_date: f,
+    to_date: t,
+    rows: rows.map(r => ({ werknemer_id: r.werknemer_id, work_type: r.work_type, note: r.note || null }))
+  });
+
+  const { error: delErr } = await sb
+    .from("project_assignments")
+    .delete()
+    .eq("project_id", pid)
+    .eq("work_date", f)
+    .eq("work_type", type);
+
+  if (delErr) { alert("Delete fout: " + delErr.message); return; }
+
+  const newRows = rows.map(r => ({
+    project_id: r.project_id,
+    work_date: t,
+    werknemer_id: r.werknemer_id,
+    work_type: r.work_type,
+    note: r.note || null
+  }));
+
+  const { error: insErr } = await sb
+    .from("project_assignments")
+    .insert(newRows);
+
+  if (insErr) { alert("Insert fout: " + insErr.message); return; }
+}
+
+async function moveProjectAssignmentRange(projectId, workType, fromStartISO, fromEndISO, deltaDays){
+  const type = String(workType || "").toLowerCase().trim();
+
+  const { data: rows, error: selErr } = await sb
+    .from("project_assignments")
+    .select("id, project_id, work_date, werknemer_id, work_type, note")
+    .eq("project_id", projectId)
+    .eq("work_type", type)
+    .gte("work_date", fromStartISO)
+    .lte("work_date", fromEndISO)
+    .limit(200000);
+
+  if (selErr) { alert("Range select fout: " + selErr.message); return; }
+  if (!rows || rows.length === 0) { alert("Er is niets verplaatst (0 regels)."); return; }
+
+  const { error: delErr } = await sb
+    .from("project_assignments")
+    .delete()
+    .eq("project_id", projectId)
+    .eq("work_type", type)
+    .gte("work_date", fromStartISO)
+    .lte("work_date", fromEndISO);
+
+  if (delErr) { alert("Range delete fout: " + delErr.message); return; }
+
+  const newRows = rows.map(r => {
+    const newISO = toISODate(addDays(parseISODate(r.work_date), deltaDays));
+    return {
+      project_id: r.project_id,
+      work_date: newISO,
+      werknemer_id: r.werknemer_id,
+      work_type: r.work_type,
+      note: r.note || null
+    };
+  });
+
+  const { error: insErr } = await sb.from("project_assignments").insert(newRows);
+  if (insErr) { alert("Range insert fout: " + insErr.message); return; }
 }
 
 async function moveProjectMontageRange(projectId, fromStartISO, fromEndISO, deltaDays){
