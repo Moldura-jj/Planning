@@ -657,8 +657,6 @@ function asISODate(v){
           </div>
         </div>
         <div class="ft">
-          <button class="btn" id="amAutoProd" type="button" hidden>Auto productie</button>
-          <button class="btn" id="amAutoMont" type="button" hidden>Auto montage</button>
           <button class="btn" id="amCancel" type="button">Annuleren</button>
           <button class="btn primary" id="amSave" type="button">Opslaan</button>
         </div>
@@ -1343,108 +1341,6 @@ function parseSectionNo(v){
   };
 }
 
-function pickSectionNumber(obj, keys){
-  for (const key of keys) {
-    const v = obj?.[key];
-    if (v !== null && v !== undefined && v !== "") {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : 0;
-    }
-  }
-  return 0;
-}
-
-function roundHours2(n){
-  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
-}
-
-function sectionDummyHours(entry, kind){
-  const key = `dummy${kind}Hours`;
-  const countKey = `dummy${kind}`;
-  const hours = Number(entry?.[key] || 0);
-  if (hours > 0) return hours;
-  return Number(entry?.[countKey] || 0) * PROJECT_DUMMY_HOURS_PER_DAY;
-}
-
-async function consumeProjectConceptHours(projectId, dateISO, workType, consumeHours){
-  const pid = String(projectId || "").trim();
-  const date = String(dateISO || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
-  let remaining = roundHours2(consumeHours);
-
-  if (!pid || !date || !["productie", "montage"].includes(type) || remaining <= 0) return;
-
-  const { data: rows, error: selErr } = await sb
-    .from("project_assignments")
-    .select("id, note")
-    .eq("project_id", pid)
-    .eq("work_date", date)
-    .eq("work_type", type)
-    .eq("werknemer_id", DUMMY_EMP_ID)
-    .limit(50);
-
-  if (selErr) {
-    console.warn("consumeProjectConceptHours select error:", selErr.message);
-    return;
-  }
-
-  for (const row of (rows || [])) {
-    if (remaining <= 0) break;
-
-    const curHours = parseProjectDummyHours(row.note);
-    const take = Math.min(curHours, remaining);
-    const left = roundHours2(curHours - take);
-    remaining = roundHours2(remaining - take);
-
-    if (left > 0.001) {
-      const upd = await sb
-        .from("project_assignments")
-        .update({ note: `concept-hours:${left}` })
-        .eq("id", row.id);
-      if (upd.error) console.warn("consumeProjectConceptHours update error:", upd.error.message);
-    } else {
-      const del = await sb
-        .from("project_assignments")
-        .delete()
-        .eq("id", row.id);
-      if (del.error) console.warn("consumeProjectConceptHours delete error:", del.error.message);
-    }
-  }
-}
-
-async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, hours){
-  const sid = String(sectionId || "").trim();
-  const pid = String(projectId || "").trim();
-  const date = String(dateISO || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
-  const conceptHours = roundHours2(hours);
-
-  if (!sid || !date || !["productie", "montage"].includes(type) || conceptHours <= 0) return { ok: false, message: "Geen uren om automatisch te plannen." };
-
-  const deliveryISO = window.__plannerCtx?.projMetaById?.get(pid)?.deliveryISO || "";
-  let segments = buildProjectDummyHoursSegments(date, conceptHours, deliveryISO);
-  if (!segments.length && deliveryISO) {
-    segments = buildProjectDummyHoursSegments(date, conceptHours);
-  }
-  if (!segments.length) return { ok: false, message: "Geen werkdagen gevonden om te plannen." };
-
-  const rows = segments.map(seg => ({
-    section_id: sid,
-    work_date: seg.work_date,
-    werknemer_id: Number(DUMMY_SEC_ID),
-    work_type: type,
-    note: `concept-hours:${seg.hours}`
-  }));
-
-  const ins = await sb.from("section_assignments").insert(rows);
-  if (ins.error) return { ok: false, message: ins.error.message };
-
-  for (const seg of segments) {
-    await consumeProjectConceptHours(pid, seg.work_date, type, seg.hours);
-  }
-  return { ok: true };
-}
-
     // ===== Onderaanneming suggesties (per project cache) =====
     const _subcSuggestCache = new Map(); // projectId -> [names]
 
@@ -1908,10 +1804,6 @@ for (const p of projecten || []) {
         dummyCnc: 0,
         dummyMont: 0,
         dummyReis: 0,
-        dummyProdHours: 0,
-        dummyCncHours: 0,
-        dummyMontHours: 0,
-        dummyReisHours: 0,
 
         dummySub: 0,
         subcNames: [],
@@ -1931,7 +1823,6 @@ for (const p of projecten || []) {
 
 
 const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
-      const dummyHours = parseProjectDummyHours(note);
 
       if (wt === "productie") {
         if (isDummy && note.startsWith("inhuur:")) {
@@ -1939,7 +1830,6 @@ const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
           if (iid) entry.inhuurProdIds.add(iid);     // ✅ inhuur, NIET concept
         } else if (isDummy) {
           entry.dummyProd += 1;                      // ✅ echte concept
-          entry.dummyProdHours += dummyHours;
         } else {
           entry.productie.add(emp);
           entry.prodHours += rowHours;
@@ -1953,17 +1843,13 @@ const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
           if (iid) entry.inhuurMontIds.add(iid);     // ✅ inhuur, NIET concept
         } else if (isDummy) {
           entry.dummyMont += 1;                      // ✅ echte concept
-          entry.dummyMontHours += dummyHours;
         } else {
           entry.montage.add(emp);
           entry.montHours += rowHours;
         }
       }
       if (wt === "cnc") {
-        if (isDummy) {
-          entry.dummyCnc += 1;
-          entry.dummyCncHours += dummyHours;
-        }
+        if (isDummy) entry.dummyCnc += 1;
         else {
           entry.cnc.add(emp);
           entry.cncHours += rowHours;
@@ -1971,10 +1857,7 @@ const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
       }
 
       if (wt === "reis") {
-        if (isDummy) {
-          entry.dummyReis += 1;
-          entry.dummyReisHours += dummyHours;
-        }
+        if (isDummy) entry.dummyReis += 1;
         else {
           entry.reis.add(emp);
           entry.reisHours += rowHours;
@@ -2285,7 +2168,6 @@ for (const p of (projecten || [])) {
   projMetaById.set(pid, {
     nr: String(p?.[projNrKey] ?? "").trim(),
     nm: String(p?.[projNameKey] ?? "").trim(),
-    deliveryISO: asISODate(p?.[deliveryKey] ?? ""),
   });
 }
 
@@ -2393,32 +2275,9 @@ for (const p of (projecten || [])) {
         plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0) + (Number(entry.montHours || 0) / capFactor);
         plannedCncByDay[iso] = Number(plannedCncByDay[iso] || 0) + (Number(entry.cncHours || 0) / capFactor);
         plannedReisByDay[iso] = Number(plannedReisByDay[iso] || 0) + (Number(entry.reisHours || 0) / capFactor);
-        plannedProdByDay[iso] += sectionDummyHours(entry, "Prod") * pf;
-        plannedMontByDay[iso] += sectionDummyHours(entry, "Mont") * pf;
-      }
-    }
-
-    // ✅ projectniveau dummy/concept uren meenemen in onderste optelling
-    // Dit zijn de blokken uit de projectregels "↳ Productie" en "↳ Montage".
-    for (const [pid, dm] of projectAssignMap) {
-      for (const [iso, entry] of dm) {
-        plannedProdByDay[iso] = Number(plannedProdByDay[iso] || 0)
-          + Number(entry.prodHours || 0)
-          + Number(entry.dummyProdHours || (Number(entry.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
-          + (Number(entry.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-
-        plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0)
-          + Number(entry.montHours || 0)
-          + Number(entry.dummyMontHours || (Number(entry.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
-          + (Number(entry.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-
-        plannedCncByDay[iso] = Number(plannedCncByDay[iso] || 0)
-          + Number(entry.cncHours || 0)
-          + Number(entry.dummyCncHours || (Number(entry.dummyCnc || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
-
-        plannedReisByDay[iso] = Number(plannedReisByDay[iso] || 0)
-          + Number(entry.reisHours || 0)
-          + Number(entry.dummyReisHours || (Number(entry.dummyReis || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
+        // concept/dummy blijft als dag tellen
+        plannedProdByDay[iso] += Number(entry.dummyProd || 0) * HOURS_PER_PERSON_DAY * pf;
+        plannedMontByDay[iso] += Number(entry.dummyMont || 0) * HOURS_PER_PERSON_DAY * pf;
       }
     }
 
@@ -2671,10 +2530,11 @@ for (const dd of dates) {
     plP.mont += Number(e.montHours || 0) / capFactorP;
     plP.reis += Number(e.reisHours || 0) / capFactorP;
 
-    plP.prod += sectionDummyHours(e, "Prod") * pfP;
-    plP.cnc  += sectionDummyHours(e, "Cnc") * pfP;
-    plP.mont += sectionDummyHours(e, "Mont") * pfP;
-    plP.reis += sectionDummyHours(e, "Reis") * pfP;
+    // concept / dummy blijft als 1 dag rekenen
+    plP.prod += Number(e.dummyProd || 0) * HOURS_PER_PERSON_DAY * pfP;
+    plP.cnc  += Number(e.dummyCnc  || 0) * HOURS_PER_PERSON_DAY * pfP;
+    plP.mont += Number(e.dummyMont || 0) * HOURS_PER_PERSON_DAY * pfP;
+    plP.reis += Number(e.dummyReis || 0) * HOURS_PER_PERSON_DAY * pfP;
 
     // inhuur blijft voorlopig als dag rekenen
     plP.prod += Number(e.inhuurProdIds?.size || 0) * HOURS_PER_PERSON_DAY * pfP;
@@ -2724,11 +2584,11 @@ for (const dd of dates) {
 
     if (entry) {
       prod += Number(entry.prodHours || 0)
-          + sectionDummyHours(entry, "Prod")
+          + Number(entry.dummyProd || 0)
           + Number(entry.inhuurProdIds?.size || 0);
 
       mont += Number(entry.montHours || 0)
-          + sectionDummyHours(entry, "Mont")
+          + Number(entry.dummyMont || 0)
           + Number(entry.inhuurMontIds?.size || 0);
 
       if ((entry.dummyProd || 0) > 0) dummyProd = true;
@@ -2772,7 +2632,6 @@ for (const dd of dates) {
   });
 
   appendProjectDayCells(projRow, dates, projLabels, complISO, deliveryISO, projAssignByDay);
-  applyProjectDateColumnClasses(projRow, dates, deliveryISO, complISO);
   tbody.appendChild(projRow);
   lastRowOfProject = projRow;     // ✅ alleen assignen (mag ook weg, is al projRow)
 
@@ -2871,10 +2730,11 @@ for (const dd of dates) {
     plS.mont += Number(e.montHours || 0) / capFactorS;
     plS.reis += Number(e.reisHours || 0) / capFactorS;
 
-    plS.prod += sectionDummyHours(e, "Prod") * pfS;
-    plS.cnc  += sectionDummyHours(e, "Cnc") * pfS;
-    plS.mont += sectionDummyHours(e, "Mont") * pfS;
-    plS.reis += sectionDummyHours(e, "Reis") * pfS;
+    // ✅ concept/dummy blijft als dag tellen
+    plS.prod += Number(e.dummyProd || 0) * HOURS_PER_PERSON_DAY * pfS;
+    plS.cnc  += Number(e.dummyCnc  || 0) * HOURS_PER_PERSON_DAY * pfS;
+    plS.mont += Number(e.dummyMont || 0) * HOURS_PER_PERSON_DAY * pfS;
+    plS.reis += Number(e.dummyReis || 0) * HOURS_PER_PERSON_DAY * pfS;
 
     // ✅ inhuur voorlopig als dag tellen
     plS.prod += Number(e.inhuurProdIds?.size || 0) * HOURS_PER_PERSON_DAY * pfS;
@@ -2896,68 +2756,20 @@ for (const dd of dates) {
           const iso = toISODate(dd);
           const entry = dmA?.get(iso);
         assignByDay[iso] = {
-          prod: entry ? Number(entry.prodHours || 0) : 0,
-          mont: entry ? Number(entry.montHours || 0) : 0,
-          prodReal: entry ? Number(entry.prodHours || 0) : 0,
-          prodDummy: 0,
-          montReal: entry ? Number(entry.montHours || 0) : 0,
-          montDummy: 0,
+          prod: entry ? (Number(entry.prodHours || 0) + Number(entry.dummyProd || 0)) : 0,
+          mont: entry ? (Number(entry.montHours || 0) + Number(entry.dummyMont || 0)) : 0,
           subc: entry ? Number(entry.subcNames?.length || 0) : 0,
         };
 
         }
 
         appendSectionDayCells(secRow, dates, labels, sid, String(pid), assignByDay, assignMap, werknemers, inhuurById);
-        applyProjectDateColumnClasses(secRow, dates, deliveryISO, complISO);
 
 
 
 
         tbody.appendChild(secRow);
         lastRowOfProject = secRow;
-
-        const conceptByDay = {};
-        let hasSectionConcept = false;
-        for (const dd of dates) {
-          const iso = toISODate(dd);
-          const entry = dmA?.get(iso);
-          const prodDummy = entry ? sectionDummyHours(entry, "Prod") : 0;
-          const montDummy = entry ? sectionDummyHours(entry, "Mont") : 0;
-          if (prodDummy > 0 || montDummy > 0) hasSectionConcept = true;
-          conceptByDay[iso] = {
-            prod: prodDummy,
-            mont: montDummy,
-            prodReal: 0,
-            prodDummy,
-            montReal: 0,
-            montDummy,
-            subc: 0,
-          };
-        }
-
-        if (hasSectionConcept) {
-          const conceptRow = document.createElement("tr");
-          conceptRow.className = "section-row hidden section-concept-row";
-          markZebra(conceptRow);
-          conceptRow.dataset.parent = String(pid);
-
-          const leftConcept = document.createElement("td");
-          leftConcept.className = "rowhdr sticky-left section-cell";
-          leftConcept.innerHTML = `<span class="sectext"> ↳ Concept</span>`;
-          conceptRow.appendChild(leftConcept);
-
-          const hoursTdConcept = document.createElement("td");
-          hoursTdConcept.className = "cell hourscol sticky-left2";
-          hoursTdConcept.style.left = "380px";
-          if (!hoursColOpen) hoursTdConcept.style.display = "none";
-          hoursTdConcept.innerHTML = "";
-          conceptRow.appendChild(hoursTdConcept);
-
-          appendSectionDayCells(conceptRow, dates, dates.map(() => ""), sid, String(pid), conceptByDay, assignMap, werknemers, inhuurById);
-          applyProjectDateColumnClasses(conceptRow, dates, deliveryISO, complISO);
-          tbody.appendChild(conceptRow);
-          lastRowOfProject = conceptRow;
-        }
 
 
     // ======================
@@ -2996,7 +2808,6 @@ for (const dd of dates) {
       orderRow.appendChild(hoursTdO);
 
       appendOrderDayCells(orderRow, dates, oh.leverISO, secIdsForProject, assignMap);
-      applyProjectDateColumnClasses(orderRow, dates, deliveryISO, complISO);
       tbody.appendChild(orderRow);
       lastRowOfProject = orderRow;
 
@@ -3034,7 +2845,6 @@ for (const dd of dates) {
 
       const leverLineISO = it.leverdatum ? asISODate(it.leverdatum) : oh.leverISO;
       appendOrderDayCells(lineRow, dates, leverLineISO, [String(sid)], assignMap);
-      applyProjectDateColumnClasses(lineRow, dates, deliveryISO, complISO);
 
       tbody.appendChild(lineRow);
       lastRowOfProject = lineRow;
@@ -3045,59 +2855,11 @@ for (const dd of dates) {
       }
 
 
-    const totalProjectProdHours = Number(req.prod || 0) + Number(req.cnc || 0);
-    const totalProjectMontHours = Number(req.mont || 0) + Number(req.reis || 0);
-
-    const plannedProjectTotals = { prod: 0, mont: 0 };
-    for (const dd of dates) {
-      const iso = toISODate(dd);
-
-      for (const s of (sectiesByProject.get(pid) || [])) {
-        const sidRaw = s?.[sectIdKey]
-          ? String(s[sectIdKey])
-          : (s?.section_id ? String(s.section_id) : null);
-        if (!sidRaw) continue;
-
-        const sid = sectLookup.get(String(sidRaw)) || String(sidRaw);
-        const se = assignMap.get(String(sid))?.get(iso);
-        if (!se) continue;
-
-        plannedProjectTotals.prod += Number(se.prodHours || 0)
-          + Number(se.cncHours || 0)
-          + sectionDummyHours(se, "Prod")
-          + sectionDummyHours(se, "Cnc")
-          + (Number(se.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-
-        plannedProjectTotals.mont += Number(se.montHours || 0)
-          + Number(se.reisHours || 0)
-          + sectionDummyHours(se, "Mont")
-          + sectionDummyHours(se, "Reis")
-          + (Number(se.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-      }
-
-      const pe = projectAssignMap.get(String(pid))?.get(iso);
-      if (pe) {
-        plannedProjectTotals.prod += Number(pe.prodHours || 0)
-          + Number(pe.cncHours || 0)
-          + Number(pe.dummyProdHours || (Number(pe.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
-          + Number(pe.dummyCncHours || (Number(pe.dummyCnc || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
-          + (Number(pe.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-
-        plannedProjectTotals.mont += Number(pe.montHours || 0)
-          + Number(pe.reisHours || 0)
-          + Number(pe.dummyMontHours || (Number(pe.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
-          + Number(pe.dummyReisHours || (Number(pe.dummyReis || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
-          + (Number(pe.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-      }
-    }
-
-    const remainingProjectProdHours = Math.max(0, Math.round((totalProjectProdHours - plannedProjectTotals.prod) * 100) / 100);
-    const remainingProjectMontHours = Math.max(0, Math.round((totalProjectMontHours - plannedProjectTotals.mont) * 100) / 100);
-
     // ======================
     // ✅ EXTRA "↳ Productie" SAMENVATTINGSREGEL PER PROJECT
     // (concept/dummy productie op projectniveau, voor verder vooruit plannen)
     // ======================
+    const totalProjectProdHours = Number(req.prod || 0) + Number(req.cnc || 0);
     const hasProductieHours = totalProjectProdHours > 0;
 
     const hasProductiePlanned = dates.some(dd => {
@@ -3140,7 +2902,7 @@ for (const dd of dates) {
           if (!se) continue;
 
           sectProd += Number(se.prodHours || 0)
-            + sectionDummyHours(se, "Prod")
+            + (Number(se.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
             + (Number(se.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
         }
 
@@ -3166,8 +2928,7 @@ for (const dd of dates) {
       hoursTdP.innerHTML = "";
       prodRow.appendChild(hoursTdP);
 
-      appendProjectProductieSummaryDayCells(prodRow, dates, projProdByDay, String(pid), remainingProjectProdHours, deliveryISO);
-      applyProjectDateColumnClasses(prodRow, dates, deliveryISO, complISO);
+      appendProjectProductieSummaryDayCells(prodRow, dates, projProdByDay, String(pid), totalProjectProdHours);
 
       tbody.appendChild(prodRow);
       lastRowOfProject = prodRow;
@@ -3177,6 +2938,7 @@ for (const dd of dates) {
     // ✅ EXTRA "↳ Montage" SAMENVATTINGSREGEL PER PROJECT
     // (alleen tonen als er montage-uren bestaan in dit project)
     // ======================
+    const totalProjectMontHours = Number(req.mont || 0) + Number(req.reis || 0);
     const hasMontageHours = (secList || []).some(s => {
       const v =
         Number(s?.uren_montage ?? s?.uren_mont ?? s?.uren_montage_prod ?? 0);
@@ -3231,7 +2993,7 @@ for (const dd of dates) {
         if (!se) continue;
 
         sectMont += Number(se.montHours || 0)
-          + sectionDummyHours(se, "Mont")
+          + (Number(se.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
           + (Number(se.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
       }
 
@@ -3266,8 +3028,7 @@ for (const dd of dates) {
       montRow.appendChild(hoursTdM);
 
 
-    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid), remainingProjectMontHours, deliveryISO);
-    applyProjectDateColumnClasses(montRow, dates, deliveryISO, complISO);
+    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid), totalProjectMontHours);
 
 
       tbody.appendChild(montRow);
@@ -4078,7 +3839,6 @@ if (autoPlanTd) {
   const workType  = String(autoPlanTd.dataset.workType || "").toLowerCase().trim();
   const totalHours = Number(autoPlanTd.dataset.totalHours || 0);
   const plannedHours = Number(autoPlanTd.dataset.plannedHours || 0);
-  const deliveryDate = String(autoPlanTd.dataset.deliveryDate || "").trim();
 
   if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO) {
     alert("Geen geldig project-id gevonden voor deze projectregel.");
@@ -4088,17 +3848,11 @@ if (autoPlanTd) {
   const typeLabel = workType === "montage" ? "montage" : "productie";
 
   if (plannedHours > 0) {
-    const run = getContiguousRunFromCell(autoPlanTd);
-    const limitedRun = limitRunToMaxWorkdays(run.startISO || dateISO, run.endISO || dateISO, 5);
-    const deleteStart = limitedRun.startISO || dateISO;
-    const deleteEnd = limitedRun.endISO || dateISO;
-    const deleteHours = getRunHoursBetweenFromDom(autoPlanTd, deleteStart, deleteEnd);
-    const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
     const msg =
-      `${formatHoursCell(deleteHours || plannedHours)} uur ${typeLabel} verwijderen van ${dateTxt}?`;
+      `${formatHoursCell(plannedHours)} uur ${typeLabel} verwijderen op ${dateISO}?`;
     if (!confirm(msg)) return;
 
-    const ok = await removeProjectDummyRange(projectId, deleteStart, deleteEnd, workType);
+    const ok = await removeProjectDummyForDate(projectId, dateISO, workType);
     if (ok) await loadAndRender();
     return;
   }
@@ -4109,15 +3863,14 @@ if (autoPlanTd) {
   }
 
   const dayCount = Math.ceil(totalHours / PROJECT_DUMMY_HOURS_PER_DAY);
-  const deliveryTxt = deliveryDate ? `\nEr wordt gepland vóór leverdatum ${deliveryDate}.` : "";
   const msg =
     `Sectie plannen?\n\n` +
     `${typeLabel}: ${formatHoursCell(totalHours)} uur / ${String(PROJECT_DUMMY_HOURS_PER_DAY).replace(".", ",")} uur per dag = ${dayCount} dag(en).\n` +
-    `Vanaf ${dateISO} worden werkdagen automatisch gevuld met conceptplanning.${deliveryTxt}`;
+    `Vanaf ${dateISO} worden werkdagen automatisch gevuld met conceptplanning.`;
 
   if (!confirm(msg)) return;
 
-  const ok = await autoPlanProjectDummyRange(projectId, dateISO, workType, totalHours, deliveryDate);
+  const ok = await autoPlanProjectDummyRange(projectId, dateISO, workType, totalHours);
   if (ok) await loadAndRender();
   return;
 }
@@ -4161,10 +3914,6 @@ if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO)
   const listProd = modal.wrap.querySelector("#amListProd");
   const listMont = modal.wrap.querySelector("#amListMont");
   const saveBtn  = modal.wrap.querySelector("#amSave");
-  const autoProdBtn = modal.wrap.querySelector("#amAutoProd");
-  const autoMontBtn = modal.wrap.querySelector("#amAutoMont");
-  if (autoProdBtn) autoProdBtn.hidden = true;
-  if (autoMontBtn) autoMontBtn.hidden = true;
 
   if (subEl) subEl.textContent = `${dateISO} • ${projectId} • Montage (project)`;
 
@@ -4336,35 +4085,6 @@ const countM = rowM.querySelector(".concept-count");
 
   return;
 }
-
-// ======================
-// ✅ klik op sectie-conceptregel => concepturen verwijderen
-// ======================
-const sectionConceptTd = ev.target.closest("td.section-concept-click");
-if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) {
-  if (__wasDragging) return;
-  ev.stopPropagation();
-
-  const plannedHours = Number(sectionConceptTd.dataset.plannedHours || 0);
-  const sectionId = String(sectionConceptTd.dataset.sectionId || "").trim();
-  const workType = String(sectionConceptTd.dataset.workType || "").toLowerCase().trim();
-  const dateISO = String(sectionConceptTd.dataset.workDate || "").trim();
-  if (!sectionId || !dateISO || !["productie", "montage"].includes(workType)) return;
-
-  const run = getContiguousRunFromCell(sectionConceptTd);
-  const limitedRun = limitRunToMaxWorkdays(run.startISO || dateISO, run.endISO || dateISO, 5);
-  const deleteStart = limitedRun.startISO || dateISO;
-  const deleteEnd = limitedRun.endISO || dateISO;
-  const deleteHours = getRunHoursBetweenFromDom(sectionConceptTd, deleteStart, deleteEnd);
-  const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
-  const typeLabel = workType === "montage" ? "montage" : "productie";
-
-  if (!confirm(`${formatHoursCell(deleteHours || plannedHours)} uur concept ${typeLabel} verwijderen van ${dateTxt}?`)) return;
-
-  const ok = await removeSectionConceptRange(sectionId, workType, deleteStart, deleteEnd);
-  if (ok) await loadAndRender();
-  return;
-}
       if (__wasDragging) return;
 
       const td = ev.target.closest("td.section-click");
@@ -4383,9 +4103,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
       // current selection
       const cur = assignMap.get(sid)?.get(dateISO) || {
         productie: new Set(), montage: new Set(),
-        dummyProd: 0, dummyMont: 0, dummySub: 0,
-        dummyProdHours: 0, dummyMontHours: 0,
-        dummyCncHours: 0, dummyReisHours: 0
+        dummyProd: 0, dummyMont: 0, dummySub: 0
       };
 
       const selected = {
@@ -4398,8 +4116,6 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
         dummyProd: Number(cur.dummyProd || 0),
         dummyMont: Number(cur.dummyMont || 0),
-        dummyProdHours: sectionDummyHours(cur, "Prod"),
-        dummyMontHours: sectionDummyHours(cur, "Mont"),
 
         // ✅ onderaanneming: meerdere namen
         subcNames: Array.isArray(cur.subcNames) ? [...cur.subcNames] : []
@@ -4421,60 +4137,6 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
       for (const iid of (cur.inhuurProdIds || [])) selected.productie.add(String(iid));
       for (const iid of (cur.inhuurMontIds || [])) selected.montage.add(String(iid));
 
-      const getSectionPlannedTotals = () => {
-        const totals = { prod: 0, mont: 0 };
-        const dm = assignMap.get(String(sid));
-        if (!dm) return totals;
-
-        for (const [, entry] of dm) {
-          totals.prod += Number(entry.prodHours || 0)
-            + Number(entry.cncHours || 0)
-            + sectionDummyHours(entry, "Prod")
-            + sectionDummyHours(entry, "Cnc")
-            + (Number(entry.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-
-          totals.mont += Number(entry.montHours || 0)
-            + Number(entry.reisHours || 0)
-            + sectionDummyHours(entry, "Mont")
-            + sectionDummyHours(entry, "Reis")
-            + (Number(entry.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-        }
-
-        totals.prod = roundHours2(totals.prod);
-        totals.mont = roundHours2(totals.mont);
-        return totals;
-      };
-
-      const sectionRequiredHours = {
-        prod: roundHours2(
-          pickSectionNumber(sObj, ["uren_prod"]) +
-          pickSectionNumber(sObj, ["uren_cnc", "uren_cnc_prod", "cnc_uren"])
-        ),
-        mont: roundHours2(
-          pickSectionNumber(sObj, ["uren_montage", "uren_mont"]) +
-          pickSectionNumber(sObj, ["uren_reis", "reis_uren"])
-        ),
-      };
-
-      const sectionPlannedTotals = getSectionPlannedTotals();
-      const sectionRemainingHours = {
-        prod: Math.max(0, roundHours2(sectionRequiredHours.prod - sectionPlannedTotals.prod)),
-        mont: Math.max(0, roundHours2(sectionRequiredHours.mont - sectionPlannedTotals.mont)),
-      };
-
-      const prevSectProdHours = roundHours2(
-        Number(cur.prodHours || 0) +
-        Number(cur.cncHours || 0) +
-        sectionDummyHours(cur, "Prod") +
-        sectionDummyHours(cur, "Cnc")
-      );
-      const prevSectMontHours = roundHours2(
-        Number(cur.montHours || 0) +
-        Number(cur.reisHours || 0) +
-        sectionDummyHours(cur, "Mont") +
-        sectionDummyHours(cur, "Reis")
-      );
-
       // ✅ snapshot: hoeveel montage stond er al op deze sectie (incl concept)
       const prevSectMontCount = (cur?.montage?.size || 0) + Number(cur?.dummyMont || 0);
 
@@ -4484,34 +4146,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
       const saveBtn = modal.wrap.querySelector("#amSave");
       const listSubc = modal.wrap.querySelector("#amListSubc");
       const pickSubc = modal.wrap.querySelector("#amSubcPick");
-      const autoProdBtn = modal.wrap.querySelector("#amAutoProd");
-      const autoMontBtn = modal.wrap.querySelector("#amAutoMont");
       if (subEl) subEl.textContent = `${dateISO} • ${sid}`;
-
-      const setupAutoButton = (btn, type, hours) => {
-        if (!btn) return;
-        btn.hidden = false;
-        btn.disabled = !(hours > 0);
-        btn.textContent = type === "productie"
-          ? `Auto productie (${formatHoursCell(hours)}u)`
-          : `Auto montage (${formatHoursCell(hours)}u)`;
-        btn.onclick = async () => {
-          if (!(hours > 0)) {
-            alert("Geen resterende uren om automatisch te plannen.");
-            return;
-          }
-          const res = await autoPlanSectionConcept(sid, projectId, dateISO, type, hours);
-          if (!res.ok) {
-            alert("Fout automatisch plannen: " + (res.message || "Onbekende fout"));
-            return;
-          }
-          modal.close();
-          loadAndRender();
-        };
-      };
-
-      setupAutoButton(autoProdBtn, "productie", sectionRemainingHours.prod);
-      setupAutoButton(autoMontBtn, "montage", sectionRemainingHours.mont);
 
 
       const renderBothLists = () => {
@@ -4585,12 +4220,10 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
         plusP.onclick = () => {
           selected.dummyProd = Number(selected.dummyProd || 0) + 1;
-          selected.dummyProdHours = roundHours2(Number(selected.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
           countP.textContent = String(selected.dummyProd);
         };
         minusP.onclick = () => {
           selected.dummyProd = Math.max(0, Number(selected.dummyProd || 0) - 1);
-          selected.dummyProdHours = roundHours2(Number(selected.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
           countP.textContent = String(selected.dummyProd);
         };
 
@@ -4617,12 +4250,10 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
         plusM.onclick = () => {
           selected.dummyMont = Number(selected.dummyMont || 0) + 1;
-          selected.dummyMontHours = roundHours2(Number(selected.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
           countM.textContent = String(selected.dummyMont);
         };
         minusM.onclick = () => {
           selected.dummyMont = Math.max(0, Number(selected.dummyMont || 0) - 1);
-          selected.dummyMontHours = roundHours2(Number(selected.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
           countM.textContent = String(selected.dummyMont);
         };
 
@@ -4638,15 +4269,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
           rowP.className = "assign-item";
 
           const prodChecked = selected.productie.has(eid);
-          const pfForDefault = Number(settings.planFactor || 1);
-          const replaceableProdHours = sectionDummyHours(cur, "Prod");
-          const prodDefaultHours = Math.min(
-            Number(sectionRemainingHours.prod || 0) + Number(replaceableProdHours || 0),
-            Number(remainingCapacityHours || 0) * pfForDefault
-          );
-          const prodHours = selected.prodHours.has(eid)
-            ? selected.prodHours.get(eid)
-            : roundHours2(prodDefaultHours);
+          const prodHours = selected.prodHours.get(eid) ?? 1;
 
           rowP.innerHTML = `
             <input type="checkbox" ${prodChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="productie" />
@@ -4692,8 +4315,8 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
           selected.productie.add(id);
 
-          const hRaw = String(prodHoursInp.value || String(prodHours || 0)).replace(",", ".");
-          const h = Number(hRaw) || 0;
+          const hRaw = String(prodHoursInp.value || "1").replace(",", ".");
+          const h = Number(hRaw) || 1;
           selected.prodHours.set(id, h);
         } else {
           selected.productie.delete(id);
@@ -4729,14 +4352,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
           rowM.className = "assign-item";
 
           const montChecked = selected.montage.has(eid);
-          const replaceableMontHours = sectionDummyHours(cur, "Mont");
-          const montDefaultHours = Math.min(
-            Number(sectionRemainingHours.mont || 0) + Number(replaceableMontHours || 0),
-            Number(remainingCapacityHours || 0) * pfForDefault
-          );
-          const montHours = selected.montHours.has(eid)
-            ? selected.montHours.get(eid)
-            : roundHours2(montDefaultHours);
+          const montHours = selected.montHours.get(eid) ?? 1;
 
           rowM.innerHTML = `
             <input type="checkbox" ${montChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="montage" />
@@ -4782,8 +4398,8 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
           selected.montage.add(id);
 
-          const hRaw = String(montHoursInp.value || String(montHours || 0)).replace(",", ".");
-          const h = Number(hRaw) || 0;
+          const hRaw = String(montHoursInp.value || "1").replace(",", ".");
+          const h = Number(hRaw) || 1;
           selected.montHours.set(id, h);
         } else {
           selected.montage.delete(id);
@@ -5012,7 +4628,7 @@ if (listSubc) {
             work_date: dateISO,
             werknemer_id: werknemerId,
             work_type: "productie",
-            hours: Number(selected.prodHours.get(eid) || 0)
+            hours: Number(selected.prodHours.get(eid) || 1)
           });
         } else {
           // inhuur -> opslaan als dummy met herkenbare note
@@ -5036,7 +4652,7 @@ if (listSubc) {
             work_date: dateISO,
             werknemer_id: werknemerId,
             work_type: "montage",
-            hours: Number(selected.montHours.get(eid) || 0)
+            hours: Number(selected.montHours.get(eid) || 1)
           });
         } else {
           // inhuur -> opslaan als dummy met herkenbare note
@@ -5050,35 +4666,15 @@ if (listSubc) {
         }
       }
 
-      const selectedProdAssignedHours = roundHours2(
-        Array.from(selected.productie || []).reduce((sum, eid) => {
-          const werknemerId = Number(eid);
-          if (Number.isFinite(werknemerId)) return sum + Number(selected.prodHours.get(eid) || 0);
-          return sum + PROJECT_DUMMY_HOURS_PER_DAY;
-        }, 0)
-      );
-
-      const selectedMontAssignedHours = roundHours2(
-        Array.from(selected.montage || []).reduce((sum, eid) => {
-          const werknemerId = Number(eid);
-          if (Number.isFinite(werknemerId)) return sum + Number(selected.montHours.get(eid) || 0);
-          return sum + PROJECT_DUMMY_HOURS_PER_DAY;
-        }, 0)
-      );
-
-            // ✅ Concepten (dummy) als uren opslaan; medewerkeruren nemen concepturen over
+            // ✅ Concepten (dummy) als meerdere regels opslaan
       const dummyProdCount = Number(selected.dummyProd || 0);
       const dummyMontCount = Number(selected.dummyMont || 0);
-      const dummyProdHoursRaw = roundHours2(Number(selected.dummyProdHours || 0) || (dummyProdCount * PROJECT_DUMMY_HOURS_PER_DAY));
-      const dummyMontHoursRaw = roundHours2(Number(selected.dummyMontHours || 0) || (dummyMontCount * PROJECT_DUMMY_HOURS_PER_DAY));
-      const dummyProdHours = Math.max(0, roundHours2(dummyProdHoursRaw - selectedProdAssignedHours));
-      const dummyMontHours = Math.max(0, roundHours2(dummyMontHoursRaw - selectedMontAssignedHours));
 
-      if (dummyProdCount > 0 && dummyProdHours > 0) {
-        rows.push({ section_id: sid, work_date: dateISO, werknemer_id: Number(DUMMY_SEC_ID), work_type: "productie", note: `concept-hours:${dummyProdHours}` });
+      for (let i = 0; i < dummyProdCount; i++) {
+        rows.push({ section_id: sid, work_date: dateISO, werknemer_id: Number(DUMMY_SEC_ID), work_type: "productie" });
       }
-      if (dummyMontCount > 0 && dummyMontHours > 0) {
-        rows.push({ section_id: sid, work_date: dateISO, werknemer_id: Number(DUMMY_SEC_ID), work_type: "montage", note: `concept-hours:${dummyMontHours}` });
+      for (let i = 0; i < dummyMontCount; i++) {
+        rows.push({ section_id: sid, work_date: dateISO, werknemer_id: Number(DUMMY_SEC_ID), work_type: "montage" });
       }
       // ✅ Onderaanneming: lees ALLE inputs uit de modal (betrouwbaar, ook bij meerdere)
       const subcNames = Array.from(modal.wrap.querySelectorAll("#amListSubc input.subc-name"))
@@ -5111,26 +4707,6 @@ if (pidKey) {
     .filter(Boolean)
     .sort((a,b)=>a.localeCompare(b, "nl"));
   _subcSuggestCache.set(pidKey, merged);
-}
-
-const newSectProdHours = roundHours2(
-  selectedProdAssignedHours +
-  dummyProdHours
-);
-
-const newSectMontHours = roundHours2(
-  selectedMontAssignedHours +
-  dummyMontHours
-);
-
-const deltaProdHours = roundHours2(newSectProdHours - prevSectProdHours);
-const deltaMontHours = roundHours2(newSectMontHours - prevSectMontHours);
-
-if (deltaProdHours > 0) {
-  await consumeProjectConceptHours(projectId, dateISO, "productie", deltaProdHours);
-}
-if (deltaMontHours > 0) {
-  await consumeProjectConceptHours(projectId, dateISO, "montage", deltaMontHours);
 }
 
 const newSectMontCount = Number(selected.montage.size || 0) + Number(dummyMontCount || 0);
@@ -5879,8 +5455,6 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     if (tr.classList.contains("project-bottomline")) td.classList.add("project-bottomline-cell");
 
     td.dataset.proj = tr.querySelector(".expander")?.dataset?.proj || "";
-    td.dataset.projectId = td.dataset.proj || "";
-    td.dataset.workDate = iso;
 
     // cel-kleur
     let cls = `cell plan-cell ${isWeekend(d) ? "wknd" : ""}`.trim();
@@ -5889,17 +5463,16 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     else if (key === "mont") cls += " bar-mont";
     else if (key.startsWith("lbl:")) cls += ` ${barClass(label)}`;
     td.className = cls;
-    td.classList.add("project-date-dropzone");
 
     let html = `<div class="plan-stack">`;
 
     // markers samen op 1 regel
     html += `<div class="marker-row">`;
     html += isDelivery
-      ? `<div class="marker delivery project-date-marker" draggable="true" data-marker-type="delivery" title="Leverdatum verslepen"></div>`
+      ? `<div class="marker delivery"></div>`
       : `<div class="marker delivery placeholder">lever</div>`;
     html += isMarker
-      ? `<div class="marker deadline project-date-marker" draggable="true" data-marker-type="completion" title="Opleverdatum verslepen"></div>`
+      ? `<div class="marker deadline" title="${iso}"></div>`
       : `<div class="marker deadline placeholder">oplever</div>`;
 
     html += `</div>`;
@@ -5943,20 +5516,9 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
   }
 }
 
-function applyProjectDateColumnClasses(tr, dates, deliveryISO = "", completionISO = ""){
-  if (!tr) return;
 
-  const cells = Array.from(tr.querySelectorAll("td.cell"))
-    .filter(td => !td.classList.contains("hourscol"));
 
-  for (let i = 0; i < dates.length && i < cells.length; i++) {
-    const iso = toISODate(dates[i]);
-    const td = cells[i];
 
-    td.classList.toggle("project-delivery-col", !!deliveryISO && iso === deliveryISO);
-    td.classList.toggle("project-completion-col", !!completionISO && iso === completionISO);
-  }
-}
 
 function appendSectionDayCells(tr, dates, labels, sectionId, projectId, assignCountByDay, assignMap, werknemers, inhuurById) {
 const empIdKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
@@ -5991,21 +5553,6 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     return "";
   });
 
-  const mixedBarContent = (realHours, dummyHours, totalHours) => {
-    const real = Number(realHours || 0);
-    const dummy = Number(dummyHours || 0);
-    const total = Number(totalHours || 0);
-
-    if (real > 0 && dummy > 0) {
-      return `
-        <span class="bar-part bar-part-real" style="flex:${real} 1 0;">${escapeHtml(formatHoursCell(real))}</span>
-        <span class="bar-part bar-part-concept" style="flex:${dummy} 1 0;">${escapeHtml(formatHoursCell(dummy))}</span>
-      `;
-    }
-
-    return total > 0 ? escapeHtml(formatHoursCell(total)) : "\u00A0";
-  };
-
     // ✅ alle unieke onderaannemers in deze sectie binnen dit zichtbare bereik (vaste volgorde)
     const dmSub = assignMap?.get(String(sectionId)) || new Map();
     const subcNamesAll = [...new Set(dates.flatMap(dd => {
@@ -6020,10 +5567,6 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
     const prod = Number(assignCountByDay?.[iso]?.prod || 0);
     const mont = Number(assignCountByDay?.[iso]?.mont || 0);
-    const prodReal = Number(assignCountByDay?.[iso]?.prodReal || 0);
-    const prodDummyHours = Number(assignCountByDay?.[iso]?.prodDummy || 0);
-    const montReal = Number(assignCountByDay?.[iso]?.montReal || 0);
-    const montDummyHours = Number(assignCountByDay?.[iso]?.montDummy || 0);
     const subc = Number(assignCountByDay?.[iso]?.subc || 0);
     const label = labels[i] || "";
 
@@ -6035,12 +5578,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     td.dataset.sectionId = String(sectionId || "");
     td.dataset.projectId = String(projectId || "");
     td.dataset.workDate  = iso;
-    const isConceptRow = tr.classList.contains("section-concept-row");
 
     // tooltip met namen (prod/mont)
     const entry = assignMap?.get(String(sectionId))?.get(iso);
-    const dummyProd = prodDummyHours > 0;
-    const dummyMont = montDummyHours > 0;
+    const dummyProd = (entry?.dummyProd || 0) > 0;
+    const dummyMont = (entry?.dummyMont || 0) > 0;
 
     if (entry) {
     const prodNames = Array.from(entry.productie || []).map(id => empNameById.get(String(id)) || String(id));
@@ -6052,19 +5594,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     const inhuurMontNames = Array.from(entry.inhuurMontIds || [])
       .map(id => inhuurById?.get(String(id))?.name || String(id));
 
-    const prodTipRows = [...prodNames];
-    const prodConceptHours = sectionDummyHours(entry, "Prod");
-    if (prodConceptHours > 0) prodTipRows.push(`Concept ${formatHoursCell(prodConceptHours)}u`);
-
-    const montTipRows = [...montNames];
-    const montConceptHours = sectionDummyHours(entry, "Mont");
-    if (montConceptHours > 0) montTipRows.push(`Concept ${formatHoursCell(montConceptHours)}u`);
-
     let tip = "";
-    if (prodTipRows.length) tip += `Productie:\n- ${prodTipRows.join("\n- ")}`;
+    if (prodNames.length) tip += `Productie:\n- ${prodNames.join("\n- ")}`;
     if (inhuurProdNames.length) tip += (tip ? "\n\n" : "") + `Inhuur productie:\n- ${inhuurProdNames.join("\n- ")}`;
 
-    if (montTipRows.length) tip += (tip ? "\n\n" : "") + `Montage:\n- ${montTipRows.join("\n- ")}`;
+    if (montNames.length) tip += (tip ? "\n\n" : "") + `Montage:\n- ${montNames.join("\n- ")}`;
     if (inhuurMontNames.length) tip += (tip ? "\n\n" : "") + `Inhuur montage:\n- ${inhuurMontNames.join("\n- ")}`;
       if (tip) td.dataset.tip = tip;
       td.removeAttribute("title");
@@ -6076,14 +5610,8 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
     // Drag&Drop metadata
     td.classList.add("dd-dropzone");
-    td.dataset.ddKind = isConceptRow ? "section-concept" : "section";
+    td.dataset.ddKind = "section";
     td.dataset.ddKey  = key || "";
-    if (isConceptRow) {
-      const conceptType = prod > 0 ? "productie" : (mont > 0 ? "montage" : "");
-      td.dataset.workType = conceptType;
-      td.dataset.plannedHours = String(prod > 0 ? prod : mont);
-      td.classList.add("section-concept-click");
-    }
 
     const hasPlan = (prod > 0) || (mont > 0) || (subc > 0);
     if (hasPlan) {
@@ -6112,14 +5640,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       const isEnd   = isProd && key !== nextKey;
       const startCls = isStart ? " bar-start" : "";
       const endCls   = isEnd   ? " bar-end"   : "";
-      const hasMixedProd = prodReal > 0 && prodDummyHours > 0;
-      const dummyCls = dummyProd && !hasMixedProd ? " dummy-hatch" : "";
-      const mixedCls = hasMixedProd ? " bar-mixed" : "";
+      const dummyCls = dummyProd ? " dummy-hatch" : "";
 
       if (isProd) {
-        const prodTxt = mixedBarContent(prodReal, prodDummyHours, prod);
-        const resizeHandle = isConceptRow && isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="productie" title="Concepturen groter/kleiner trekken"></span>` : "";
-        html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}${mixedCls}">${prodTxt}${resizeHandle}</div>`;
+        const prodTxt = prod > 0 ? String(prod) : "\u00A0";
+        html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${prodTxt}</div>`;
       } else {
         html += `<div class="bar bar-prod placeholder">\u00A0</div>`;
       }
@@ -6132,14 +5657,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       const isEnd   = isMont && key !== nextKey;
       const startCls = isStart ? " bar-start" : "";
       const endCls   = isEnd   ? " bar-end"   : "";
-      const hasMixedMont = montReal > 0 && montDummyHours > 0;
-      const dummyCls = dummyMont && !hasMixedMont ? " dummy-hatch" : "";
-      const mixedCls = hasMixedMont ? " bar-mixed" : "";
+      const dummyCls = dummyMont ? " dummy-hatch" : "";
 
       if (isMont) {
-        const montTxt = mixedBarContent(montReal, montDummyHours, mont);
-        const resizeHandle = isConceptRow && isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="montage" title="Concepturen groter/kleiner trekken"></span>` : "";
-        html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}${mixedCls}">${montTxt}${resizeHandle}</div>`;
+        const montTxt = mont > 0 ? String(mont) : "\u00A0";
+        html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${montTxt}</div>`;
       } else {
         html += `<div class="bar bar-mont placeholder">\u00A0</div>`;
       }
@@ -6195,7 +5717,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
   }
 }
 
-    function appendProjectProductieSummaryDayCells(tr, dates, projProdByDay = {}, projectId = "", totalHours = 0, deliveryISO = "") {
+    function appendProjectProductieSummaryDayCells(tr, dates, projProdByDay = {}, projectId = "", totalHours = 0) {
       const keys = dates.map(d => {
         const iso = toISODate(d);
         const prod = Number(projProdByDay?.[iso]?.prod || 0);
@@ -6226,13 +5748,12 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
         td.dataset.workType = "productie";
         td.dataset.totalHours = String(Number(totalHours || 0));
         td.dataset.plannedHours = String(displayProd);
-        td.dataset.deliveryDate = String(deliveryISO || "");
 
         td.classList.add("dd-dropzone");
         td.dataset.ddKind = "project-productie";
         td.dataset.ddKey = key || "";
 
-        if (displayProd > 0) {
+        if (prod > 0) {
           td.setAttribute("draggable", "true");
           td.classList.add("dd-draggable");
         }
@@ -6249,9 +5770,8 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
           const startCls = isStart ? " bar-start" : "";
           const endCls   = isEnd   ? " bar-end"   : "";
           const dummyCls = dummyProd ? " dummy-hatch" : "";
-          const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" title="Uren groter/kleiner trekken"></span>` : "";
 
-          html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayProd))}${resizeHandle}</div>`;
+          html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayProd))}</div>`;
         }
 
         html += `</div>`;
@@ -6260,7 +5780,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       }
     }
 
-    function appendProjectMontageSummaryDayCells(tr, dates, projMontByDay = {}, projectId = "", totalHours = 0, deliveryISO = "") {
+    function appendProjectMontageSummaryDayCells(tr, dates, projMontByDay = {}, projectId = "", totalHours = 0) {
 
       // key: wel/geen montage zodat start/einde afgerond blijft
       const keys = dates.map(d => {
@@ -6293,7 +5813,6 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
         td.dataset.workType = "montage";
         td.dataset.totalHours = String(Number(totalHours || 0));
         td.dataset.plannedHours = String(displayMont);
-        td.dataset.deliveryDate = String(deliveryISO || "");
 
         // ✅ Drag & Drop metadata
         td.classList.add("dd-dropzone");
@@ -6322,10 +5841,9 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
           const startCls = isStart ? " bar-start" : "";
           const endCls   = isEnd   ? " bar-end"   : "";
           const dummyCls = dummyMont ? " dummy-hatch" : "";
-          const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" title="Uren groter/kleiner trekken"></span>` : "";
 
           // ✅ altijd het aantal tonen (niet "mon" en niet alleen bij start)
-          html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayMont))}${resizeHandle}</div>`;
+          html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayMont))}</div>`;
         }
 
         html += `</div>`;
@@ -6531,53 +6049,14 @@ function isPlannerWorkday(date){
   return day >= 1 && day <= 5;
 }
 
-function getPlannerWorkdaysBetween(startISO, endISO){
-  const startDate = parseISODate(startISO);
-  const endDate = parseISODate(endISO);
-  const out = [];
-  if (!startDate || !endDate || endDate < startDate) return out;
-
-  let d = startDate;
-  while (d <= endDate) {
-    if (isPlannerWorkday(d)) out.push(toISODate(d));
-    d = addDays(d, 1);
-  }
-
-  return out;
-}
-
-function buildProjectDummyHoursSegments(startISO, totalHours, deliveryISO = ""){
+function buildProjectDummyHoursSegments(startISO, totalHours){
   const startDate = parseISODate(startISO);
   let remaining = Math.max(0, Number(totalHours || 0));
   const out = [];
   if (!startDate || remaining <= 0) return out;
 
-  const deliveryDate = parseISODate(deliveryISO);
-  const deadlineISO = deliveryDate ? toISODate(addDays(deliveryDate, -1)) : "";
-  const limitedDays = deadlineISO ? getPlannerWorkdaysBetween(startISO, deadlineISO) : [];
-
-  if (deadlineISO && limitedDays.length === 0) return [];
-
-  if (limitedDays.length && remaining > (limitedDays.length * PROJECT_DUMMY_HOURS_PER_DAY)) {
-    const perDayRaw = remaining / limitedDays.length;
-    let used = 0;
-    return limitedDays.map((iso, idx) => {
-      const last = idx === limitedDays.length - 1;
-      const hours = last
-        ? Math.max(0, remaining - used)
-        : Math.round((perDayRaw + Number.EPSILON) * 100) / 100;
-      used += hours;
-      return {
-        work_date: iso,
-        hours: Math.round((hours + Number.EPSILON) * 100) / 100
-      };
-    });
-  }
-
   let d = startDate;
   while (remaining > 0.0001) {
-    if (deadlineISO && toISODate(d) > deadlineISO) break;
-
     if (isPlannerWorkday(d)) {
       const hours = Math.min(PROJECT_DUMMY_HOURS_PER_DAY, remaining);
       out.push({
@@ -6597,7 +6076,7 @@ function buildProjectDummyDates(startISO, count){
   return buildProjectDummyHoursSegments(startISO, totalHours).map(x => x.work_date);
 }
 
-async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHours, deliveryISO = ""){
+async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHours){
   const pid = String(projectId || "").trim();
   const dateISO = String(startISO || "").trim();
   const type = String(workType || "").toLowerCase().trim();
@@ -6613,9 +6092,9 @@ async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHou
     return false;
   }
 
-  const segments = buildProjectDummyHoursSegments(dateISO, hours, deliveryISO);
+  const segments = buildProjectDummyHoursSegments(dateISO, hours);
   if (!segments.length) {
-    alert("Geen werkdagen gevonden om vóór de leverdatum te plannen.");
+    alert("Geen werkdagen gevonden om te plannen.");
     return false;
   }
 
@@ -6673,315 +6152,6 @@ async function removeProjectDummyForDate(projectId, dateISO, workType){
   }
 
   return true;
-}
-
-function limitRunToMaxWorkdays(startISO, endISO, maxDays = 5){
-  const days = getPlannerWorkdaysBetween(startISO, endISO).slice(0, maxDays);
-  if (!days.length) return { startISO, endISO: startISO, days: [] };
-  return {
-    startISO: days[0],
-    endISO: days[days.length - 1],
-    days
-  };
-}
-
-function getRunHoursBetweenFromDom(td, startISO, endISO){
-  const tr = td.closest("tr");
-  if (!tr || !startISO || !endISO) return Number(td.dataset.plannedHours || 0);
-
-  let total = 0;
-  const selector = td.classList.contains("project-auto-plan-click")
-    ? "td.project-auto-plan-click"
-    : "td.dd-draggable";
-  const wantedKind = String(td.dataset.ddKind || "");
-  const wantedType = String(td.dataset.workType || "");
-
-  for (const cell of Array.from(tr.querySelectorAll(selector))) {
-    const iso = String(cell.dataset.workDate || "");
-    if (!iso || iso < startISO || iso > endISO) continue;
-    if (wantedKind && String(cell.dataset.ddKind || "") !== wantedKind) continue;
-    if (wantedType && String(cell.dataset.workType || "") !== wantedType) continue;
-    total += Number(cell.dataset.plannedHours || 0);
-  }
-
-  return Math.round((total + Number.EPSILON) * 100) / 100;
-}
-
-async function removeProjectDummyRange(projectId, startISO, endISO, workType){
-  const pid = String(projectId || "").trim();
-  const start = String(startISO || "").trim();
-  const end = String(endISO || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
-
-  if (!pid || !start || !end || !["productie", "montage"].includes(type)) {
-    alert("Geen geldig project, datum of planningstype gevonden.");
-    return false;
-  }
-
-  const del = await sb
-    .from("project_assignments")
-    .delete()
-    .eq("project_id", pid)
-    .eq("work_type", type)
-    .eq("werknemer_id", DUMMY_EMP_ID)
-    .gte("work_date", start)
-    .lte("work_date", end);
-
-  if (del.error) {
-    alert("Fout verwijderen conceptplanning: " + del.error.message);
-    return false;
-  }
-
-  return true;
-}
-
-function countPlannerWorkdaysInclusive(startISO, endISO){
-  let startDate = parseISODate(startISO);
-  const endDate = parseISODate(endISO);
-  if (!startDate || !endDate || endDate < startDate) return 0;
-
-  let count = 0;
-  let d = startDate;
-  while (d <= endDate) {
-    if (isPlannerWorkday(d)) count++;
-    d = addDays(d, 1);
-  }
-  return count;
-}
-
-function getRunHoursFromDom(td){
-  const run = getContiguousRunFromCell(td);
-  const tr = td.closest("tr");
-  if (!tr || !run.startISO || !run.endISO) return Number(td.dataset.plannedHours || 0);
-
-  let total = 0;
-  const selector = td.classList.contains("project-auto-plan-click")
-    ? "td.project-auto-plan-click"
-    : "td.dd-draggable";
-  const wantedKind = String(td.dataset.ddKind || "");
-  const wantedType = String(td.dataset.workType || "");
-
-  for (const cell of Array.from(tr.querySelectorAll(selector))) {
-    const iso = String(cell.dataset.workDate || "");
-    if (!iso || iso < run.startISO || iso > run.endISO) continue;
-    if (wantedKind && String(cell.dataset.ddKind || "") !== wantedKind) continue;
-    if (wantedType && String(cell.dataset.workType || "") !== wantedType) continue;
-    total += Number(cell.dataset.plannedHours || 0);
-  }
-  return Math.round((total + Number.EPSILON) * 100) / 100;
-}
-
-function isSectionConceptRow(row, workType = ""){
-  const emp = String(row?.werknemer_id ?? "");
-  const type = String(row?.work_type || "").toLowerCase().trim();
-  const note = String(row?.note || "");
-  const wanted = String(workType || "").toLowerCase().trim();
-  return emp === String(DUMMY_SEC_ID)
-    && (!wanted || type === wanted)
-    && !note.startsWith("inhuur:")
-    && parseProjectDummyHours(note, 0) > 0;
-}
-
-async function resizeProjectAssignmentRun({ projectId, workType, runStartISO, runEndISO, targetEndISO, currentHours, remainingHours }){
-  const pid = String(projectId || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
-  const startISO = String(runStartISO || "").trim();
-  const endISO = String(runEndISO || "").trim();
-  const targetISO = String(targetEndISO || "").trim();
-
-  if (!pid || !["productie", "montage"].includes(type) || !startISO || !endISO || !targetISO) return;
-
-  const current = Math.max(0, Number(currentHours || 0));
-  const remaining = Math.max(0, Number(remainingHours || 0));
-  const maxHours = Math.round((current + remaining + Number.EPSILON) * 100) / 100;
-  const targetDays = countPlannerWorkdaysInclusive(startISO, targetISO);
-  if (targetDays <= 0) return;
-
-  const wantedHours = Math.min(maxHours, targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
-  const newHours = Math.round((wantedHours + Number.EPSILON) * 100) / 100;
-  if (newHours <= 0 || Math.abs(newHours - current) < 0.001) return;
-
-  const del = await sb
-    .from("project_assignments")
-    .delete()
-    .eq("project_id", pid)
-    .eq("work_type", type)
-    .eq("werknemer_id", DUMMY_EMP_ID)
-    .gte("work_date", startISO)
-    .lte("work_date", endISO);
-
-  if (del.error) {
-    alert("Fout aanpassen conceptplanning: " + del.error.message);
-    return;
-  }
-
-  const segments = buildProjectDummyHoursSegments(startISO, newHours);
-  const rows = segments.map(seg => ({
-    project_id: pid,
-    work_date: seg.work_date,
-    werknemer_id: Number(DUMMY_EMP_ID),
-    work_type: type,
-    note: `concept-hours:${seg.hours}`,
-  }));
-
-  if (rows.length) {
-    const ins = await sb.from("project_assignments").insert(rows);
-    if (ins.error) alert("Fout opslaan conceptplanning: " + ins.error.message);
-  }
-}
-
-async function moveSectionConceptDay(sectionId, workType, fromDate, toDate){
-  const sid = String(sectionId || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
-  const f = String(fromDate || "").trim();
-  const t = String(toDate || "").trim();
-  if (!sid || !["productie", "montage"].includes(type) || !f || !t || f === t) return;
-
-  const { data: rows, error: selErr } = await sb
-    .from("section_assignments")
-    .select("id, section_id, werknemer_id, work_type, note")
-    .eq("section_id", sid)
-    .eq("work_date", f)
-    .eq("work_type", type)
-    .eq("werknemer_id", DUMMY_SEC_ID);
-
-  if (selErr) { alert("Concept select fout: " + selErr.message); return; }
-
-  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
-  if (!conceptRows.length) return;
-
-  const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
-  if (del.error) { alert("Concept delete fout: " + del.error.message); return; }
-
-  const newRows = conceptRows.map(r => ({
-    section_id: sid,
-    work_date: t,
-    werknemer_id: Number(DUMMY_SEC_ID),
-    work_type: type,
-    note: r.note || null
-  }));
-
-  const ins = await sb.from("section_assignments").insert(newRows);
-  if (ins.error) alert("Concept insert fout: " + ins.error.message);
-}
-
-async function moveSectionConceptRange(sectionId, workType, fromStartISO, fromEndISO, deltaDays){
-  const sid = String(sectionId || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
-  if (!sid || !["productie", "montage"].includes(type) || !fromStartISO || !fromEndISO) return;
-
-  const { data: rows, error: selErr } = await sb
-    .from("section_assignments")
-    .select("id, section_id, work_date, werknemer_id, work_type, note")
-    .eq("section_id", sid)
-    .eq("work_type", type)
-    .eq("werknemer_id", DUMMY_SEC_ID)
-    .gte("work_date", fromStartISO)
-    .lte("work_date", fromEndISO)
-    .limit(200000);
-
-  if (selErr) { alert("Concept range select fout: " + selErr.message); return; }
-
-  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
-  if (!conceptRows.length) return;
-
-  const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
-  if (del.error) { alert("Concept range delete fout: " + del.error.message); return; }
-
-  const newRows = conceptRows.map(r => ({
-    section_id: sid,
-    work_date: toISODate(addDays(parseISODate(r.work_date), deltaDays)),
-    werknemer_id: Number(DUMMY_SEC_ID),
-    work_type: type,
-    note: r.note || null
-  }));
-
-  const ins = await sb.from("section_assignments").insert(newRows);
-  if (ins.error) alert("Concept range insert fout: " + ins.error.message);
-}
-
-async function removeSectionConceptRange(sectionId, workType, startISO, endISO){
-  const sid = String(sectionId || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
-  const start = String(startISO || "").trim();
-  const end = String(endISO || "").trim();
-  if (!sid || !["productie", "montage"].includes(type) || !start || !end) return false;
-
-  const { data: rows, error: selErr } = await sb
-    .from("section_assignments")
-    .select("id, werknemer_id, work_type, note")
-    .eq("section_id", sid)
-    .eq("work_type", type)
-    .eq("werknemer_id", DUMMY_SEC_ID)
-    .gte("work_date", start)
-    .lte("work_date", end)
-    .limit(200000);
-
-  if (selErr) {
-    alert("Concept verwijderen select fout: " + selErr.message);
-    return false;
-  }
-
-  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
-  if (!conceptRows.length) return true;
-
-  const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
-  if (del.error) {
-    alert("Concept verwijderen fout: " + del.error.message);
-    return false;
-  }
-
-  return true;
-}
-
-async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEndISO, targetEndISO, currentHours }){
-  const sid = String(sectionId || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
-  const startISO = String(runStartISO || "").trim();
-  const endISO = String(runEndISO || "").trim();
-  const targetISO = String(targetEndISO || "").trim();
-  if (!sid || !["productie", "montage"].includes(type) || !startISO || !endISO || !targetISO) return;
-
-  const targetDays = countPlannerWorkdaysInclusive(startISO, targetISO);
-  if (targetDays <= 0) return;
-
-  const currentDays = countPlannerWorkdaysInclusive(startISO, endISO);
-  const current = Math.max(0, Number(currentHours || 0));
-  const dayDelta = targetDays - currentDays;
-  const newHours = dayDelta >= 0
-    ? roundHours2(current + (dayDelta * PROJECT_DUMMY_HOURS_PER_DAY))
-    : roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
-  const { data: rows, error: selErr } = await sb
-    .from("section_assignments")
-    .select("id, note")
-    .eq("section_id", sid)
-    .eq("work_type", type)
-    .eq("werknemer_id", DUMMY_SEC_ID)
-    .gte("work_date", startISO)
-    .lte("work_date", endISO)
-    .limit(200000);
-
-  if (selErr) { alert("Concept resize select fout: " + selErr.message); return; }
-
-  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
-  if (conceptRows.length) {
-    const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
-    if (del.error) { alert("Concept resize delete fout: " + del.error.message); return; }
-  }
-
-  const segments = buildProjectDummyHoursSegments(startISO, newHours);
-  const newRows = segments.map(seg => ({
-    section_id: sid,
-    work_date: seg.work_date,
-    werknemer_id: Number(DUMMY_SEC_ID),
-    work_type: type,
-    note: `concept-hours:${seg.hours}`,
-  }));
-
-  if (newRows.length) {
-    const ins = await sb.from("section_assignments").insert(newRows);
-    if (ins.error) alert("Concept resize insert fout: " + ins.error.message);
-  }
 }
 
 function renderOrdersAccordion(byBN){
@@ -7083,141 +6253,12 @@ function applyMiniHoursOverrunColors(root){
   });
 }
 
-async function moveProjectDateMarker(projectId, markerType, targetISO){
-  const pid = String(projectId || "").trim();
-  const type = String(markerType || "").trim();
-  const target = String(targetISO || "").trim();
-
-  if (!pid || !target) return;
-
-  const col =
-    type === "delivery" ? deliveryKey :
-    type === "completion" ? completionKey :
-    "";
-
-  if (!col) {
-    alert("Datumkolom niet gevonden voor dit project.");
-    return;
-  }
-
-  const saveISO = type === "completion"
-    ? toISODate(addDays(parseISODate(target), 1))
-    : target;
-
-  const upd = await sb
-    .from("projecten")
-    .update({ [col]: saveISO })
-    .eq(projIdKey, pid);
-
-  if (upd.error) {
-    alert("Fout datum opslaan: " + upd.error.message);
-  }
-}
-
 // ======================
 // DRAG & DROP (planned days)
 // ======================
 
 function wireDragDrop(root){
   if (!root) return;
-
-  root.querySelectorAll(".project-date-marker[draggable='true']").forEach(marker => {
-    marker.addEventListener("dragstart", (e) => {
-      e.stopPropagation();
-      __wasDragging = true;
-
-      const td = marker.closest("td.project-date-dropzone");
-      const payload = {
-        kind: "project-date-marker",
-        markerType: String(marker.dataset.markerType || ""),
-        projectId: String(td?.dataset.projectId || ""),
-        fromDate: String(td?.dataset.workDate || "")
-      };
-
-      e.dataTransfer.setData("application/json", JSON.stringify(payload));
-      e.dataTransfer.setData("text/plain", "date-marker");
-      e.dataTransfer.effectAllowed = "move";
-      marker.classList.add("is-dragging");
-    });
-
-    marker.addEventListener("dragend", (e) => {
-      e.stopPropagation();
-      marker.classList.remove("is-dragging");
-      setTimeout(() => { __wasDragging = false; }, 150);
-    });
-  });
-
-  root.querySelectorAll("td.project-date-dropzone").forEach(cell => {
-    cell.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
-      cell.classList.add("is-drop-target");
-    });
-
-    cell.addEventListener("dragleave", () => {
-      cell.classList.remove("is-drop-target");
-    });
-
-    cell.addEventListener("drop", async (e) => {
-      let payload;
-      try {
-        payload = JSON.parse(e.dataTransfer.getData("application/json"));
-      } catch {
-        return;
-      }
-
-      if (String(payload.kind || "") !== "project-date-marker") return;
-
-      e.preventDefault();
-      e.stopPropagation();
-      cell.classList.remove("is-drop-target");
-
-      const projectId = String(payload.projectId || "");
-      const targetProjectId = String(cell.dataset.projectId || "");
-      const targetISO = String(cell.dataset.workDate || "");
-      const markerType = String(payload.markerType || "");
-
-      if (!projectId || !targetProjectId || projectId !== targetProjectId || !targetISO) return;
-
-      await moveProjectDateMarker(projectId, markerType, targetISO);
-      await loadAndRender();
-    });
-  });
-
-  root.querySelectorAll(".bar-resize-handle[draggable='true']").forEach(handle => {
-    handle.addEventListener("dragstart", (e) => {
-      e.stopPropagation();
-      __wasDragging = true;
-
-      const td = handle.closest("td.project-auto-plan-click, td.section-concept-click");
-      if (!td) return;
-
-      const run = getContiguousRunFromCell(td);
-      const isSectionConcept = String(td.dataset.ddKind || "") === "section-concept";
-      const payload = {
-        kind: isSectionConcept ? "section-concept-resize" : "project-resize",
-        resizeKind: String(td.dataset.ddKind || ""),
-        sectionId: String(td.dataset.sectionId || ""),
-        projectId: String(td.dataset.projectId || ""),
-        workType: String(handle.dataset.workType || td.dataset.workType || ""),
-        runStart: run.startISO,
-        runEnd: run.endISO,
-        currentHours: getRunHoursFromDom(td),
-        remainingHours: Number(td.dataset.totalHours || 0)
-      };
-
-      e.dataTransfer.setData("application/json", JSON.stringify(payload));
-      e.dataTransfer.setData("text/plain", "resize");
-      e.dataTransfer.effectAllowed = "move";
-      td.classList.add("is-dragging");
-    });
-
-    handle.addEventListener("dragend", (e) => {
-      e.stopPropagation();
-      handle.closest("td")?.classList.remove("is-dragging");
-      setTimeout(() => { __wasDragging = false; }, 150);
-    });
-  });
 
   // DRAG START / END
   root.querySelectorAll("td.dd-draggable[draggable='true']").forEach(td => {
@@ -7242,7 +6283,6 @@ function wireDragDrop(root){
         kind,
         sectionId: td.dataset.sectionId || "",
         projectId: td.dataset.projectId || "",
-        workType: td.dataset.workType || "",
         fromDate,
         fromStart,
         fromEnd,
@@ -7291,51 +6331,6 @@ function wireDragDrop(root){
       const kind = String(payload.kind || "");
       const fromDate = String(payload.fromDate || "");
 
-      if (kind === "project-resize") {
-        const resizeKind = String(payload.resizeKind || "");
-        const targetKind = String(cell.dataset.ddKind || "");
-        const fromPid = String(payload.projectId || "");
-        const toPid = String(cell.dataset.projectId || "");
-
-        if (!resizeKind || resizeKind !== targetKind) return;
-        if (!fromPid || !toPid || fromPid !== toPid) return;
-
-        await resizeProjectAssignmentRun({
-          projectId: fromPid,
-          workType: String(payload.workType || ""),
-          runStartISO: String(payload.runStart || ""),
-          runEndISO: String(payload.runEnd || ""),
-          targetEndISO: toDate,
-          currentHours: Number(payload.currentHours || 0),
-          remainingHours: Number(payload.remainingHours || 0)
-        });
-
-        loadAndRender();
-        return;
-      }
-
-      if (kind === "section-concept-resize") {
-        const resizeKind = String(payload.resizeKind || "");
-        const targetKind = String(cell.dataset.ddKind || "");
-        const fromSid = String(payload.sectionId || "");
-        const toSid = String(cell.dataset.sectionId || "");
-
-        if (resizeKind !== "section-concept" || targetKind !== "section-concept") return;
-        if (!fromSid || !toSid || fromSid !== toSid) return;
-
-        await resizeSectionConceptRun({
-          sectionId: fromSid,
-          workType: String(payload.workType || cell.dataset.workType || ""),
-          runStartISO: String(payload.runStart || ""),
-          runEndISO: String(payload.runEnd || ""),
-          targetEndISO: toDate,
-          currentHours: Number(payload.currentHours || 0)
-        });
-
-        loadAndRender();
-        return;
-      }
-
       // ✅ alleen droppen op dezelfde soort cel
       const targetKind = String(cell.dataset.ddKind || "");
       if (!targetKind || targetKind !== kind) {
@@ -7357,26 +6352,6 @@ function wireDragDrop(root){
           await moveSectionRange(fromSid, startISO, endISO, delta);
         } else {
           await moveSectionDay(fromSid, fromDate, toDate);
-        }
-
-        loadAndRender();
-        return;
-      }
-
-      if (kind === "section-concept") {
-        const fromSid = String(payload.sectionId || "");
-        const toSid   = String(cell.dataset.sectionId || "");
-        if (!fromSid || !toSid || fromSid !== toSid) return;
-
-        const workType = String(payload.workType || cell.dataset.workType || "");
-
-        if (payload.isRange) {
-          const startISO = String(payload.fromStart || fromDate);
-          const endISO   = String(payload.fromEnd   || fromDate);
-          const delta    = daysBetweenISO(startISO, toDate);
-          await moveSectionConceptRange(fromSid, workType, startISO, endISO, delta);
-        } else {
-          await moveSectionConceptDay(fromSid, workType, fromDate, toDate);
         }
 
         loadAndRender();
@@ -7513,57 +6488,6 @@ async function moveSectionRange(sectionId, fromStartISO, fromEndISO, deltaDays){
 
 
 
-async function moveProjectMontageDay(projectId, fromDate, toDate){
-  const pid = String(projectId || "").trim();
-  const f = String(fromDate || "").trim();
-  const t = String(toDate || "").trim();
-  if (!pid || !f || !t || f === t) return;
-
-  const { data: rows, error: selErr } = await sb
-    .from("project_assignments")
-    .select("id, project_id, werknemer_id, work_type")
-    .eq("project_id", pid)
-    .eq("work_date", f)
-    .eq("work_type", "montage");
-
-  if (selErr) { alert("Select fout: " + selErr.message); return; }
-  if (!rows || rows.length === 0) { alert("Er is niets verplaatst (0 regels)."); return; }
-
-  // ✅ UNDO snapshot opslaan (voor we deleten)
-pushUndo({
-  kind: "project-montage",
-  project_id: pid,
-  from_date: f,
-  to_date: t,
-  rows: rows.map(r => ({ werknemer_id: r.werknemer_id, work_type: r.work_type }))
-});
-
-
-  const { error: delErr } = await sb
-    .from("project_assignments")
-    .delete()
-    .eq("project_id", pid)
-    .eq("work_date", f)
-    .eq("work_type", "montage");
-
-  if (delErr) { alert("Delete fout: " + delErr.message); return; }
-
-  const newRows = rows.map(r => ({
-    project_id: r.project_id,
-    work_date: t,
-    werknemer_id: r.werknemer_id,
-    work_type: r.work_type
-  }));
-
-  const { error: insErr } = await sb
-    .from("project_assignments")
-    .insert(newRows);
-
-  if (insErr) { alert("Insert fout: " + insErr.message); return; }
-
-  console.log("moveProjectMontageDay OK:", rows.length, { pid, f, t });
-}
-
 async function moveProjectAssignmentDay(projectId, workType, fromDate, toDate){
   const pid = String(projectId || "").trim();
   const type = String(workType || "").toLowerCase().trim();
@@ -7581,13 +6505,15 @@ async function moveProjectAssignmentDay(projectId, workType, fromDate, toDate){
   if (selErr) { alert("Select fout: " + selErr.message); return; }
   if (!rows || rows.length === 0) { alert("Er is niets verplaatst (0 regels)."); return; }
 
-  pushUndo({
-    kind: type === "productie" ? "project-productie" : "project-montage",
-    project_id: pid,
-    from_date: f,
-    to_date: t,
-    rows: rows.map(r => ({ werknemer_id: r.werknemer_id, work_type: r.work_type, note: r.note || null }))
-  });
+  // ✅ UNDO snapshot opslaan (voor we deleten)
+pushUndo({
+  kind: type === "productie" ? "project-productie" : "project-montage",
+  project_id: pid,
+  from_date: f,
+  to_date: t,
+  rows: rows.map(r => ({ werknemer_id: r.werknemer_id, work_type: r.work_type, note: r.note || null }))
+});
+
 
   const { error: delErr } = await sb
     .from("project_assignments")
@@ -7611,11 +6537,12 @@ async function moveProjectAssignmentDay(projectId, workType, fromDate, toDate){
     .insert(newRows);
 
   if (insErr) { alert("Insert fout: " + insErr.message); return; }
+
+  console.log("moveProjectAssignmentDay OK:", rows.length, { pid, type, f, t });
 }
 
 async function moveProjectAssignmentRange(projectId, workType, fromStartISO, fromEndISO, deltaDays){
   const type = String(workType || "").toLowerCase().trim();
-
   const { data: rows, error: selErr } = await sb
     .from("project_assignments")
     .select("id, project_id, work_date, werknemer_id, work_type, note")
@@ -7653,41 +6580,12 @@ async function moveProjectAssignmentRange(projectId, workType, fromStartISO, fro
   if (insErr) { alert("Range insert fout: " + insErr.message); return; }
 }
 
+async function moveProjectMontageDay(projectId, fromDate, toDate){
+  return moveProjectAssignmentDay(projectId, "montage", fromDate, toDate);
+}
+
 async function moveProjectMontageRange(projectId, fromStartISO, fromEndISO, deltaDays){
-  const { data: rows, error: selErr } = await sb
-    .from("project_assignments")
-    .select("id, project_id, work_date, werknemer_id, work_type")
-    .eq("project_id", projectId)
-    .eq("work_type", "montage")
-    .gte("work_date", fromStartISO)
-    .lte("work_date", fromEndISO)
-    .limit(200000);
-
-  if (selErr) { alert("Range select fout: " + selErr.message); return; }
-  if (!rows || rows.length === 0) { alert("Er is niets verplaatst (0 regels)."); return; }
-
-  const { error: delErr } = await sb
-    .from("project_assignments")
-    .delete()
-    .eq("project_id", projectId)
-    .eq("work_type", "montage")
-    .gte("work_date", fromStartISO)
-    .lte("work_date", fromEndISO);
-
-  if (delErr) { alert("Range delete fout: " + delErr.message); return; }
-
-  const newRows = rows.map(r => {
-    const newISO = toISODate(addDays(parseISODate(r.work_date), deltaDays));
-    return {
-      project_id: r.project_id,
-      work_date: newISO,
-      werknemer_id: r.werknemer_id,
-      work_type: r.work_type
-    };
-  });
-
-  const { error: insErr } = await sb.from("project_assignments").insert(newRows);
-  if (insErr) { alert("Range insert fout: " + insErr.message); return; }
+  return moveProjectAssignmentRange(projectId, "montage", fromStartISO, fromEndISO, deltaDays);
 }
 
 function daysBetweenISO(fromISO, toISO){
