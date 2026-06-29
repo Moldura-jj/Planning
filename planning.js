@@ -1421,17 +1421,24 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
 
   if (!sid || !date || !["productie", "montage"].includes(type) || conceptHours <= 0) return { ok: false, message: "Geen uren om automatisch te plannen." };
 
-  const ins = await sb.from("section_assignments").insert({
+  const deliveryISO = window.__plannerCtx?.projMetaById?.get(pid)?.deliveryISO || "";
+  const segments = buildProjectDummyHoursSegments(date, conceptHours, deliveryISO);
+  if (!segments.length) return { ok: false, message: "Geen werkdagen gevonden om te plannen." };
+
+  const rows = segments.map(seg => ({
     section_id: sid,
-    work_date: date,
+    work_date: seg.work_date,
     werknemer_id: Number(DUMMY_SEC_ID),
     work_type: type,
-    note: `concept-hours:${conceptHours}`
-  });
+    note: `concept-hours:${seg.hours}`
+  }));
 
+  const ins = await sb.from("section_assignments").insert(rows);
   if (ins.error) return { ok: false, message: ins.error.message };
 
-  await consumeProjectConceptHours(pid, date, type, conceptHours);
+  for (const seg of segments) {
+    await consumeProjectConceptHours(pid, seg.work_date, type, seg.hours);
+  }
   return { ok: true };
 }
 
@@ -2275,6 +2282,7 @@ for (const p of (projecten || [])) {
   projMetaById.set(pid, {
     nr: String(p?.[projNrKey] ?? "").trim(),
     nm: String(p?.[projNameKey] ?? "").trim(),
+    deliveryISO: asISODate(p?.[deliveryKey] ?? ""),
   });
 }
 
@@ -4552,8 +4560,9 @@ const countM = rowM.querySelector(".concept-count");
 
           const prodChecked = selected.productie.has(eid);
           const pfForDefault = Number(settings.planFactor || 1);
+          const replaceableProdHours = sectionDummyHours(cur, "Prod");
           const prodDefaultHours = Math.min(
-            Number(sectionRemainingHours.prod || 0),
+            Number(sectionRemainingHours.prod || 0) + Number(replaceableProdHours || 0),
             Number(remainingCapacityHours || 0) * pfForDefault
           );
           const prodHours = selected.prodHours.has(eid)
@@ -4641,8 +4650,9 @@ const countM = rowM.querySelector(".concept-count");
           rowM.className = "assign-item";
 
           const montChecked = selected.montage.has(eid);
+          const replaceableMontHours = sectionDummyHours(cur, "Mont");
           const montDefaultHours = Math.min(
-            Number(sectionRemainingHours.mont || 0),
+            Number(sectionRemainingHours.mont || 0) + Number(replaceableMontHours || 0),
             Number(remainingCapacityHours || 0) * pfForDefault
           );
           const montHours = selected.montHours.has(eid)
@@ -4961,11 +4971,29 @@ if (listSubc) {
         }
       }
 
-            // ✅ Concepten (dummy) als meerdere regels opslaan
+      const selectedProdAssignedHours = roundHours2(
+        Array.from(selected.productie || []).reduce((sum, eid) => {
+          const werknemerId = Number(eid);
+          if (Number.isFinite(werknemerId)) return sum + Number(selected.prodHours.get(eid) || 0);
+          return sum + PROJECT_DUMMY_HOURS_PER_DAY;
+        }, 0)
+      );
+
+      const selectedMontAssignedHours = roundHours2(
+        Array.from(selected.montage || []).reduce((sum, eid) => {
+          const werknemerId = Number(eid);
+          if (Number.isFinite(werknemerId)) return sum + Number(selected.montHours.get(eid) || 0);
+          return sum + PROJECT_DUMMY_HOURS_PER_DAY;
+        }, 0)
+      );
+
+            // ✅ Concepten (dummy) als uren opslaan; medewerkeruren nemen concepturen over
       const dummyProdCount = Number(selected.dummyProd || 0);
       const dummyMontCount = Number(selected.dummyMont || 0);
-      const dummyProdHours = roundHours2(Number(selected.dummyProdHours || 0) || (dummyProdCount * PROJECT_DUMMY_HOURS_PER_DAY));
-      const dummyMontHours = roundHours2(Number(selected.dummyMontHours || 0) || (dummyMontCount * PROJECT_DUMMY_HOURS_PER_DAY));
+      const dummyProdHoursRaw = roundHours2(Number(selected.dummyProdHours || 0) || (dummyProdCount * PROJECT_DUMMY_HOURS_PER_DAY));
+      const dummyMontHoursRaw = roundHours2(Number(selected.dummyMontHours || 0) || (dummyMontCount * PROJECT_DUMMY_HOURS_PER_DAY));
+      const dummyProdHours = Math.max(0, roundHours2(dummyProdHoursRaw - selectedProdAssignedHours));
+      const dummyMontHours = Math.max(0, roundHours2(dummyMontHoursRaw - selectedMontAssignedHours));
 
       if (dummyProdCount > 0 && dummyProdHours > 0) {
         rows.push({ section_id: sid, work_date: dateISO, werknemer_id: Number(DUMMY_SEC_ID), work_type: "productie", note: `concept-hours:${dummyProdHours}` });
@@ -5007,20 +5035,12 @@ if (pidKey) {
 }
 
 const newSectProdHours = roundHours2(
-  Array.from(selected.productie || []).reduce((sum, eid) => {
-    const werknemerId = Number(eid);
-    if (Number.isFinite(werknemerId)) return sum + Number(selected.prodHours.get(eid) || 0);
-    return sum + PROJECT_DUMMY_HOURS_PER_DAY;
-  }, 0) +
+  selectedProdAssignedHours +
   dummyProdHours
 );
 
 const newSectMontHours = roundHours2(
-  Array.from(selected.montage || []).reduce((sum, eid) => {
-    const werknemerId = Number(eid);
-    if (Number.isFinite(werknemerId)) return sum + Number(selected.montHours.get(eid) || 0);
-    return sum + PROJECT_DUMMY_HOURS_PER_DAY;
-  }, 0) +
+  selectedMontAssignedHours +
   dummyMontHours
 );
 
