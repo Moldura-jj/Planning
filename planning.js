@@ -2044,6 +2044,14 @@ function fmt1(n){
   return String(Math.round(Number(n || 0) * 10) / 10).replace(".", ",");
 }
 
+function parseProjectDummyHours(note, fallback = PROJECT_DUMMY_HOURS_PER_DAY){
+  const s = String(note || "");
+  const m = s.match(/(?:^|[;\s])concept-hours:([0-9]+(?:[.,][0-9]+)?)/i);
+  if (!m) return fallback;
+  const n = Number(String(m[1]).replace(",", "."));
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
     // ======================
 // projectAssignMap: project_id -> dateISO -> { productie:Set, montage:Set, dummyProd:number, dummyMont:number }
 // ======================
@@ -2075,10 +2083,10 @@ for (const a of (pAssigns || [])) {
   const entry = dmP.get(d);
   entry.rows.push(a);
 
-  const isDummy = (emp === String(DUMMY_EMP_ID)); // ✅ project dummy alleen
-  const rowHours = Number(a.hours ?? 1);
-
 const note = String(a.note || "");
+  const isDummy = (emp === String(DUMMY_EMP_ID)); // ✅ project dummy alleen
+  const dummyHours = parseProjectDummyHours(note);
+  const rowHours = dummyHours;
 
 if (wt === "productie") {
   if (isDummy && note.startsWith("inhuur:")) {
@@ -2086,7 +2094,7 @@ if (wt === "productie") {
     if (iid) entry.inhuurProdIds.add(iid);
   } else if (isDummy) {
     entry.dummyProd += 1;
-    entry.dummyProdHours += Number(a.hours ?? PROJECT_DUMMY_HOURS_PER_DAY);
+    entry.dummyProdHours += dummyHours;
   } else {
     entry.productie.add(emp);
     entry.prodHours += rowHours;
@@ -2099,7 +2107,7 @@ if (wt === "montage") {
     if (iid) entry.inhuurMontIds.add(iid);
   } else if (isDummy) {
     entry.dummyMont += 1;
-    entry.dummyMontHours += Number(a.hours ?? PROJECT_DUMMY_HOURS_PER_DAY);
+    entry.dummyMontHours += dummyHours;
   } else {
     entry.montage.add(emp);
     entry.montHours += rowHours;
@@ -2108,7 +2116,7 @@ if (wt === "montage") {
   if (wt === "cnc") {
   if (isDummy) {
     entry.dummyCnc += 1;
-    entry.dummyCncHours += Number(a.hours ?? PROJECT_DUMMY_HOURS_PER_DAY);
+    entry.dummyCncHours += dummyHours;
   } else {
     entry.cnc.add(emp);
     entry.cncHours += rowHours;
@@ -2117,7 +2125,7 @@ if (wt === "montage") {
   if (wt === "reis") {
     if (isDummy) {
       entry.dummyReis += 1;
-      entry.dummyReisHours += Number(a.hours ?? PROJECT_DUMMY_HOURS_PER_DAY);
+      entry.dummyReisHours += dummyHours;
     } else {
       entry.reis.add(emp);
       entry.reisHours += rowHours;
@@ -2590,12 +2598,12 @@ for (const dd of dates) {
   const pe = projectAssignMap.get(String(pid))?.get(iso);
     if (pe) {
       prod += Number(pe.prodHours || 0)
-          + Number(pe.dummyProd || 0)
-          + Number(pe.inhuurProdIds?.size || 0);
+          + Number(pe.dummyProdHours || (Number(pe.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + (Number(pe.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
 
       mont += Number(pe.montHours || 0)
-          + Number(pe.dummyMont || 0)
-          + Number(pe.inhuurMontIds?.size || 0);
+          + Number(pe.dummyMontHours || (Number(pe.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + (Number(pe.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
 
       if ((pe.dummyProd || 0) > 0) dummyProd = true;
       if ((pe.dummyMont || 0) > 0) dummyMont = true;
@@ -2871,8 +2879,14 @@ for (const dd of dates) {
       for (const dd of dates) {
         const iso = toISODate(dd);
         const pe = projectAssignMap.get(String(pid))?.get(iso);
-        const projProd = pe ? (pe.productie.size + Number(pe.dummyProd || 0)) : 0;
-        const projDummyProd = pe ? Number(pe.dummyProd || 0) : 0;
+        const projProd = pe
+          ? Number(pe.prodHours || 0)
+            + Number(pe.dummyProdHours || (Number(pe.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+            + (Number(pe.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+          : 0;
+        const projDummyProdHours = pe
+          ? Number(pe.dummyProdHours || (Number(pe.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          : 0;
 
         let sectProd = 0;
         for (const s of secsForProj) {
@@ -2885,11 +2899,13 @@ for (const dd of dates) {
           const se = assignMap.get(String(sid))?.get(iso);
           if (!se) continue;
 
-          sectProd += (se.productie.size + Number(se.dummyProd || 0));
+          sectProd += Number(se.prodHours || 0)
+            + (Number(se.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+            + (Number(se.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
         }
 
         const remaining = Math.max(0, projProd - sectProd);
-        const dummyRemaining = Math.max(0, projDummyProd - Math.max(0, sectProd - (projProd - projDummyProd)));
+        const dummyRemaining = Math.max(0, projDummyProdHours - Math.max(0, sectProd - (projProd - projDummyProdHours)));
         projProdByDay[iso] = { prod: remaining, dummyProd: dummyRemaining > 0 };
       }
 
@@ -2951,8 +2967,14 @@ for (const dd of dates) {
 
       // 1) projectniveau montage (project_assignments)
       const pe = projectAssignMap.get(String(pid))?.get(iso);
-      const projMont = pe ? (pe.montage.size + Number(pe.dummyMont || 0)) : 0;
-      const projDummyMont = pe ? Number(pe.dummyMont || 0) : 0;
+      const projMont = pe
+        ? Number(pe.montHours || 0)
+          + Number(pe.dummyMontHours || (Number(pe.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + (Number(pe.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+        : 0;
+      const projDummyMontHours = pe
+        ? Number(pe.dummyMontHours || (Number(pe.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+        : 0;
 
       // 2) sectieniveau montage (section_assignments) optellen
       let sectMont = 0;
@@ -2968,14 +2990,16 @@ for (const dd of dates) {
         const se = assignMap.get(String(sid))?.get(iso);
         if (!se) continue;
 
-        sectMont += (se.montage.size + Number(se.dummyMont || 0));
+        sectMont += Number(se.montHours || 0)
+          + (Number(se.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+          + (Number(se.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
       }
 
       // 3) restant (nooit negatief tonen)
       const remaining = Math.max(0, projMont - sectMont);
 
       // hatch alleen als er nog dummy over is (ruw maar werkt visueel)
-      const dummyRemaining = Math.max(0, projDummyMont - Math.max(0, sectMont - (projMont - projDummyMont)));
+      const dummyRemaining = Math.max(0, projDummyMontHours - Math.max(0, sectMont - (projMont - projDummyMontHours)));
       const dummy = dummyRemaining > 0;
 
       projMontByDay[iso] = { mont: remaining, dummyMont: dummy };
@@ -3812,9 +3836,22 @@ if (autoPlanTd) {
   const dateISO   = String(autoPlanTd.dataset.workDate || "").trim();
   const workType  = String(autoPlanTd.dataset.workType || "").toLowerCase().trim();
   const totalHours = Number(autoPlanTd.dataset.totalHours || 0);
+  const plannedHours = Number(autoPlanTd.dataset.plannedHours || 0);
 
   if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO) {
     alert("Geen geldig project-id gevonden voor deze projectregel.");
+    return;
+  }
+
+  const typeLabel = workType === "montage" ? "montage" : "productie";
+
+  if (plannedHours > 0) {
+    const msg =
+      `${formatHoursCell(plannedHours)} uur ${typeLabel} verwijderen op ${dateISO}?`;
+    if (!confirm(msg)) return;
+
+    const ok = await removeProjectDummyForDate(projectId, dateISO, workType);
+    if (ok) await loadAndRender();
     return;
   }
 
@@ -3824,7 +3861,6 @@ if (autoPlanTd) {
   }
 
   const dayCount = Math.ceil(totalHours / PROJECT_DUMMY_HOURS_PER_DAY);
-  const typeLabel = workType === "montage" ? "montage" : "productie";
   const msg =
     `Sectie plannen?\n\n` +
     `${typeLabel}: ${formatHoursCell(totalHours)} uur / ${String(PROJECT_DUMMY_HOURS_PER_DAY).replace(".", ",")} uur per dag = ${dayCount} dag(en).\n` +
@@ -5692,6 +5728,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
         const prod = Number(projProdByDay?.[iso]?.prod || 0);
         const dummyProd = !!projProdByDay?.[iso]?.dummyProd;
+        const peForCell = projectAssignMap.get(String(projectId || ""))?.get(iso);
+        const dummyProdHoursForCell = Number(peForCell?.dummyProdHours || 0);
+        const displayProd = (dummyProd && dummyProdHoursForCell > 0 && prod <= Number(peForCell?.dummyProd || 0))
+          ? dummyProdHoursForCell
+          : prod;
 
         const key = keys[i];
         const prevKey = (i > 0) ? keys[i - 1] : "";
@@ -5704,6 +5745,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
         td.dataset.workDate = iso;
         td.dataset.workType = "productie";
         td.dataset.totalHours = String(Number(totalHours || 0));
+        td.dataset.plannedHours = String(displayProd);
 
         let html = `<div class="plan-stack">`;
         html += `<div class="marker-row">
@@ -5718,7 +5760,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
           const endCls   = isEnd   ? " bar-end"   : "";
           const dummyCls = dummyProd ? " dummy-hatch" : "";
 
-          html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${prod}</div>`;
+          html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayProd))}</div>`;
         }
 
         html += `</div>`;
@@ -5742,6 +5784,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
         const mont = Number(projMontByDay?.[iso]?.mont || 0);
         const dummyMont = !!projMontByDay?.[iso]?.dummyMont;
+        const peForCell = projectAssignMap.get(String(projectId || ""))?.get(iso);
+        const dummyMontHoursForCell = Number(peForCell?.dummyMontHours || 0);
+        const displayMont = (dummyMont && dummyMontHoursForCell > 0 && mont <= Number(peForCell?.dummyMont || 0))
+          ? dummyMontHoursForCell
+          : mont;
 
         const key = keys[i];
         const prevKey = (i > 0) ? keys[i - 1] : "";
@@ -5754,6 +5801,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
         td.dataset.workDate = iso;
         td.dataset.workType = "montage";
         td.dataset.totalHours = String(Number(totalHours || 0));
+        td.dataset.plannedHours = String(displayMont);
 
         // ✅ Drag & Drop metadata
         td.classList.add("dd-dropzone");
@@ -5784,7 +5832,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
           const dummyCls = dummyMont ? " dummy-hatch" : "";
 
           // ✅ altijd het aantal tonen (niet "mon" en niet alleen bij start)
-          html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${mont}</div>`;
+          html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayMont))}</div>`;
         }
 
         html += `</div>`;
@@ -5990,19 +6038,31 @@ function isPlannerWorkday(date){
   return day >= 1 && day <= 5;
 }
 
-function buildProjectDummyDates(startISO, count){
+function buildProjectDummyHoursSegments(startISO, totalHours){
   const startDate = parseISODate(startISO);
-  const n = Math.max(0, Math.ceil(Number(count || 0)));
+  let remaining = Math.max(0, Number(totalHours || 0));
   const out = [];
-  if (!startDate || n <= 0) return out;
+  if (!startDate || remaining <= 0) return out;
 
   let d = startDate;
-  while (out.length < n) {
-    if (isPlannerWorkday(d)) out.push(toISODate(d));
+  while (remaining > 0.0001) {
+    if (isPlannerWorkday(d)) {
+      const hours = Math.min(PROJECT_DUMMY_HOURS_PER_DAY, remaining);
+      out.push({
+        work_date: toISODate(d),
+        hours: Math.round((hours + Number.EPSILON) * 100) / 100
+      });
+      remaining -= hours;
+    }
     d = addDays(d, 1);
   }
 
   return out;
+}
+
+function buildProjectDummyDates(startISO, count){
+  const totalHours = Number(count || 0) * PROJECT_DUMMY_HOURS_PER_DAY;
+  return buildProjectDummyHoursSegments(startISO, totalHours).map(x => x.work_date);
 }
 
 async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHours){
@@ -6021,9 +6081,8 @@ async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHou
     return false;
   }
 
-  const dayCount = Math.ceil(hours / PROJECT_DUMMY_HOURS_PER_DAY);
-  const datesToPlan = buildProjectDummyDates(dateISO, dayCount);
-  if (!datesToPlan.length) {
+  const segments = buildProjectDummyHoursSegments(dateISO, hours);
+  if (!segments.length) {
     alert("Geen werkdagen gevonden om te plannen.");
     return false;
   }
@@ -6041,16 +6100,43 @@ async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHou
     return false;
   }
 
-  const rows = datesToPlan.map(iso => ({
+  const rows = segments.map(seg => ({
     project_id: pid,
-    work_date: iso,
+    work_date: seg.work_date,
     werknemer_id: Number(DUMMY_EMP_ID),
     work_type: type,
+    note: `concept-hours:${seg.hours}`,
   }));
 
   const ins = await sb.from("project_assignments").insert(rows);
   if (ins.error) {
     alert("Fout opslaan conceptplanning: " + ins.error.message);
+    return false;
+  }
+
+  return true;
+}
+
+async function removeProjectDummyForDate(projectId, dateISO, workType){
+  const pid = String(projectId || "").trim();
+  const d = String(dateISO || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+
+  if (!pid || !d || !["productie", "montage"].includes(type)) {
+    alert("Geen geldig project, datum of planningstype gevonden.");
+    return false;
+  }
+
+  const del = await sb
+    .from("project_assignments")
+    .delete()
+    .eq("project_id", pid)
+    .eq("work_date", d)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_EMP_ID);
+
+  if (del.error) {
+    alert("Fout verwijderen conceptplanning: " + del.error.message);
     return false;
   }
 
