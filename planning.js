@@ -98,22 +98,20 @@ async function undoLast(){
       }
     }
 
-    if (action.kind === "project-montage" || action.kind === "project-productie") {
-      const workType = action.kind === "project-productie" ? "productie" : "montage";
+    if (action.kind === "project-montage") {
       await sb
         .from("project_assignments")
         .delete()
         .eq("project_id", action.project_id)
         .eq("work_date", action.to_date)
-        .eq("work_type", workType);
+        .eq("work_type", "montage");
 
       if (action.rows?.length) {
         const backRows = action.rows.map(r => ({
           project_id: action.project_id,
           work_date: action.from_date,
           werknemer_id: r.werknemer_id,
-          work_type: r.work_type,
-          note: r.note || null
+          work_type: r.work_type
         }));
         await sb.from("project_assignments").insert(backRows);
       }
@@ -2278,6 +2276,30 @@ for (const p of (projecten || [])) {
         // concept/dummy blijft als dag tellen
         plannedProdByDay[iso] += Number(entry.dummyProd || 0) * HOURS_PER_PERSON_DAY * pf;
         plannedMontByDay[iso] += Number(entry.dummyMont || 0) * HOURS_PER_PERSON_DAY * pf;
+      }
+    }
+
+    // ✅ projectniveau dummy/concept uren meenemen in onderste optelling
+    // Dit zijn de blokken uit de projectregels "↳ Productie" en "↳ Montage".
+    for (const [pid, dm] of projectAssignMap) {
+      for (const [iso, entry] of dm) {
+        plannedProdByDay[iso] = Number(plannedProdByDay[iso] || 0)
+          + Number(entry.prodHours || 0)
+          + Number(entry.dummyProdHours || (Number(entry.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + (Number(entry.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+
+        plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0)
+          + Number(entry.montHours || 0)
+          + Number(entry.dummyMontHours || (Number(entry.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY))
+          + (Number(entry.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+
+        plannedCncByDay[iso] = Number(plannedCncByDay[iso] || 0)
+          + Number(entry.cncHours || 0)
+          + Number(entry.dummyCncHours || (Number(entry.dummyCnc || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
+
+        plannedReisByDay[iso] = Number(plannedReisByDay[iso] || 0)
+          + Number(entry.reisHours || 0)
+          + Number(entry.dummyReisHours || (Number(entry.dummyReis || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
       }
     }
 
@@ -5749,15 +5771,6 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
         td.dataset.totalHours = String(Number(totalHours || 0));
         td.dataset.plannedHours = String(displayProd);
 
-        td.classList.add("dd-dropzone");
-        td.dataset.ddKind = "project-productie";
-        td.dataset.ddKey = key || "";
-
-        if (prod > 0) {
-          td.setAttribute("draggable", "true");
-          td.classList.add("dd-draggable");
-        }
-
         let html = `<div class="plan-stack">`;
         html += `<div class="marker-row">
           <div class="marker delivery placeholder">lever</div>
@@ -6358,20 +6371,18 @@ function wireDragDrop(root){
         return;
       }
 
-      if (kind === "project-montage" || kind === "project-productie") {
+      if (kind === "project-montage") {
         const fromPid = String(payload.projectId || "");
         const toPid   = String(cell.dataset.projectId || "");
         if (!fromPid || !toPid || fromPid !== toPid) return;
-
-        const workType = kind === "project-productie" ? "productie" : "montage";
 
         if (payload.isRange) {
           const startISO = String(payload.fromStart || fromDate);
           const endISO   = String(payload.fromEnd   || fromDate);
           const delta    = daysBetweenISO(startISO, toDate);
-          await moveProjectAssignmentRange(fromPid, workType, startISO, endISO, delta);
+          await moveProjectMontageRange(fromPid, startISO, endISO, delta);
         } else {
-          await moveProjectAssignmentDay(fromPid, workType, fromDate, toDate);
+          await moveProjectMontageDay(fromPid, fromDate, toDate);
         }
 
         loadAndRender();
@@ -6488,30 +6499,29 @@ async function moveSectionRange(sectionId, fromStartISO, fromEndISO, deltaDays){
 
 
 
-async function moveProjectAssignmentDay(projectId, workType, fromDate, toDate){
+async function moveProjectMontageDay(projectId, fromDate, toDate){
   const pid = String(projectId || "").trim();
-  const type = String(workType || "").toLowerCase().trim();
   const f = String(fromDate || "").trim();
   const t = String(toDate || "").trim();
-  if (!pid || !type || !f || !t || f === t) return;
+  if (!pid || !f || !t || f === t) return;
 
   const { data: rows, error: selErr } = await sb
     .from("project_assignments")
-    .select("id, project_id, werknemer_id, work_type, note")
+    .select("id, project_id, werknemer_id, work_type")
     .eq("project_id", pid)
     .eq("work_date", f)
-    .eq("work_type", type);
+    .eq("work_type", "montage");
 
   if (selErr) { alert("Select fout: " + selErr.message); return; }
   if (!rows || rows.length === 0) { alert("Er is niets verplaatst (0 regels)."); return; }
 
   // ✅ UNDO snapshot opslaan (voor we deleten)
 pushUndo({
-  kind: type === "productie" ? "project-productie" : "project-montage",
+  kind: "project-montage",
   project_id: pid,
   from_date: f,
   to_date: t,
-  rows: rows.map(r => ({ werknemer_id: r.werknemer_id, work_type: r.work_type, note: r.note || null }))
+  rows: rows.map(r => ({ werknemer_id: r.werknemer_id, work_type: r.work_type }))
 });
 
 
@@ -6520,7 +6530,7 @@ pushUndo({
     .delete()
     .eq("project_id", pid)
     .eq("work_date", f)
-    .eq("work_type", type);
+    .eq("work_type", "montage");
 
   if (delErr) { alert("Delete fout: " + delErr.message); return; }
 
@@ -6528,8 +6538,7 @@ pushUndo({
     project_id: r.project_id,
     work_date: t,
     werknemer_id: r.werknemer_id,
-    work_type: r.work_type,
-    note: r.note || null
+    work_type: r.work_type
   }));
 
   const { error: insErr } = await sb
@@ -6538,16 +6547,15 @@ pushUndo({
 
   if (insErr) { alert("Insert fout: " + insErr.message); return; }
 
-  console.log("moveProjectAssignmentDay OK:", rows.length, { pid, type, f, t });
+  console.log("moveProjectMontageDay OK:", rows.length, { pid, f, t });
 }
 
-async function moveProjectAssignmentRange(projectId, workType, fromStartISO, fromEndISO, deltaDays){
-  const type = String(workType || "").toLowerCase().trim();
+async function moveProjectMontageRange(projectId, fromStartISO, fromEndISO, deltaDays){
   const { data: rows, error: selErr } = await sb
     .from("project_assignments")
-    .select("id, project_id, work_date, werknemer_id, work_type, note")
+    .select("id, project_id, work_date, werknemer_id, work_type")
     .eq("project_id", projectId)
-    .eq("work_type", type)
+    .eq("work_type", "montage")
     .gte("work_date", fromStartISO)
     .lte("work_date", fromEndISO)
     .limit(200000);
@@ -6559,7 +6567,7 @@ async function moveProjectAssignmentRange(projectId, workType, fromStartISO, fro
     .from("project_assignments")
     .delete()
     .eq("project_id", projectId)
-    .eq("work_type", type)
+    .eq("work_type", "montage")
     .gte("work_date", fromStartISO)
     .lte("work_date", fromEndISO);
 
@@ -6571,21 +6579,12 @@ async function moveProjectAssignmentRange(projectId, workType, fromStartISO, fro
       project_id: r.project_id,
       work_date: newISO,
       werknemer_id: r.werknemer_id,
-      work_type: r.work_type,
-      note: r.note || null
+      work_type: r.work_type
     };
   });
 
   const { error: insErr } = await sb.from("project_assignments").insert(newRows);
   if (insErr) { alert("Range insert fout: " + insErr.message); return; }
-}
-
-async function moveProjectMontageDay(projectId, fromDate, toDate){
-  return moveProjectAssignmentDay(projectId, "montage", fromDate, toDate);
-}
-
-async function moveProjectMontageRange(projectId, fromStartISO, fromEndISO, deltaDays){
-  return moveProjectAssignmentRange(projectId, "montage", fromStartISO, fromEndISO, deltaDays);
 }
 
 function daysBetweenISO(fromISO, toISO){
