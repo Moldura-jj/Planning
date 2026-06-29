@@ -5536,7 +5536,6 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     td.dataset.proj = tr.querySelector(".expander")?.dataset?.proj || "";
     td.dataset.projectId = td.dataset.proj || "";
     td.dataset.workDate = iso;
-    td.classList.add("project-date-dropzone");
 
     // cel-kleur
     let cls = `cell plan-cell ${isWeekend(d) ? "wknd" : ""}`.trim();
@@ -5545,16 +5544,17 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     else if (key === "mont") cls += " bar-mont";
     else if (key.startsWith("lbl:")) cls += ` ${barClass(label)}`;
     td.className = cls;
+    td.classList.add("project-date-dropzone");
 
     let html = `<div class="plan-stack">`;
 
     // markers samen op 1 regel
     html += `<div class="marker-row">`;
     html += isDelivery
-      ? `<div class="marker delivery project-date-marker" draggable="true" data-marker-type="delivery" title="Leverdatum verslepen"></div>`
+      ? `<div class="marker delivery project-date-marker" draggable="true" data-marker-type="delivery" title="Leverdatum verslepen">lever</div>`
       : `<div class="marker delivery placeholder">lever</div>`;
     html += isMarker
-      ? `<div class="marker deadline project-date-marker" draggable="true" data-marker-type="completion" title="Opleverdatum verslepen"></div>`
+      ? `<div class="marker deadline project-date-marker" draggable="true" data-marker-type="completion" title="Opleverdatum verslepen">oplever</div>`
       : `<div class="marker deadline placeholder">oplever</div>`;
 
     html += `</div>`;
@@ -6572,9 +6572,8 @@ function wireDragDrop(root){
 
   root.querySelectorAll("td.project-date-dropzone").forEach(cell => {
     cell.addEventListener("dragover", (e) => {
-      const raw = e.dataTransfer?.types ? Array.from(e.dataTransfer.types) : [];
-      if (!raw.includes("application/json")) return;
       e.preventDefault();
+      if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
       cell.classList.add("is-drop-target");
     });
 
