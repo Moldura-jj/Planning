@@ -6006,6 +6006,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     td.dataset.sectionId = String(sectionId || "");
     td.dataset.projectId = String(projectId || "");
     td.dataset.workDate  = iso;
+    const isConceptRow = tr.classList.contains("section-concept-row");
 
     // tooltip met namen (prod/mont)
     const entry = assignMap?.get(String(sectionId))?.get(iso);
@@ -6046,8 +6047,14 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
     // Drag&Drop metadata
     td.classList.add("dd-dropzone");
-    td.dataset.ddKind = "section";
+    td.dataset.ddKind = isConceptRow ? "section-concept" : "section";
     td.dataset.ddKey  = key || "";
+    if (isConceptRow) {
+      const conceptType = prod > 0 ? "productie" : (mont > 0 ? "montage" : "");
+      td.dataset.workType = conceptType;
+      td.dataset.plannedHours = String(prod > 0 ? prod : mont);
+      td.classList.add("section-concept-click");
+    }
 
     const hasPlan = (prod > 0) || (mont > 0) || (subc > 0);
     if (hasPlan) {
@@ -6082,7 +6089,8 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
       if (isProd) {
         const prodTxt = mixedBarContent(prodReal, prodDummyHours, prod);
-        html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}${mixedCls}">${prodTxt}</div>`;
+        const resizeHandle = isConceptRow && isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="productie" title="Concepturen groter/kleiner trekken"></span>` : "";
+        html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}${mixedCls}">${prodTxt}${resizeHandle}</div>`;
       } else {
         html += `<div class="bar bar-prod placeholder">\u00A0</div>`;
       }
@@ -6101,7 +6109,8 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
       if (isMont) {
         const montTxt = mixedBarContent(montReal, montDummyHours, mont);
-        html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}${mixedCls}">${montTxt}</div>`;
+        const resizeHandle = isConceptRow && isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="montage" title="Concepturen groter/kleiner trekken"></span>` : "";
+        html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}${mixedCls}">${montTxt}${resizeHandle}</div>`;
       } else {
         html += `<div class="bar bar-mont placeholder">\u00A0</div>`;
       }
@@ -6709,12 +6718,31 @@ function getRunHoursFromDom(td){
   if (!tr || !run.startISO || !run.endISO) return Number(td.dataset.plannedHours || 0);
 
   let total = 0;
-  for (const cell of Array.from(tr.querySelectorAll("td.project-auto-plan-click"))) {
+  const selector = td.classList.contains("project-auto-plan-click")
+    ? "td.project-auto-plan-click"
+    : "td.dd-draggable";
+  const wantedKind = String(td.dataset.ddKind || "");
+  const wantedType = String(td.dataset.workType || "");
+
+  for (const cell of Array.from(tr.querySelectorAll(selector))) {
     const iso = String(cell.dataset.workDate || "");
     if (!iso || iso < run.startISO || iso > run.endISO) continue;
+    if (wantedKind && String(cell.dataset.ddKind || "") !== wantedKind) continue;
+    if (wantedType && String(cell.dataset.workType || "") !== wantedType) continue;
     total += Number(cell.dataset.plannedHours || 0);
   }
   return Math.round((total + Number.EPSILON) * 100) / 100;
+}
+
+function isSectionConceptRow(row, workType = ""){
+  const emp = String(row?.werknemer_id ?? "");
+  const type = String(row?.work_type || "").toLowerCase().trim();
+  const note = String(row?.note || "");
+  const wanted = String(workType || "").toLowerCase().trim();
+  return emp === String(DUMMY_SEC_ID)
+    && (!wanted || type === wanted)
+    && !note.startsWith("inhuur:")
+    && parseProjectDummyHours(note, 0) > 0;
 }
 
 async function resizeProjectAssignmentRun({ projectId, workType, runStartISO, runEndISO, targetEndISO, currentHours, remainingHours }){
@@ -6762,6 +6790,126 @@ async function resizeProjectAssignmentRun({ projectId, workType, runStartISO, ru
   if (rows.length) {
     const ins = await sb.from("project_assignments").insert(rows);
     if (ins.error) alert("Fout opslaan conceptplanning: " + ins.error.message);
+  }
+}
+
+async function moveSectionConceptDay(sectionId, workType, fromDate, toDate){
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const f = String(fromDate || "").trim();
+  const t = String(toDate || "").trim();
+  if (!sid || !["productie", "montage"].includes(type) || !f || !t || f === t) return;
+
+  const { data: rows, error: selErr } = await sb
+    .from("section_assignments")
+    .select("id, section_id, werknemer_id, work_type, note")
+    .eq("section_id", sid)
+    .eq("work_date", f)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_SEC_ID);
+
+  if (selErr) { alert("Concept select fout: " + selErr.message); return; }
+
+  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
+  if (!conceptRows.length) return;
+
+  const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
+  if (del.error) { alert("Concept delete fout: " + del.error.message); return; }
+
+  const newRows = conceptRows.map(r => ({
+    section_id: sid,
+    work_date: t,
+    werknemer_id: Number(DUMMY_SEC_ID),
+    work_type: type,
+    note: r.note || null
+  }));
+
+  const ins = await sb.from("section_assignments").insert(newRows);
+  if (ins.error) alert("Concept insert fout: " + ins.error.message);
+}
+
+async function moveSectionConceptRange(sectionId, workType, fromStartISO, fromEndISO, deltaDays){
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  if (!sid || !["productie", "montage"].includes(type) || !fromStartISO || !fromEndISO) return;
+
+  const { data: rows, error: selErr } = await sb
+    .from("section_assignments")
+    .select("id, section_id, work_date, werknemer_id, work_type, note")
+    .eq("section_id", sid)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_SEC_ID)
+    .gte("work_date", fromStartISO)
+    .lte("work_date", fromEndISO)
+    .limit(200000);
+
+  if (selErr) { alert("Concept range select fout: " + selErr.message); return; }
+
+  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
+  if (!conceptRows.length) return;
+
+  const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
+  if (del.error) { alert("Concept range delete fout: " + del.error.message); return; }
+
+  const newRows = conceptRows.map(r => ({
+    section_id: sid,
+    work_date: toISODate(addDays(parseISODate(r.work_date), deltaDays)),
+    werknemer_id: Number(DUMMY_SEC_ID),
+    work_type: type,
+    note: r.note || null
+  }));
+
+  const ins = await sb.from("section_assignments").insert(newRows);
+  if (ins.error) alert("Concept range insert fout: " + ins.error.message);
+}
+
+async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEndISO, targetEndISO, currentHours }){
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const startISO = String(runStartISO || "").trim();
+  const endISO = String(runEndISO || "").trim();
+  const targetISO = String(targetEndISO || "").trim();
+  if (!sid || !["productie", "montage"].includes(type) || !startISO || !endISO || !targetISO) return;
+
+  const targetDays = countPlannerWorkdaysInclusive(startISO, targetISO);
+  if (targetDays <= 0) return;
+
+  const currentDays = countPlannerWorkdaysInclusive(startISO, endISO);
+  const current = Math.max(0, Number(currentHours || 0));
+  const dayDelta = targetDays - currentDays;
+  const newHours = dayDelta >= 0
+    ? roundHours2(current + (dayDelta * PROJECT_DUMMY_HOURS_PER_DAY))
+    : roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
+  const { data: rows, error: selErr } = await sb
+    .from("section_assignments")
+    .select("id, note")
+    .eq("section_id", sid)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_SEC_ID)
+    .gte("work_date", startISO)
+    .lte("work_date", endISO)
+    .limit(200000);
+
+  if (selErr) { alert("Concept resize select fout: " + selErr.message); return; }
+
+  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
+  if (conceptRows.length) {
+    const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
+    if (del.error) { alert("Concept resize delete fout: " + del.error.message); return; }
+  }
+
+  const segments = buildProjectDummyHoursSegments(startISO, newHours);
+  const newRows = segments.map(seg => ({
+    section_id: sid,
+    work_date: seg.work_date,
+    werknemer_id: Number(DUMMY_SEC_ID),
+    work_type: type,
+    note: `concept-hours:${seg.hours}`,
+  }));
+
+  if (newRows.length) {
+    const ins = await sb.from("section_assignments").insert(newRows);
+    if (ins.error) alert("Concept resize insert fout: " + ins.error.message);
   }
 }
 
@@ -6970,15 +7118,17 @@ function wireDragDrop(root){
       e.stopPropagation();
       __wasDragging = true;
 
-      const td = handle.closest("td.project-auto-plan-click");
+      const td = handle.closest("td.project-auto-plan-click, td.section-concept-click");
       if (!td) return;
 
       const run = getContiguousRunFromCell(td);
+      const isSectionConcept = String(td.dataset.ddKind || "") === "section-concept";
       const payload = {
-        kind: "project-resize",
+        kind: isSectionConcept ? "section-concept-resize" : "project-resize",
         resizeKind: String(td.dataset.ddKind || ""),
+        sectionId: String(td.dataset.sectionId || ""),
         projectId: String(td.dataset.projectId || ""),
-        workType: String(td.dataset.workType || ""),
+        workType: String(handle.dataset.workType || td.dataset.workType || ""),
         runStart: run.startISO,
         runEnd: run.endISO,
         currentHours: getRunHoursFromDom(td),
@@ -7021,6 +7171,7 @@ function wireDragDrop(root){
         kind,
         sectionId: td.dataset.sectionId || "",
         projectId: td.dataset.projectId || "",
+        workType: td.dataset.workType || "",
         fromDate,
         fromStart,
         fromEnd,
@@ -7092,6 +7243,28 @@ function wireDragDrop(root){
         return;
       }
 
+      if (kind === "section-concept-resize") {
+        const resizeKind = String(payload.resizeKind || "");
+        const targetKind = String(cell.dataset.ddKind || "");
+        const fromSid = String(payload.sectionId || "");
+        const toSid = String(cell.dataset.sectionId || "");
+
+        if (resizeKind !== "section-concept" || targetKind !== "section-concept") return;
+        if (!fromSid || !toSid || fromSid !== toSid) return;
+
+        await resizeSectionConceptRun({
+          sectionId: fromSid,
+          workType: String(payload.workType || cell.dataset.workType || ""),
+          runStartISO: String(payload.runStart || ""),
+          runEndISO: String(payload.runEnd || ""),
+          targetEndISO: toDate,
+          currentHours: Number(payload.currentHours || 0)
+        });
+
+        loadAndRender();
+        return;
+      }
+
       // ✅ alleen droppen op dezelfde soort cel
       const targetKind = String(cell.dataset.ddKind || "");
       if (!targetKind || targetKind !== kind) {
@@ -7113,6 +7286,26 @@ function wireDragDrop(root){
           await moveSectionRange(fromSid, startISO, endISO, delta);
         } else {
           await moveSectionDay(fromSid, fromDate, toDate);
+        }
+
+        loadAndRender();
+        return;
+      }
+
+      if (kind === "section-concept") {
+        const fromSid = String(payload.sectionId || "");
+        const toSid   = String(cell.dataset.sectionId || "");
+        if (!fromSid || !toSid || fromSid !== toSid) return;
+
+        const workType = String(payload.workType || cell.dataset.workType || "");
+
+        if (payload.isRange) {
+          const startISO = String(payload.fromStart || fromDate);
+          const endISO   = String(payload.fromEnd   || fromDate);
+          const delta    = daysBetweenISO(startISO, toDate);
+          await moveSectionConceptRange(fromSid, workType, startISO, endISO, delta);
+        } else {
+          await moveSectionConceptDay(fromSid, workType, fromDate, toDate);
         }
 
         loadAndRender();
