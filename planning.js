@@ -2937,10 +2937,9 @@ for (const dd of dates) {
 
         if (hasSectionConcept) {
           const conceptRow = document.createElement("tr");
-          conceptRow.className = "order-row hidden section-concept-row";
+          conceptRow.className = "section-row hidden section-concept-row";
           markZebra(conceptRow);
           conceptRow.dataset.parent = String(pid);
-          conceptRow.dataset.orderParent = String(sid);
 
           const leftConcept = document.createElement("td");
           leftConcept.className = "rowhdr sticky-left section-cell";
