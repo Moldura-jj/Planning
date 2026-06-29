@@ -3000,7 +3000,7 @@ for (const dd of dates) {
       hoursTdP.innerHTML = "";
       prodRow.appendChild(hoursTdP);
 
-      appendProjectProductieSummaryDayCells(prodRow, dates, projProdByDay, String(pid), remainingProjectProdHours);
+      appendProjectProductieSummaryDayCells(prodRow, dates, projProdByDay, String(pid), remainingProjectProdHours, deliveryISO);
 
       tbody.appendChild(prodRow);
       lastRowOfProject = prodRow;
@@ -3099,7 +3099,7 @@ for (const dd of dates) {
       montRow.appendChild(hoursTdM);
 
 
-    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid), remainingProjectMontHours);
+    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid), remainingProjectMontHours, deliveryISO);
 
 
       tbody.appendChild(montRow);
@@ -3910,6 +3910,7 @@ if (autoPlanTd) {
   const workType  = String(autoPlanTd.dataset.workType || "").toLowerCase().trim();
   const totalHours = Number(autoPlanTd.dataset.totalHours || 0);
   const plannedHours = Number(autoPlanTd.dataset.plannedHours || 0);
+  const deliveryDate = String(autoPlanTd.dataset.deliveryDate || "").trim();
 
   if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO) {
     alert("Geen geldig project-id gevonden voor deze projectregel.");
@@ -3934,14 +3935,15 @@ if (autoPlanTd) {
   }
 
   const dayCount = Math.ceil(totalHours / PROJECT_DUMMY_HOURS_PER_DAY);
+  const deliveryTxt = deliveryDate ? `\nEr wordt gepland vóór leverdatum ${deliveryDate}.` : "";
   const msg =
     `Sectie plannen?\n\n` +
     `${typeLabel}: ${formatHoursCell(totalHours)} uur / ${String(PROJECT_DUMMY_HOURS_PER_DAY).replace(".", ",")} uur per dag = ${dayCount} dag(en).\n` +
-    `Vanaf ${dateISO} worden werkdagen automatisch gevuld met conceptplanning.`;
+    `Vanaf ${dateISO} worden werkdagen automatisch gevuld met conceptplanning.${deliveryTxt}`;
 
   if (!confirm(msg)) return;
 
-  const ok = await autoPlanProjectDummyRange(projectId, dateISO, workType, totalHours);
+  const ok = await autoPlanProjectDummyRange(projectId, dateISO, workType, totalHours, deliveryDate);
   if (ok) await loadAndRender();
   return;
 }
@@ -5788,7 +5790,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
   }
 }
 
-    function appendProjectProductieSummaryDayCells(tr, dates, projProdByDay = {}, projectId = "", totalHours = 0) {
+    function appendProjectProductieSummaryDayCells(tr, dates, projProdByDay = {}, projectId = "", totalHours = 0, deliveryISO = "") {
       const keys = dates.map(d => {
         const iso = toISODate(d);
         const prod = Number(projProdByDay?.[iso]?.prod || 0);
@@ -5819,6 +5821,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
         td.dataset.workType = "productie";
         td.dataset.totalHours = String(Number(totalHours || 0));
         td.dataset.plannedHours = String(displayProd);
+        td.dataset.deliveryDate = String(deliveryISO || "");
 
         td.classList.add("dd-dropzone");
         td.dataset.ddKind = "project-productie";
@@ -5852,7 +5855,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       }
     }
 
-    function appendProjectMontageSummaryDayCells(tr, dates, projMontByDay = {}, projectId = "", totalHours = 0) {
+    function appendProjectMontageSummaryDayCells(tr, dates, projMontByDay = {}, projectId = "", totalHours = 0, deliveryISO = "") {
 
       // key: wel/geen montage zodat start/einde afgerond blijft
       const keys = dates.map(d => {
@@ -5885,6 +5888,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
         td.dataset.workType = "montage";
         td.dataset.totalHours = String(Number(totalHours || 0));
         td.dataset.plannedHours = String(displayMont);
+        td.dataset.deliveryDate = String(deliveryISO || "");
 
         // ✅ Drag & Drop metadata
         td.classList.add("dd-dropzone");
@@ -6122,14 +6126,53 @@ function isPlannerWorkday(date){
   return day >= 1 && day <= 5;
 }
 
-function buildProjectDummyHoursSegments(startISO, totalHours){
+function getPlannerWorkdaysBetween(startISO, endISO){
+  const startDate = parseISODate(startISO);
+  const endDate = parseISODate(endISO);
+  const out = [];
+  if (!startDate || !endDate || endDate < startDate) return out;
+
+  let d = startDate;
+  while (d <= endDate) {
+    if (isPlannerWorkday(d)) out.push(toISODate(d));
+    d = addDays(d, 1);
+  }
+
+  return out;
+}
+
+function buildProjectDummyHoursSegments(startISO, totalHours, deliveryISO = ""){
   const startDate = parseISODate(startISO);
   let remaining = Math.max(0, Number(totalHours || 0));
   const out = [];
   if (!startDate || remaining <= 0) return out;
 
+  const deliveryDate = parseISODate(deliveryISO);
+  const deadlineISO = deliveryDate ? toISODate(addDays(deliveryDate, -1)) : "";
+  const limitedDays = deadlineISO ? getPlannerWorkdaysBetween(startISO, deadlineISO) : [];
+
+  if (deadlineISO && limitedDays.length === 0) return [];
+
+  if (limitedDays.length && remaining > (limitedDays.length * PROJECT_DUMMY_HOURS_PER_DAY)) {
+    const perDayRaw = remaining / limitedDays.length;
+    let used = 0;
+    return limitedDays.map((iso, idx) => {
+      const last = idx === limitedDays.length - 1;
+      const hours = last
+        ? Math.max(0, remaining - used)
+        : Math.round((perDayRaw + Number.EPSILON) * 100) / 100;
+      used += hours;
+      return {
+        work_date: iso,
+        hours: Math.round((hours + Number.EPSILON) * 100) / 100
+      };
+    });
+  }
+
   let d = startDate;
   while (remaining > 0.0001) {
+    if (deadlineISO && toISODate(d) > deadlineISO) break;
+
     if (isPlannerWorkday(d)) {
       const hours = Math.min(PROJECT_DUMMY_HOURS_PER_DAY, remaining);
       out.push({
@@ -6149,7 +6192,7 @@ function buildProjectDummyDates(startISO, count){
   return buildProjectDummyHoursSegments(startISO, totalHours).map(x => x.work_date);
 }
 
-async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHours){
+async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHours, deliveryISO = ""){
   const pid = String(projectId || "").trim();
   const dateISO = String(startISO || "").trim();
   const type = String(workType || "").toLowerCase().trim();
@@ -6165,9 +6208,9 @@ async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHou
     return false;
   }
 
-  const segments = buildProjectDummyHoursSegments(dateISO, hours);
+  const segments = buildProjectDummyHoursSegments(dateISO, hours, deliveryISO);
   if (!segments.length) {
-    alert("Geen werkdagen gevonden om te plannen.");
+    alert("Geen werkdagen gevonden om vóór de leverdatum te plannen.");
     return false;
   }
 
