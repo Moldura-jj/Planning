@@ -4336,6 +4336,37 @@ const countM = rowM.querySelector(".concept-count");
 
   return;
 }
+
+// ======================
+// ✅ klik op sectie-conceptregel => concepturen verwijderen
+// ======================
+const sectionConceptTd = ev.target.closest("td.section-concept-click");
+if (sectionConceptTd) {
+  if (__wasDragging) return;
+  ev.stopPropagation();
+
+  const plannedHours = Number(sectionConceptTd.dataset.plannedHours || 0);
+  if (!(plannedHours > 0)) return;
+
+  const sectionId = String(sectionConceptTd.dataset.sectionId || "").trim();
+  const workType = String(sectionConceptTd.dataset.workType || "").toLowerCase().trim();
+  const dateISO = String(sectionConceptTd.dataset.workDate || "").trim();
+  if (!sectionId || !dateISO || !["productie", "montage"].includes(workType)) return;
+
+  const run = getContiguousRunFromCell(sectionConceptTd);
+  const limitedRun = limitRunToMaxWorkdays(run.startISO || dateISO, run.endISO || dateISO, 5);
+  const deleteStart = limitedRun.startISO || dateISO;
+  const deleteEnd = limitedRun.endISO || dateISO;
+  const deleteHours = getRunHoursBetweenFromDom(sectionConceptTd, deleteStart, deleteEnd);
+  const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
+  const typeLabel = workType === "montage" ? "montage" : "productie";
+
+  if (!confirm(`${formatHoursCell(deleteHours || plannedHours)} uur concept ${typeLabel} verwijderen van ${dateTxt}?`)) return;
+
+  const ok = await removeSectionConceptRange(sectionId, workType, deleteStart, deleteEnd);
+  if (ok) await loadAndRender();
+  return;
+}
       if (__wasDragging) return;
 
       const td = ev.target.closest("td.section-click");
@@ -6661,9 +6692,17 @@ function getRunHoursBetweenFromDom(td, startISO, endISO){
   if (!tr || !startISO || !endISO) return Number(td.dataset.plannedHours || 0);
 
   let total = 0;
-  for (const cell of Array.from(tr.querySelectorAll("td.project-auto-plan-click"))) {
+  const selector = td.classList.contains("project-auto-plan-click")
+    ? "td.project-auto-plan-click"
+    : "td.dd-draggable";
+  const wantedKind = String(td.dataset.ddKind || "");
+  const wantedType = String(td.dataset.workType || "");
+
+  for (const cell of Array.from(tr.querySelectorAll(selector))) {
     const iso = String(cell.dataset.workDate || "");
     if (!iso || iso < startISO || iso > endISO) continue;
+    if (wantedKind && String(cell.dataset.ddKind || "") !== wantedKind) continue;
+    if (wantedType && String(cell.dataset.workType || "") !== wantedType) continue;
     total += Number(cell.dataset.plannedHours || 0);
   }
 
@@ -6861,6 +6900,40 @@ async function moveSectionConceptRange(sectionId, workType, fromStartISO, fromEn
 
   const ins = await sb.from("section_assignments").insert(newRows);
   if (ins.error) alert("Concept range insert fout: " + ins.error.message);
+}
+
+async function removeSectionConceptRange(sectionId, workType, startISO, endISO){
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const start = String(startISO || "").trim();
+  const end = String(endISO || "").trim();
+  if (!sid || !["productie", "montage"].includes(type) || !start || !end) return false;
+
+  const { data: rows, error: selErr } = await sb
+    .from("section_assignments")
+    .select("id, werknemer_id, work_type, note")
+    .eq("section_id", sid)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_SEC_ID)
+    .gte("work_date", start)
+    .lte("work_date", end)
+    .limit(200000);
+
+  if (selErr) {
+    alert("Concept verwijderen select fout: " + selErr.message);
+    return false;
+  }
+
+  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
+  if (!conceptRows.length) return true;
+
+  const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
+  if (del.error) {
+    alert("Concept verwijderen fout: " + del.error.message);
+    return false;
+  }
+
+  return true;
 }
 
 async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEndISO, targetEndISO, currentHours }){
