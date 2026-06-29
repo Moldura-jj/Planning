@@ -709,6 +709,39 @@ background:repeating-linear-gradient(
   );
 }
 
+.plan-stack .bar.bar-mixed{
+  padding:0 !important;
+  gap:0;
+}
+.plan-stack .bar .bar-part{
+  align-self:stretch;
+  min-width:0;
+  padding:0 2px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  position:relative;
+}
+.plan-stack .bar .bar-part-concept{
+  outline:1px dashed rgba(0,0,0,.35);
+  outline-offset:-1px;
+}
+.plan-stack .bar .bar-part-concept::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0.00) 0px,
+    rgba(0,0,0,0.00) 2px,
+    rgba(0,0,0,0.18) 2px,
+    rgba(0,0,0,0.18) 3px
+  );
+}
 
 /* =========================
    PROJECT ROW OPEN HIGHLIGHT
