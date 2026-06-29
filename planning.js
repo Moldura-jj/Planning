@@ -1341,6 +1341,67 @@ function parseSectionNo(v){
   };
 }
 
+function pickSectionNumber(obj, keys){
+  for (const key of keys) {
+    const v = obj?.[key];
+    if (v !== null && v !== undefined && v !== "") {
+      const n = Number(v);
+      return Number.isFinite(n) ? n : 0;
+    }
+  }
+  return 0;
+}
+
+function roundHours2(n){
+  return Math.round((Number(n || 0) + Number.EPSILON) * 100) / 100;
+}
+
+async function consumeProjectConceptHours(projectId, dateISO, workType, consumeHours){
+  const pid = String(projectId || "").trim();
+  const date = String(dateISO || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  let remaining = roundHours2(consumeHours);
+
+  if (!pid || !date || !["productie", "montage"].includes(type) || remaining <= 0) return;
+
+  const { data: rows, error: selErr } = await sb
+    .from("project_assignments")
+    .select("id, note")
+    .eq("project_id", pid)
+    .eq("work_date", date)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_EMP_ID)
+    .limit(50);
+
+  if (selErr) {
+    console.warn("consumeProjectConceptHours select error:", selErr.message);
+    return;
+  }
+
+  for (const row of (rows || [])) {
+    if (remaining <= 0) break;
+
+    const curHours = parseProjectDummyHours(row.note);
+    const take = Math.min(curHours, remaining);
+    const left = roundHours2(curHours - take);
+    remaining = roundHours2(remaining - take);
+
+    if (left > 0.001) {
+      const upd = await sb
+        .from("project_assignments")
+        .update({ note: `concept-hours:${left}` })
+        .eq("id", row.id);
+      if (upd.error) console.warn("consumeProjectConceptHours update error:", upd.error.message);
+    } else {
+      const del = await sb
+        .from("project_assignments")
+        .delete()
+        .eq("id", row.id);
+      if (del.error) console.warn("consumeProjectConceptHours delete error:", del.error.message);
+    }
+  }
+}
+
     // ===== Onderaanneming suggesties (per project cache) =====
     const _subcSuggestCache = new Map(); // projectId -> [names]
 
@@ -4222,6 +4283,60 @@ const countM = rowM.querySelector(".concept-count");
       for (const iid of (cur.inhuurProdIds || [])) selected.productie.add(String(iid));
       for (const iid of (cur.inhuurMontIds || [])) selected.montage.add(String(iid));
 
+      const getSectionPlannedTotals = () => {
+        const totals = { prod: 0, mont: 0 };
+        const dm = assignMap.get(String(sid));
+        if (!dm) return totals;
+
+        for (const [, entry] of dm) {
+          totals.prod += Number(entry.prodHours || 0)
+            + Number(entry.cncHours || 0)
+            + (Number(entry.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+            + (Number(entry.dummyCnc || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+            + (Number(entry.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+
+          totals.mont += Number(entry.montHours || 0)
+            + Number(entry.reisHours || 0)
+            + (Number(entry.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+            + (Number(entry.dummyReis || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+            + (Number(entry.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+        }
+
+        totals.prod = roundHours2(totals.prod);
+        totals.mont = roundHours2(totals.mont);
+        return totals;
+      };
+
+      const sectionRequiredHours = {
+        prod: roundHours2(
+          pickSectionNumber(sObj, ["uren_prod"]) +
+          pickSectionNumber(sObj, ["uren_cnc", "uren_cnc_prod", "cnc_uren"])
+        ),
+        mont: roundHours2(
+          pickSectionNumber(sObj, ["uren_montage", "uren_mont"]) +
+          pickSectionNumber(sObj, ["uren_reis", "reis_uren"])
+        ),
+      };
+
+      const sectionPlannedTotals = getSectionPlannedTotals();
+      const sectionRemainingHours = {
+        prod: Math.max(0, roundHours2(sectionRequiredHours.prod - sectionPlannedTotals.prod)),
+        mont: Math.max(0, roundHours2(sectionRequiredHours.mont - sectionPlannedTotals.mont)),
+      };
+
+      const prevSectProdHours = roundHours2(
+        Number(cur.prodHours || 0) +
+        Number(cur.cncHours || 0) +
+        (Number(cur.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY) +
+        (Number(cur.dummyCnc || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+      );
+      const prevSectMontHours = roundHours2(
+        Number(cur.montHours || 0) +
+        Number(cur.reisHours || 0) +
+        (Number(cur.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY) +
+        (Number(cur.dummyReis || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+      );
+
       // ✅ snapshot: hoeveel montage stond er al op deze sectie (incl concept)
       const prevSectMontCount = (cur?.montage?.size || 0) + Number(cur?.dummyMont || 0);
 
@@ -4354,7 +4469,14 @@ const countM = rowM.querySelector(".concept-count");
           rowP.className = "assign-item";
 
           const prodChecked = selected.productie.has(eid);
-          const prodHours = selected.prodHours.get(eid) ?? 1;
+          const pfForDefault = Number(settings.planFactor || 1);
+          const prodDefaultHours = Math.min(
+            Number(sectionRemainingHours.prod || 0),
+            Number(remainingCapacityHours || 0) * pfForDefault
+          );
+          const prodHours = selected.prodHours.has(eid)
+            ? selected.prodHours.get(eid)
+            : roundHours2(prodDefaultHours);
 
           rowP.innerHTML = `
             <input type="checkbox" ${prodChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="productie" />
@@ -4400,8 +4522,8 @@ const countM = rowM.querySelector(".concept-count");
 
           selected.productie.add(id);
 
-          const hRaw = String(prodHoursInp.value || "1").replace(",", ".");
-          const h = Number(hRaw) || 1;
+          const hRaw = String(prodHoursInp.value || String(prodHours || 0)).replace(",", ".");
+          const h = Number(hRaw) || 0;
           selected.prodHours.set(id, h);
         } else {
           selected.productie.delete(id);
@@ -4437,7 +4559,13 @@ const countM = rowM.querySelector(".concept-count");
           rowM.className = "assign-item";
 
           const montChecked = selected.montage.has(eid);
-          const montHours = selected.montHours.get(eid) ?? 1;
+          const montDefaultHours = Math.min(
+            Number(sectionRemainingHours.mont || 0),
+            Number(remainingCapacityHours || 0) * pfForDefault
+          );
+          const montHours = selected.montHours.has(eid)
+            ? selected.montHours.get(eid)
+            : roundHours2(montDefaultHours);
 
           rowM.innerHTML = `
             <input type="checkbox" ${montChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="montage" />
@@ -4483,8 +4611,8 @@ const countM = rowM.querySelector(".concept-count");
 
           selected.montage.add(id);
 
-          const hRaw = String(montHoursInp.value || "1").replace(",", ".");
-          const h = Number(hRaw) || 1;
+          const hRaw = String(montHoursInp.value || String(montHours || 0)).replace(",", ".");
+          const h = Number(hRaw) || 0;
           selected.montHours.set(id, h);
         } else {
           selected.montage.delete(id);
@@ -4713,7 +4841,7 @@ if (listSubc) {
             work_date: dateISO,
             werknemer_id: werknemerId,
             work_type: "productie",
-            hours: Number(selected.prodHours.get(eid) || 1)
+            hours: Number(selected.prodHours.get(eid) || 0)
           });
         } else {
           // inhuur -> opslaan als dummy met herkenbare note
@@ -4737,7 +4865,7 @@ if (listSubc) {
             work_date: dateISO,
             werknemer_id: werknemerId,
             work_type: "montage",
-            hours: Number(selected.montHours.get(eid) || 1)
+            hours: Number(selected.montHours.get(eid) || 0)
           });
         } else {
           // inhuur -> opslaan als dummy met herkenbare note
@@ -4792,6 +4920,34 @@ if (pidKey) {
     .filter(Boolean)
     .sort((a,b)=>a.localeCompare(b, "nl"));
   _subcSuggestCache.set(pidKey, merged);
+}
+
+const newSectProdHours = roundHours2(
+  Array.from(selected.productie || []).reduce((sum, eid) => {
+    const werknemerId = Number(eid);
+    if (Number.isFinite(werknemerId)) return sum + Number(selected.prodHours.get(eid) || 0);
+    return sum + PROJECT_DUMMY_HOURS_PER_DAY;
+  }, 0) +
+  (Number(dummyProdCount || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+);
+
+const newSectMontHours = roundHours2(
+  Array.from(selected.montage || []).reduce((sum, eid) => {
+    const werknemerId = Number(eid);
+    if (Number.isFinite(werknemerId)) return sum + Number(selected.montHours.get(eid) || 0);
+    return sum + PROJECT_DUMMY_HOURS_PER_DAY;
+  }, 0) +
+  (Number(dummyMontCount || 0) * PROJECT_DUMMY_HOURS_PER_DAY)
+);
+
+const deltaProdHours = roundHours2(newSectProdHours - prevSectProdHours);
+const deltaMontHours = roundHours2(newSectMontHours - prevSectMontHours);
+
+if (deltaProdHours > 0) {
+  await consumeProjectConceptHours(projectId, dateISO, "productie", deltaProdHours);
+}
+if (deltaMontHours > 0) {
+  await consumeProjectConceptHours(projectId, dateISO, "montage", deltaMontHours);
 }
 
 const newSectMontCount = Number(selected.montage.size || 0) + Number(dummyMontCount || 0);
