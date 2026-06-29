@@ -271,6 +271,9 @@ a{ color:inherit; text-decoration:none; }
   justify-content:flex-end;
   gap:10px;
 }
+.modal .ft #amAutoProd:not([hidden]){
+  margin-right:auto;
+}
 
 .split2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 @media (max-width:720px){ .split2{ grid-template-columns:1fr; } }
