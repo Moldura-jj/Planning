@@ -5534,6 +5534,9 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     if (tr.classList.contains("project-bottomline")) td.classList.add("project-bottomline-cell");
 
     td.dataset.proj = tr.querySelector(".expander")?.dataset?.proj || "";
+    td.dataset.projectId = td.dataset.proj || "";
+    td.dataset.workDate = iso;
+    td.classList.add("project-date-dropzone");
 
     // cel-kleur
     let cls = `cell plan-cell ${isWeekend(d) ? "wknd" : ""}`.trim();
@@ -5548,10 +5551,10 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     // markers samen op 1 regel
     html += `<div class="marker-row">`;
     html += isDelivery
-      ? `<div class="marker delivery"></div>`
+      ? `<div class="marker delivery project-date-marker" draggable="true" data-marker-type="delivery" title="Leverdatum verslepen"></div>`
       : `<div class="marker delivery placeholder">lever</div>`;
     html += isMarker
-      ? `<div class="marker deadline" title="${iso}"></div>`
+      ? `<div class="marker deadline project-date-marker" draggable="true" data-marker-type="completion" title="Opleverdatum verslepen"></div>`
       : `<div class="marker deadline placeholder">oplever</div>`;
 
     html += `</div>`;
@@ -6503,12 +6506,107 @@ function applyMiniHoursOverrunColors(root){
   });
 }
 
+async function moveProjectDateMarker(projectId, markerType, targetISO){
+  const pid = String(projectId || "").trim();
+  const type = String(markerType || "").trim();
+  const target = String(targetISO || "").trim();
+
+  if (!pid || !target) return;
+
+  const col =
+    type === "delivery" ? deliveryKey :
+    type === "completion" ? completionKey :
+    "";
+
+  if (!col) {
+    alert("Datumkolom niet gevonden voor dit project.");
+    return;
+  }
+
+  const saveISO = type === "completion"
+    ? toISODate(addDays(parseISODate(target), 1))
+    : target;
+
+  const upd = await sb
+    .from("projecten")
+    .update({ [col]: saveISO })
+    .eq(projIdKey, pid);
+
+  if (upd.error) {
+    alert("Fout datum opslaan: " + upd.error.message);
+  }
+}
+
 // ======================
 // DRAG & DROP (planned days)
 // ======================
 
 function wireDragDrop(root){
   if (!root) return;
+
+  root.querySelectorAll(".project-date-marker[draggable='true']").forEach(marker => {
+    marker.addEventListener("dragstart", (e) => {
+      e.stopPropagation();
+      __wasDragging = true;
+
+      const td = marker.closest("td.project-date-dropzone");
+      const payload = {
+        kind: "project-date-marker",
+        markerType: String(marker.dataset.markerType || ""),
+        projectId: String(td?.dataset.projectId || ""),
+        fromDate: String(td?.dataset.workDate || "")
+      };
+
+      e.dataTransfer.setData("application/json", JSON.stringify(payload));
+      e.dataTransfer.setData("text/plain", "date-marker");
+      e.dataTransfer.effectAllowed = "move";
+      marker.classList.add("is-dragging");
+    });
+
+    marker.addEventListener("dragend", (e) => {
+      e.stopPropagation();
+      marker.classList.remove("is-dragging");
+      setTimeout(() => { __wasDragging = false; }, 150);
+    });
+  });
+
+  root.querySelectorAll("td.project-date-dropzone").forEach(cell => {
+    cell.addEventListener("dragover", (e) => {
+      const raw = e.dataTransfer?.types ? Array.from(e.dataTransfer.types) : [];
+      if (!raw.includes("application/json")) return;
+      e.preventDefault();
+      cell.classList.add("is-drop-target");
+    });
+
+    cell.addEventListener("dragleave", () => {
+      cell.classList.remove("is-drop-target");
+    });
+
+    cell.addEventListener("drop", async (e) => {
+      let payload;
+      try {
+        payload = JSON.parse(e.dataTransfer.getData("application/json"));
+      } catch {
+        return;
+      }
+
+      if (String(payload.kind || "") !== "project-date-marker") return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      cell.classList.remove("is-drop-target");
+
+      const projectId = String(payload.projectId || "");
+      const targetProjectId = String(cell.dataset.projectId || "");
+      const targetISO = String(cell.dataset.workDate || "");
+      const markerType = String(payload.markerType || "");
+
+      if (!projectId || !targetProjectId || projectId !== targetProjectId || !targetISO) return;
+
+      await moveProjectDateMarker(projectId, markerType, targetISO);
+      await loadAndRender();
+    });
+  });
 
   root.querySelectorAll(".bar-resize-handle[draggable='true']").forEach(handle => {
     handle.addEventListener("dragstart", (e) => {

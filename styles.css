@@ -583,6 +583,13 @@ td.details-fill{ text-align:left !important; vertical-align:top; padding:0 !impo
   border:1px solid rgba(0,0,0,.15);
 }
 .plan-stack .marker.placeholder{ visibility:hidden; }
+.project-date-marker{
+  cursor:grab;
+}
+.project-date-marker:active,
+.project-date-marker.is-dragging{
+  cursor:grabbing;
+}
 
 /* stack bars */
 .plan-stack .bar{
