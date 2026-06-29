@@ -4341,13 +4341,11 @@ const countM = rowM.querySelector(".concept-count");
 // ✅ klik op sectie-conceptregel => concepturen verwijderen
 // ======================
 const sectionConceptTd = ev.target.closest("td.section-concept-click");
-if (sectionConceptTd) {
+if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) {
   if (__wasDragging) return;
   ev.stopPropagation();
 
   const plannedHours = Number(sectionConceptTd.dataset.plannedHours || 0);
-  if (!(plannedHours > 0)) return;
-
   const sectionId = String(sectionConceptTd.dataset.sectionId || "").trim();
   const workType = String(sectionConceptTd.dataset.workType || "").toLowerCase().trim();
   const dateISO = String(sectionConceptTd.dataset.workDate || "").trim();
