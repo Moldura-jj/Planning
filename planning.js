@@ -5841,8 +5841,9 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
           const startCls = isStart ? " bar-start" : "";
           const endCls   = isEnd   ? " bar-end"   : "";
           const dummyCls = dummyProd ? " dummy-hatch" : "";
+          const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" title="Uren groter/kleiner trekken"></span>` : "";
 
-          html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayProd))}</div>`;
+          html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayProd))}${resizeHandle}</div>`;
         }
 
         html += `</div>`;
@@ -5912,9 +5913,10 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
           const startCls = isStart ? " bar-start" : "";
           const endCls   = isEnd   ? " bar-end"   : "";
           const dummyCls = dummyMont ? " dummy-hatch" : "";
+          const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" title="Uren groter/kleiner trekken"></span>` : "";
 
           // ✅ altijd het aantal tonen (niet "mon" en niet alleen bij start)
-          html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayMont))}</div>`;
+          html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${escapeHtml(formatHoursCell(displayMont))}${resizeHandle}</div>`;
         }
 
         html += `</div>`;
@@ -6225,6 +6227,82 @@ async function removeProjectDummyForDate(projectId, dateISO, workType){
   return true;
 }
 
+function countPlannerWorkdaysInclusive(startISO, endISO){
+  let startDate = parseISODate(startISO);
+  const endDate = parseISODate(endISO);
+  if (!startDate || !endDate || endDate < startDate) return 0;
+
+  let count = 0;
+  let d = startDate;
+  while (d <= endDate) {
+    if (isPlannerWorkday(d)) count++;
+    d = addDays(d, 1);
+  }
+  return count;
+}
+
+function getRunHoursFromDom(td){
+  const run = getContiguousRunFromCell(td);
+  const tr = td.closest("tr");
+  if (!tr || !run.startISO || !run.endISO) return Number(td.dataset.plannedHours || 0);
+
+  let total = 0;
+  for (const cell of Array.from(tr.querySelectorAll("td.project-auto-plan-click"))) {
+    const iso = String(cell.dataset.workDate || "");
+    if (!iso || iso < run.startISO || iso > run.endISO) continue;
+    total += Number(cell.dataset.plannedHours || 0);
+  }
+  return Math.round((total + Number.EPSILON) * 100) / 100;
+}
+
+async function resizeProjectAssignmentRun({ projectId, workType, runStartISO, runEndISO, targetEndISO, currentHours, remainingHours }){
+  const pid = String(projectId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const startISO = String(runStartISO || "").trim();
+  const endISO = String(runEndISO || "").trim();
+  const targetISO = String(targetEndISO || "").trim();
+
+  if (!pid || !["productie", "montage"].includes(type) || !startISO || !endISO || !targetISO) return;
+
+  const current = Math.max(0, Number(currentHours || 0));
+  const remaining = Math.max(0, Number(remainingHours || 0));
+  const maxHours = Math.round((current + remaining + Number.EPSILON) * 100) / 100;
+  const targetDays = countPlannerWorkdaysInclusive(startISO, targetISO);
+  if (targetDays <= 0) return;
+
+  const wantedHours = Math.min(maxHours, targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
+  const newHours = Math.round((wantedHours + Number.EPSILON) * 100) / 100;
+  if (newHours <= 0 || Math.abs(newHours - current) < 0.001) return;
+
+  const del = await sb
+    .from("project_assignments")
+    .delete()
+    .eq("project_id", pid)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_EMP_ID)
+    .gte("work_date", startISO)
+    .lte("work_date", endISO);
+
+  if (del.error) {
+    alert("Fout aanpassen conceptplanning: " + del.error.message);
+    return;
+  }
+
+  const segments = buildProjectDummyHoursSegments(startISO, newHours);
+  const rows = segments.map(seg => ({
+    project_id: pid,
+    work_date: seg.work_date,
+    werknemer_id: Number(DUMMY_EMP_ID),
+    work_type: type,
+    note: `concept-hours:${seg.hours}`,
+  }));
+
+  if (rows.length) {
+    const ins = await sb.from("project_assignments").insert(rows);
+    if (ins.error) alert("Fout opslaan conceptplanning: " + ins.error.message);
+  }
+}
+
 function renderOrdersAccordion(byBN){
   if(!byBN || !byBN.size) return `<div class="muted" style="padding:6px 0;">Geen bestellingen</div>`;
 
@@ -6331,6 +6409,39 @@ function applyMiniHoursOverrunColors(root){
 function wireDragDrop(root){
   if (!root) return;
 
+  root.querySelectorAll(".bar-resize-handle[draggable='true']").forEach(handle => {
+    handle.addEventListener("dragstart", (e) => {
+      e.stopPropagation();
+      __wasDragging = true;
+
+      const td = handle.closest("td.project-auto-plan-click");
+      if (!td) return;
+
+      const run = getContiguousRunFromCell(td);
+      const payload = {
+        kind: "project-resize",
+        resizeKind: String(td.dataset.ddKind || ""),
+        projectId: String(td.dataset.projectId || ""),
+        workType: String(td.dataset.workType || ""),
+        runStart: run.startISO,
+        runEnd: run.endISO,
+        currentHours: getRunHoursFromDom(td),
+        remainingHours: Number(td.dataset.totalHours || 0)
+      };
+
+      e.dataTransfer.setData("application/json", JSON.stringify(payload));
+      e.dataTransfer.setData("text/plain", "resize");
+      e.dataTransfer.effectAllowed = "move";
+      td.classList.add("is-dragging");
+    });
+
+    handle.addEventListener("dragend", (e) => {
+      e.stopPropagation();
+      handle.closest("td")?.classList.remove("is-dragging");
+      setTimeout(() => { __wasDragging = false; }, 150);
+    });
+  });
+
   // DRAG START / END
   root.querySelectorAll("td.dd-draggable[draggable='true']").forEach(td => {
 
@@ -6401,6 +6512,29 @@ function wireDragDrop(root){
       const toDate = String(cell.dataset.workDate || "");
       const kind = String(payload.kind || "");
       const fromDate = String(payload.fromDate || "");
+
+      if (kind === "project-resize") {
+        const resizeKind = String(payload.resizeKind || "");
+        const targetKind = String(cell.dataset.ddKind || "");
+        const fromPid = String(payload.projectId || "");
+        const toPid = String(cell.dataset.projectId || "");
+
+        if (!resizeKind || resizeKind !== targetKind) return;
+        if (!fromPid || !toPid || fromPid !== toPid) return;
+
+        await resizeProjectAssignmentRun({
+          projectId: fromPid,
+          workType: String(payload.workType || ""),
+          runStartISO: String(payload.runStart || ""),
+          runEndISO: String(payload.runEnd || ""),
+          targetEndISO: toDate,
+          currentHours: Number(payload.currentHours || 0),
+          remainingHours: Number(payload.remainingHours || 0)
+        });
+
+        loadAndRender();
+        return;
+      }
 
       // ✅ alleen droppen op dezelfde soort cel
       const targetKind = String(cell.dataset.ddKind || "");

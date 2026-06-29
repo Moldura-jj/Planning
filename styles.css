@@ -635,6 +635,26 @@ td.plan-cell.bar-generic .bar{ background:#e5e7eb !important; }
   overflow:hidden;
 }
 
+.bar-resize-handle{
+  position:absolute;
+  top:0;
+  right:0;
+  width:8px;
+  height:100%;
+  cursor:ew-resize;
+  z-index:3;
+}
+.bar-resize-handle::after{
+  content:"";
+  position:absolute;
+  top:3px;
+  bottom:3px;
+  right:2px;
+  width:2px;
+  border-radius:2px;
+  background:rgba(17,24,39,.45);
+}
+
 .plan-stack .bar.dummy-hatch::after{
   content:"";
   position:absolute;
