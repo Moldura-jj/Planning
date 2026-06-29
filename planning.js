@@ -1422,7 +1422,10 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
   if (!sid || !date || !["productie", "montage"].includes(type) || conceptHours <= 0) return { ok: false, message: "Geen uren om automatisch te plannen." };
 
   const deliveryISO = window.__plannerCtx?.projMetaById?.get(pid)?.deliveryISO || "";
-  const segments = buildProjectDummyHoursSegments(date, conceptHours, deliveryISO);
+  let segments = buildProjectDummyHoursSegments(date, conceptHours, deliveryISO);
+  if (!segments.length && deliveryISO) {
+    segments = buildProjectDummyHoursSegments(date, conceptHours);
+  }
   if (!segments.length) return { ok: false, message: "Geen werkdagen gevonden om te plannen." };
 
   const rows = segments.map(seg => ({
@@ -2893,8 +2896,12 @@ for (const dd of dates) {
           const iso = toISODate(dd);
           const entry = dmA?.get(iso);
         assignByDay[iso] = {
-          prod: entry ? (Number(entry.prodHours || 0) + sectionDummyHours(entry, "Prod")) : 0,
-          mont: entry ? (Number(entry.montHours || 0) + sectionDummyHours(entry, "Mont")) : 0,
+          prod: entry ? Number(entry.prodHours || 0) : 0,
+          mont: entry ? Number(entry.montHours || 0) : 0,
+          prodReal: entry ? Number(entry.prodHours || 0) : 0,
+          prodDummy: 0,
+          montReal: entry ? Number(entry.montHours || 0) : 0,
+          montDummy: 0,
           subc: entry ? Number(entry.subcNames?.length || 0) : 0,
         };
 
@@ -2908,6 +2915,50 @@ for (const dd of dates) {
 
         tbody.appendChild(secRow);
         lastRowOfProject = secRow;
+
+        const conceptByDay = {};
+        let hasSectionConcept = false;
+        for (const dd of dates) {
+          const iso = toISODate(dd);
+          const entry = dmA?.get(iso);
+          const prodDummy = entry ? sectionDummyHours(entry, "Prod") : 0;
+          const montDummy = entry ? sectionDummyHours(entry, "Mont") : 0;
+          if (prodDummy > 0 || montDummy > 0) hasSectionConcept = true;
+          conceptByDay[iso] = {
+            prod: prodDummy,
+            mont: montDummy,
+            prodReal: 0,
+            prodDummy,
+            montReal: 0,
+            montDummy,
+            subc: 0,
+          };
+        }
+
+        if (hasSectionConcept) {
+          const conceptRow = document.createElement("tr");
+          conceptRow.className = "order-row hidden section-concept-row";
+          markZebra(conceptRow);
+          conceptRow.dataset.parent = String(pid);
+          conceptRow.dataset.orderParent = String(sid);
+
+          const leftConcept = document.createElement("td");
+          leftConcept.className = "rowhdr sticky-left section-cell";
+          leftConcept.innerHTML = `<span class="sectext"> ↳ Concept</span>`;
+          conceptRow.appendChild(leftConcept);
+
+          const hoursTdConcept = document.createElement("td");
+          hoursTdConcept.className = "cell hourscol sticky-left2";
+          hoursTdConcept.style.left = "380px";
+          if (!hoursColOpen) hoursTdConcept.style.display = "none";
+          hoursTdConcept.innerHTML = "";
+          conceptRow.appendChild(hoursTdConcept);
+
+          appendSectionDayCells(conceptRow, dates, dates.map(() => ""), sid, String(pid), conceptByDay, assignMap, werknemers, inhuurById);
+          applyProjectDateColumnClasses(conceptRow, dates, deliveryISO, complISO);
+          tbody.appendChild(conceptRow);
+          lastRowOfProject = conceptRow;
+        }
 
 
     // ======================
@@ -5912,6 +5963,21 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     return "";
   });
 
+  const mixedBarContent = (realHours, dummyHours, totalHours) => {
+    const real = Number(realHours || 0);
+    const dummy = Number(dummyHours || 0);
+    const total = Number(totalHours || 0);
+
+    if (real > 0 && dummy > 0) {
+      return `
+        <span class="bar-part bar-part-real" style="flex:${real} 1 0;">${escapeHtml(formatHoursCell(real))}</span>
+        <span class="bar-part bar-part-concept" style="flex:${dummy} 1 0;">${escapeHtml(formatHoursCell(dummy))}</span>
+      `;
+    }
+
+    return total > 0 ? escapeHtml(formatHoursCell(total)) : "\u00A0";
+  };
+
     // ✅ alle unieke onderaannemers in deze sectie binnen dit zichtbare bereik (vaste volgorde)
     const dmSub = assignMap?.get(String(sectionId)) || new Map();
     const subcNamesAll = [...new Set(dates.flatMap(dd => {
@@ -5926,6 +5992,10 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
     const prod = Number(assignCountByDay?.[iso]?.prod || 0);
     const mont = Number(assignCountByDay?.[iso]?.mont || 0);
+    const prodReal = Number(assignCountByDay?.[iso]?.prodReal || 0);
+    const prodDummyHours = Number(assignCountByDay?.[iso]?.prodDummy || 0);
+    const montReal = Number(assignCountByDay?.[iso]?.montReal || 0);
+    const montDummyHours = Number(assignCountByDay?.[iso]?.montDummy || 0);
     const subc = Number(assignCountByDay?.[iso]?.subc || 0);
     const label = labels[i] || "";
 
@@ -5940,8 +6010,8 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
     // tooltip met namen (prod/mont)
     const entry = assignMap?.get(String(sectionId))?.get(iso);
-    const dummyProd = (entry?.dummyProd || 0) > 0;
-    const dummyMont = (entry?.dummyMont || 0) > 0;
+    const dummyProd = prodDummyHours > 0;
+    const dummyMont = montDummyHours > 0;
 
     if (entry) {
     const prodNames = Array.from(entry.productie || []).map(id => empNameById.get(String(id)) || String(id));
@@ -5953,11 +6023,19 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     const inhuurMontNames = Array.from(entry.inhuurMontIds || [])
       .map(id => inhuurById?.get(String(id))?.name || String(id));
 
+    const prodTipRows = [...prodNames];
+    const prodConceptHours = sectionDummyHours(entry, "Prod");
+    if (prodConceptHours > 0) prodTipRows.push(`Concept ${formatHoursCell(prodConceptHours)}u`);
+
+    const montTipRows = [...montNames];
+    const montConceptHours = sectionDummyHours(entry, "Mont");
+    if (montConceptHours > 0) montTipRows.push(`Concept ${formatHoursCell(montConceptHours)}u`);
+
     let tip = "";
-    if (prodNames.length) tip += `Productie:\n- ${prodNames.join("\n- ")}`;
+    if (prodTipRows.length) tip += `Productie:\n- ${prodTipRows.join("\n- ")}`;
     if (inhuurProdNames.length) tip += (tip ? "\n\n" : "") + `Inhuur productie:\n- ${inhuurProdNames.join("\n- ")}`;
 
-    if (montNames.length) tip += (tip ? "\n\n" : "") + `Montage:\n- ${montNames.join("\n- ")}`;
+    if (montTipRows.length) tip += (tip ? "\n\n" : "") + `Montage:\n- ${montTipRows.join("\n- ")}`;
     if (inhuurMontNames.length) tip += (tip ? "\n\n" : "") + `Inhuur montage:\n- ${inhuurMontNames.join("\n- ")}`;
       if (tip) td.dataset.tip = tip;
       td.removeAttribute("title");
@@ -5999,11 +6077,13 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       const isEnd   = isProd && key !== nextKey;
       const startCls = isStart ? " bar-start" : "";
       const endCls   = isEnd   ? " bar-end"   : "";
-      const dummyCls = dummyProd ? " dummy-hatch" : "";
+      const hasMixedProd = prodReal > 0 && prodDummyHours > 0;
+      const dummyCls = dummyProd && !hasMixedProd ? " dummy-hatch" : "";
+      const mixedCls = hasMixedProd ? " bar-mixed" : "";
 
       if (isProd) {
-        const prodTxt = prod > 0 ? escapeHtml(formatHoursCell(prod)) : "\u00A0";
-        html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${prodTxt}</div>`;
+        const prodTxt = mixedBarContent(prodReal, prodDummyHours, prod);
+        html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}${mixedCls}">${prodTxt}</div>`;
       } else {
         html += `<div class="bar bar-prod placeholder">\u00A0</div>`;
       }
@@ -6016,11 +6096,13 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       const isEnd   = isMont && key !== nextKey;
       const startCls = isStart ? " bar-start" : "";
       const endCls   = isEnd   ? " bar-end"   : "";
-      const dummyCls = dummyMont ? " dummy-hatch" : "";
+      const hasMixedMont = montReal > 0 && montDummyHours > 0;
+      const dummyCls = dummyMont && !hasMixedMont ? " dummy-hatch" : "";
+      const mixedCls = hasMixedMont ? " bar-mixed" : "";
 
       if (isMont) {
-        const montTxt = mont > 0 ? escapeHtml(formatHoursCell(mont)) : "\u00A0";
-        html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${montTxt}</div>`;
+        const montTxt = mixedBarContent(montReal, montDummyHours, mont);
+        html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}${mixedCls}">${montTxt}</div>`;
       } else {
         html += `<div class="bar bar-mont placeholder">\u00A0</div>`;
       }
