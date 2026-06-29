@@ -258,6 +258,7 @@ function restoreOpenState(){
 
 
   const HOURS_PER_PERSON_DAY = 7.75;
+  const PROJECT_DUMMY_HOURS_PER_DAY = 7.5;
 
   // ---- Settings (uitbreidbaar) ----
   const SETTINGS_KEY = "lovd_planner_settings_v1";
@@ -2060,7 +2061,9 @@ for (const a of (pAssigns || [])) {
 
   if (!dmP.has(d)) dmP.set(d, {
     productie: new Set(), cnc: new Set(), montage: new Set(), reis: new Set(),
+    prodHours: 0, cncHours: 0, montHours: 0, reisHours: 0,
     dummyProd: 0, dummyCnc: 0, dummyMont: 0, dummyReis: 0,
+    dummyProdHours: 0, dummyCncHours: 0, dummyMontHours: 0, dummyReisHours: 0,
     dummySub: 0, subcNames: [],
     inhuurProdIds: new Set(),
     inhuurMontIds: new Set(),
@@ -2073,6 +2076,7 @@ for (const a of (pAssigns || [])) {
   entry.rows.push(a);
 
   const isDummy = (emp === String(DUMMY_EMP_ID)); // ✅ project dummy alleen
+  const rowHours = Number(a.hours ?? 1);
 
 const note = String(a.note || "");
 
@@ -2082,8 +2086,10 @@ if (wt === "productie") {
     if (iid) entry.inhuurProdIds.add(iid);
   } else if (isDummy) {
     entry.dummyProd += 1;
+    entry.dummyProdHours += Number(a.hours ?? PROJECT_DUMMY_HOURS_PER_DAY);
   } else {
     entry.productie.add(emp);
+    entry.prodHours += rowHours;
   }
 }
 
@@ -2093,17 +2099,29 @@ if (wt === "montage") {
     if (iid) entry.inhuurMontIds.add(iid);
   } else if (isDummy) {
     entry.dummyMont += 1;
+    entry.dummyMontHours += Number(a.hours ?? PROJECT_DUMMY_HOURS_PER_DAY);
   } else {
     entry.montage.add(emp);
+    entry.montHours += rowHours;
   }
 }
   if (wt === "cnc") {
-  if (isDummy) entry.dummyCnc += 1;
-  else entry.cnc.add(emp);
+  if (isDummy) {
+    entry.dummyCnc += 1;
+    entry.dummyCncHours += Number(a.hours ?? PROJECT_DUMMY_HOURS_PER_DAY);
+  } else {
+    entry.cnc.add(emp);
+    entry.cncHours += rowHours;
+  }
   }
   if (wt === "reis") {
-    if (isDummy) entry.dummyReis += 1;
-    else entry.reis.add(emp);
+    if (isDummy) {
+      entry.dummyReis += 1;
+      entry.dummyReisHours += Number(a.hours ?? PROJECT_DUMMY_HOURS_PER_DAY);
+    } else {
+      entry.reis.add(emp);
+      entry.reisHours += rowHours;
+    }
   }
   if (wt === "onderaanneming") {
     if (isDummy) {
@@ -2522,10 +2540,10 @@ for (const dd of dates) {
     for (const emp of (pe.montage || []))   plP.mont += HOURS_PER_PERSON_DAY * pfP;
     for (const emp of (pe.reis || []))      plP.reis += HOURS_PER_PERSON_DAY * pfP;
 
-    plP.prod += Number(pe.dummyProd || 0) * HOURS_PER_PERSON_DAY * pfP;
-    plP.cnc  += Number(pe.dummyCnc  || 0) * HOURS_PER_PERSON_DAY * pfP;
-    plP.mont += Number(pe.dummyMont || 0) * HOURS_PER_PERSON_DAY * pfP;
-    plP.reis += Number(pe.dummyReis || 0) * HOURS_PER_PERSON_DAY * pfP;
+    plP.prod += Number(pe.dummyProdHours || (Number(pe.dummyProd || 0) * HOURS_PER_PERSON_DAY)) * pfP;
+    plP.cnc  += Number(pe.dummyCncHours  || (Number(pe.dummyCnc  || 0) * HOURS_PER_PERSON_DAY)) * pfP;
+    plP.mont += Number(pe.dummyMontHours || (Number(pe.dummyMont || 0) * HOURS_PER_PERSON_DAY)) * pfP;
+    plP.reis += Number(pe.dummyReisHours || (Number(pe.dummyReis || 0) * HOURS_PER_PERSON_DAY)) * pfP;
 
     plP.prod += Number(pe.inhuurProdIds?.size || 0) * HOURS_PER_PERSON_DAY * pfP;
     plP.mont += Number(pe.inhuurMontIds?.size || 0) * HOURS_PER_PERSON_DAY * pfP;
@@ -2828,14 +2846,86 @@ for (const dd of dates) {
 
 
     // ======================
+    // ✅ EXTRA "↳ Productie" SAMENVATTINGSREGEL PER PROJECT
+    // (concept/dummy productie op projectniveau, voor verder vooruit plannen)
+    // ======================
+    const totalProjectProdHours = Number(req.prod || 0) + Number(req.cnc || 0);
+    const hasProductieHours = totalProjectProdHours > 0;
+
+    const hasProductiePlanned = dates.some(dd => {
+      const iso = toISODate(dd);
+      return Number(projAssignByDay?.[iso]?.prod || 0) > 0;
+    });
+
+    const hasProjectProdPlanned = dates.some(dd => {
+      const iso = toISODate(dd);
+      const e = projectAssignMap.get(String(pid))?.get(iso);
+      const prodCnt = e ? (e.productie.size + Number(e.dummyProd || 0)) : 0;
+      return prodCnt > 0;
+    });
+
+    if (hasProductieHours || hasProductiePlanned || hasProjectProdPlanned) {
+      const projProdByDay = {};
+      const secsForProj = sectiesByProject.get(pid) || [];
+
+      for (const dd of dates) {
+        const iso = toISODate(dd);
+        const pe = projectAssignMap.get(String(pid))?.get(iso);
+        const projProd = pe ? (pe.productie.size + Number(pe.dummyProd || 0)) : 0;
+        const projDummyProd = pe ? Number(pe.dummyProd || 0) : 0;
+
+        let sectProd = 0;
+        for (const s of secsForProj) {
+          const sidRaw = s?.[sectIdKey]
+            ? String(s[sectIdKey])
+            : (s?.section_id ? String(s.section_id) : null);
+          if (!sidRaw) continue;
+
+          const sid = sectLookup.get(String(sidRaw)) || String(sidRaw);
+          const se = assignMap.get(String(sid))?.get(iso);
+          if (!se) continue;
+
+          sectProd += (se.productie.size + Number(se.dummyProd || 0));
+        }
+
+        const remaining = Math.max(0, projProd - sectProd);
+        const dummyRemaining = Math.max(0, projDummyProd - Math.max(0, sectProd - (projProd - projDummyProd)));
+        projProdByDay[iso] = { prod: remaining, dummyProd: dummyRemaining > 0 };
+      }
+
+      const prodRow = document.createElement("tr");
+      prodRow.className = "section-row hidden productie-summary-row";
+      prodRow.dataset.parent = String(pid);
+      markZebra(prodRow);
+
+      const leftP = document.createElement("td");
+      leftP.className = "rowhdr sticky-left section-cell";
+      leftP.innerHTML = `<span class="sectext">↳ Productie</span>`;
+      prodRow.appendChild(leftP);
+
+      const hoursTdP = document.createElement("td");
+      hoursTdP.className = "cell hourscol sticky-left2";
+      hoursTdP.style.left = "380px";
+      if (!hoursColOpen) hoursTdP.style.display = "none";
+      hoursTdP.innerHTML = "";
+      prodRow.appendChild(hoursTdP);
+
+      appendProjectProductieSummaryDayCells(prodRow, dates, projProdByDay, String(pid), totalProjectProdHours);
+
+      tbody.appendChild(prodRow);
+      lastRowOfProject = prodRow;
+    }
+
+    // ======================
     // ✅ EXTRA "↳ Montage" SAMENVATTINGSREGEL PER PROJECT
     // (alleen tonen als er montage-uren bestaan in dit project)
     // ======================
+    const totalProjectMontHours = Number(req.mont || 0) + Number(req.reis || 0);
     const hasMontageHours = (secList || []).some(s => {
       const v =
         Number(s?.uren_montage ?? s?.uren_mont ?? s?.uren_montage_prod ?? 0);
       return v > 0;
-    });
+    }) || totalProjectMontHours > 0;
     // ✅ check montage gepland via secties (section_assignments)
     const hasMontagePlanned = dates.some(dd => {
       const iso = toISODate(dd);
@@ -2912,7 +3002,7 @@ for (const dd of dates) {
       montRow.appendChild(hoursTdM);
 
 
-    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid));
+    appendProjectMontageSummaryDayCells(montRow, dates, projMontByDay, String(pid), totalProjectMontHours);
 
 
       tbody.appendChild(montRow);
@@ -3711,7 +3801,44 @@ console.log("CAP SAVE", {
     return;
   }
 // ======================
-// ✅ klik op project-montage regel (↳ Montage) => zelfde modal, opslaan naar project_assignments
+// ✅ klik op project productie/montage conceptregel => automatisch dummy-dagen plannen
+// ======================
+const autoPlanTd = ev.target.closest("td.project-auto-plan-click");
+if (autoPlanTd) {
+  if (__wasDragging) return;
+  ev.stopPropagation();
+
+  const projectId = String(autoPlanTd.dataset.projectId || "").trim();
+  const dateISO   = String(autoPlanTd.dataset.workDate || "").trim();
+  const workType  = String(autoPlanTd.dataset.workType || "").toLowerCase().trim();
+  const totalHours = Number(autoPlanTd.dataset.totalHours || 0);
+
+  if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO) {
+    alert("Geen geldig project-id gevonden voor deze projectregel.");
+    return;
+  }
+
+  if (!(totalHours > 0)) {
+    alert("Geen uren gevonden om te plannen.");
+    return;
+  }
+
+  const dayCount = Math.ceil(totalHours / PROJECT_DUMMY_HOURS_PER_DAY);
+  const typeLabel = workType === "montage" ? "montage" : "productie";
+  const msg =
+    `Sectie plannen?\n\n` +
+    `${typeLabel}: ${formatHoursCell(totalHours)} uur / ${String(PROJECT_DUMMY_HOURS_PER_DAY).replace(".", ",")} uur per dag = ${dayCount} dag(en).\n` +
+    `Vanaf ${dateISO} worden werkdagen automatisch gevuld met conceptplanning.`;
+
+  if (!confirm(msg)) return;
+
+  const ok = await autoPlanProjectDummyRange(projectId, dateISO, workType, totalHours);
+  if (ok) await loadAndRender();
+  return;
+}
+
+// ======================
+// ✅ klik op project-montage regel (fallback oude modal; normaal afgevangen door auto-plan hierboven)
 // ======================
 const ptd = ev.target.closest("td.project-montage-click");
 if (ptd) {
@@ -5552,7 +5679,55 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
   }
 }
 
-    function appendProjectMontageSummaryDayCells(tr, dates, projMontByDay = {}, projectId = "") {
+    function appendProjectProductieSummaryDayCells(tr, dates, projProdByDay = {}, projectId = "", totalHours = 0) {
+      const keys = dates.map(d => {
+        const iso = toISODate(d);
+        const prod = Number(projProdByDay?.[iso]?.prod || 0);
+        return prod > 0 ? "prod" : "";
+      });
+
+      for (let i = 0; i < dates.length; i++) {
+        const d = dates[i];
+        const iso = toISODate(d);
+
+        const prod = Number(projProdByDay?.[iso]?.prod || 0);
+        const dummyProd = !!projProdByDay?.[iso]?.dummyProd;
+
+        const key = keys[i];
+        const prevKey = (i > 0) ? keys[i - 1] : "";
+        const nextKey = (i < keys.length - 1) ? keys[i + 1] : "";
+
+        const td = document.createElement("td");
+        td.className = `cell plan-cell ${isWeekend(d) ? "wknd" : ""}`.trim();
+        td.classList.add("project-productie-click", "project-auto-plan-click");
+        td.dataset.projectId = String(projectId || "");
+        td.dataset.workDate = iso;
+        td.dataset.workType = "productie";
+        td.dataset.totalHours = String(Number(totalHours || 0));
+
+        let html = `<div class="plan-stack">`;
+        html += `<div class="marker-row">
+          <div class="marker delivery placeholder">lever</div>
+          <div class="marker deadline placeholder">oplever</div>
+        </div>`;
+
+        if (key) {
+          const isStart = key !== prevKey;
+          const isEnd   = key !== nextKey;
+          const startCls = isStart ? " bar-start" : "";
+          const endCls   = isEnd   ? " bar-end"   : "";
+          const dummyCls = dummyProd ? " dummy-hatch" : "";
+
+          html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${prod}</div>`;
+        }
+
+        html += `</div>`;
+        td.innerHTML = html;
+        tr.appendChild(td);
+      }
+    }
+
+    function appendProjectMontageSummaryDayCells(tr, dates, projMontByDay = {}, projectId = "", totalHours = 0) {
 
       // key: wel/geen montage zodat start/einde afgerond blijft
       const keys = dates.map(d => {
@@ -5574,9 +5749,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
         const td = document.createElement("td");
         td.className = `cell plan-cell ${isWeekend(d) ? "wknd" : ""}`.trim();
-        td.classList.add("project-montage-click");
+        td.classList.add("project-montage-click", "project-auto-plan-click");
         td.dataset.projectId = String(projectId || "");
         td.dataset.workDate = iso;
+        td.dataset.workType = "montage";
+        td.dataset.totalHours = String(Number(totalHours || 0));
 
         // ✅ Drag & Drop metadata
         td.classList.add("dd-dropzone");
@@ -5806,6 +5983,78 @@ async function removeOneProjectDummyProductie(projectId, dateISO) {
 
   const del = await sb.from("project_assignments").delete().eq("id", id);
   if (del.error) console.warn("removeOneProjectDummyProductie delete error:", del.error.message);
+}
+
+function isPlannerWorkday(date){
+  const day = date.getDay();
+  return day >= 1 && day <= 5;
+}
+
+function buildProjectDummyDates(startISO, count){
+  const startDate = parseISODate(startISO);
+  const n = Math.max(0, Math.ceil(Number(count || 0)));
+  const out = [];
+  if (!startDate || n <= 0) return out;
+
+  let d = startDate;
+  while (out.length < n) {
+    if (isPlannerWorkday(d)) out.push(toISODate(d));
+    d = addDays(d, 1);
+  }
+
+  return out;
+}
+
+async function autoPlanProjectDummyRange(projectId, startISO, workType, totalHours){
+  const pid = String(projectId || "").trim();
+  const dateISO = String(startISO || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const hours = Number(totalHours || 0);
+
+  if (!pid || !dateISO || !["productie", "montage"].includes(type)) {
+    alert("Geen geldig project, datum of planningstype gevonden.");
+    return false;
+  }
+
+  if (!(hours > 0)) {
+    alert(`Geen uren gevonden om ${type} te plannen.`);
+    return false;
+  }
+
+  const dayCount = Math.ceil(hours / PROJECT_DUMMY_HOURS_PER_DAY);
+  const datesToPlan = buildProjectDummyDates(dateISO, dayCount);
+  if (!datesToPlan.length) {
+    alert("Geen werkdagen gevonden om te plannen.");
+    return false;
+  }
+
+  const del = await sb
+    .from("project_assignments")
+    .delete()
+    .eq("project_id", pid)
+    .eq("work_type", type)
+    .eq("werknemer_id", DUMMY_EMP_ID)
+    .gte("work_date", dateISO);
+
+  if (del.error) {
+    alert("Fout verwijderen conceptplanning: " + del.error.message);
+    return false;
+  }
+
+  const rows = datesToPlan.map(iso => ({
+    project_id: pid,
+    work_date: iso,
+    werknemer_id: Number(DUMMY_EMP_ID),
+    work_type: type,
+  }));
+
+  const ins = await sb.from("project_assignments").insert(rows);
+  if (ins.error) {
+    alert("Fout opslaan conceptplanning: " + ins.error.message);
+    return false;
+  }
+
+  return true;
 }
 
 function renderOrdersAccordion(byBN){
