@@ -1412,6 +1412,43 @@ async function consumeProjectConceptHours(projectId, dateISO, workType, consumeH
   }
 }
 
+
+function isSectionConceptWorkday(date){
+  const day = date.getDay();
+  return day >= 1 && day <= 5;
+}
+
+function buildSectionConceptHoursSegments(startISO, totalHours, deliveryISO = ""){
+  const startDate = parseISODate(startISO);
+  let remaining = roundHours2(totalHours);
+  const out = [];
+  if (!startDate || remaining <= 0) return out;
+
+  const deliveryDate = parseISODate(deliveryISO);
+  const deadlineDate = deliveryDate ? addDays(deliveryDate, -1) : null;
+
+  let d = startDate;
+  let guard = 0;
+  while (remaining > 0.001 && guard < 1000) {
+    guard++;
+
+    if (deadlineDate && d > deadlineDate) break;
+
+    if (isSectionConceptWorkday(d)) {
+      const h = Math.min(PROJECT_DUMMY_HOURS_PER_DAY, remaining);
+      out.push({
+        work_date: toISODate(d),
+        hours: roundHours2(h)
+      });
+      remaining = roundHours2(remaining - h);
+    }
+
+    d = addDays(d, 1);
+  }
+
+  return out;
+}
+
 async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, hours){
   const sid = String(sectionId || "").trim();
   const pid = String(projectId || "").trim();
@@ -1422,9 +1459,9 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
   if (!sid || !date || !["productie", "montage"].includes(type) || conceptHours <= 0) return { ok: false, message: "Geen uren om automatisch te plannen." };
 
   const deliveryISO = window.__plannerCtx?.projMetaById?.get(pid)?.deliveryISO || "";
-  let segments = buildProjectDummyHoursSegments(date, conceptHours, deliveryISO);
+  let segments = buildSectionConceptHoursSegments(date, conceptHours, deliveryISO);
   if (!segments.length && deliveryISO) {
-    segments = buildProjectDummyHoursSegments(date, conceptHours);
+    segments = buildSectionConceptHoursSegments(date, conceptHours);
   }
   if (!segments.length) return { ok: false, message: "Geen werkdagen gevonden om te plannen." };
 
