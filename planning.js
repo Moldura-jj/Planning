@@ -2788,7 +2788,40 @@ for (const dd of dates) {
       if ((pe.dummyMont || 0) > 0) dummyMont = true;
     }
 
-  projAssignByDay[iso] = { prod, mont, dummyProd, dummyMont };
+  // splits voor compacte projectregel: medewerkers/inhuur apart van concept
+  let prodReal = 0, prodDummyHours = 0, montReal = 0, montDummyHours = 0;
+
+  for (const s of secs) {
+    const sidRaw = s?.[sectIdKey]
+      ? String(s[sectIdKey])
+      : (s?.section_id ? String(s.section_id) : null);
+    if (!sidRaw) continue;
+
+    const sidC = sectLookup.get(String(sidRaw)) || String(sidRaw);
+    const entry = assignMap.get(sidC)?.get(iso);
+    if (!entry) continue;
+
+    prodReal += Number(entry.prodHours || 0) + Number(entry.inhuurProdIds?.size || 0);
+    prodDummyHours += sectionDummyHours(entry, "Prod");
+
+    montReal += Number(entry.montHours || 0) + Number(entry.inhuurMontIds?.size || 0);
+    montDummyHours += sectionDummyHours(entry, "Mont");
+  }
+
+  const peSplit = projectAssignMap.get(String(pid))?.get(iso);
+  if (peSplit) {
+    prodReal += Number(peSplit.prodHours || 0) + (Number(peSplit.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+    prodDummyHours += Number(peSplit.dummyProdHours || (Number(peSplit.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
+
+    montReal += Number(peSplit.montHours || 0) + (Number(peSplit.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+    montDummyHours += Number(peSplit.dummyMontHours || (Number(peSplit.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
+  }
+
+  projAssignByDay[iso] = {
+    prod, mont, dummyProd, dummyMont,
+    prodReal, prodDummy: prodDummyHours,
+    montReal, montDummy: montDummyHours
+  };
 }
 
 
@@ -5854,13 +5887,17 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
 
 function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = "", assignByDay = {}) {
 
-  // bepaal per dag: welke "bar-status" is dit?
-  const keys = dates.map((d, i) => {
+  const projectKeys = {
+    prodReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.prodReal || 0) > 0 ? "prod-real" : ""),
+    prodConcept: dates.map(d => Number(assignByDay?.[toISODate(d)]?.prodDummy || 0) > 0 ? "prod-concept" : ""),
+    montReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.montReal || 0) > 0 ? "mont-real" : ""),
+    montConcept: dates.map(d => Number(assignByDay?.[toISODate(d)]?.montDummy || 0) > 0 ? "mont-concept" : ""),
+  };
+
+  const legacyKeys = dates.map((d, i) => {
     const iso = toISODate(d);
     const prod = Number(assignByDay?.[iso]?.prod || 0);
     const mont = Number(assignByDay?.[iso]?.mont || 0);
-
-
     const label = labels[i] || "";
 
     if (prod > 0 && mont > 0) return "both";
@@ -5870,24 +5907,42 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     return "";
   });
 
+  const rowStartEnd = (arr, i, key) => {
+    if (!key) return { startCls:"", endCls:"" };
+    const prev = i > 0 ? arr[i - 1] : "";
+    const next = i < arr.length - 1 ? arr[i + 1] : "";
+    return {
+      startCls: key !== prev ? " bar-start" : "",
+      endCls:   key !== next ? " bar-end"   : ""
+    };
+  };
+
+  const barHtml = ({ arr, i, key, hours, colorCls, extraCls = "", resize = false }) => {
+    if (!(Number(hours || 0) > 0)) {
+      return `<div class="bar ${colorCls} placeholder">\u00A0</div>`;
+    }
+    const se = rowStartEnd(arr, i, key);
+    const handle = resize && se.endCls ? `<span class="bar-resize-handle" draggable="true" title="Uren groter/kleiner trekken"></span>` : "";
+    return `<div class="bar ${colorCls}${extraCls}${se.startCls}${se.endCls}">${escapeHtml(formatHoursCell(hours))}${handle}</div>`;
+  };
+
   for (let i = 0; i < dates.length; i++) {
     const d = dates[i];
     const iso = toISODate(d);
 
     const prod = Number(assignByDay?.[iso]?.prod || 0);
     const mont = Number(assignByDay?.[iso]?.mont || 0);
+    const prodReal = Number(assignByDay?.[iso]?.prodReal || 0);
+    const prodConcept = Number(assignByDay?.[iso]?.prodDummy || 0);
+    const montReal = Number(assignByDay?.[iso]?.montReal || 0);
+    const montConcept = Number(assignByDay?.[iso]?.montDummy || 0);
     const label = labels[i] || "";
 
-    const key = keys[i];
-    const prevKey = (i > 0) ? keys[i - 1] : "";
-    const nextKey = (i < keys.length - 1) ? keys[i + 1] : "";
-
+    const legacyKey = legacyKeys[i];
     const isMarker = markerISO && iso === markerISO;
     const isDelivery = deliveryISO && iso === deliveryISO;
 
-
     const td = document.createElement("td");
-    // ✅ project scheidingslijnen op TD (altijd zichtbaar)
     if (tr.classList.contains("project-topline")) td.classList.add("project-topline-cell");
     if (tr.classList.contains("project-bottomline")) td.classList.add("project-bottomline-cell");
 
@@ -5895,19 +5950,16 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     td.dataset.projectId = td.dataset.proj || "";
     td.dataset.workDate = iso;
 
-    // cel-kleur
-    let cls = `cell plan-cell ${isWeekend(d) ? "wknd" : ""}`.trim();
-    if (key === "both") cls += " bar-both";
-    else if (key === "prod") cls += " bar-prod";
-    else if (key === "mont") cls += " bar-mont";
-    else if (key.startsWith("lbl:")) cls += ` ${barClass(label)}`;
+    let cls = `cell plan-cell project-two-line ${isWeekend(d) ? "wknd" : ""}`.trim();
+    if (legacyKey === "both") cls += " bar-both";
+    else if (legacyKey === "prod") cls += " bar-prod";
+    else if (legacyKey === "mont") cls += " bar-mont";
+    else if (legacyKey.startsWith("lbl:")) cls += ` ${barClass(label)}`;
     td.className = cls;
-    td.classList.add("section-two-line");
     td.classList.add("project-date-dropzone");
 
-    let html = `<div class="plan-stack">`;
+    let html = `<div class="plan-stack plan-stack-project">`;
 
-    // markers samen op 1 regel
     html += `<div class="marker-row">`;
     html += isDelivery
       ? `<div class="marker delivery project-date-marker" draggable="true" data-marker-type="delivery" title="Leverdatum verslepen"></div>`
@@ -5915,39 +5967,27 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     html += isMarker
       ? `<div class="marker deadline project-date-marker" draggable="true" data-marker-type="completion" title="Opleverdatum verslepen"></div>`
       : `<div class="marker deadline placeholder">oplever</div>`;
-
     html += `</div>`;
 
+    const hasSplit = (prodReal > 0) || (prodConcept > 0) || (montReal > 0) || (montConcept > 0);
 
-
-    // bars: toon prod en/of mont als eigen blok (stacked)
-    if (key) {
-      const isStart = key !== prevKey;
-      const isEnd = key !== nextKey;
-
-      const startCls = isStart ? " bar-start" : "";
-      const endCls = isEnd ? " bar-end" : "";
-
-      const dummyProd = !!assignByDay?.[iso]?.dummyProd;
-      const dummyMont = !!assignByDay?.[iso]?.dummyMont;
-
-    if (key === "both") {
-      const prodTxt = prod > 0 ? String(prod) : "&nbsp;";
-      const montTxt = mont > 0 ? String(mont) : "&nbsp;";
-
-      html += `<div class="bar bar-prod${startCls}${endCls}${dummyProd ? " dummy-hatch" : ""}">${prodTxt}</div>`;
-      html += `<div class="bar bar-mont${startCls}${endCls}${dummyMont ? " dummy-hatch" : ""}">${montTxt}</div>`;
-    } else if (key === "prod") {
-      const prodTxt = prod > 0 ? String(prod) : "&nbsp;";
-      const dummyCls = dummyProd ? " dummy-hatch" : "";
-      html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${prodTxt}</div>`;
-    } else if (key === "mont") {
-      const montTxt = mont > 0 ? String(mont) : "&nbsp;";
-      const dummyCls = dummyMont ? " dummy-hatch" : "";
-      html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${montTxt}</div>`;
-    } else if (key.startsWith("lbl:")) {
-      // als je labels hebt (bijv. andere soorten), laat je dit staan of maak je ook een getal
-      html += `<div class="bar${startCls}${endCls}">${escapeHtml(label)}</div>`;
+    if (hasSplit) {
+      html += barHtml({ arr: projectKeys.prodReal, i, key: projectKeys.prodReal[i], hours: prodReal, colorCls: "bar-prod bar-real" });
+      html += barHtml({ arr: projectKeys.prodConcept, i, key: projectKeys.prodConcept[i], hours: prodConcept, colorCls: "bar-prod bar-concept dummy-hatch" });
+      html += barHtml({ arr: projectKeys.montReal, i, key: projectKeys.montReal[i], hours: montReal, colorCls: "bar-mont bar-real" });
+      html += barHtml({ arr: projectKeys.montConcept, i, key: projectKeys.montConcept[i], hours: montConcept, colorCls: "bar-mont bar-concept dummy-hatch" });
+    } else if (legacyKey) {
+      const prevKey = (i > 0) ? legacyKeys[i - 1] : "";
+      const nextKey = (i < legacyKeys.length - 1) ? legacyKeys[i + 1] : "";
+      const startCls = legacyKey !== prevKey ? " bar-start" : "";
+      const endCls = legacyKey !== nextKey ? " bar-end" : "";
+      if (legacyKey === "prod") html += `<div class="bar bar-prod bar-real${startCls}${endCls}">${escapeHtml(formatHoursCell(prod))}</div>`;
+      else if (legacyKey === "mont") html += `<div class="bar bar-mont bar-real${startCls}${endCls}">${escapeHtml(formatHoursCell(mont))}</div>`;
+      else if (legacyKey === "both") {
+        html += `<div class="bar bar-prod bar-real${startCls}${endCls}">${escapeHtml(formatHoursCell(prod))}</div>`;
+        html += `<div class="bar bar-mont bar-real${startCls}${endCls}">${escapeHtml(formatHoursCell(mont))}</div>`;
+      } else if (legacyKey.startsWith("lbl:")) {
+        html += `<div class="bar${startCls}${endCls}">${escapeHtml(label)}</div>`;
       }
     }
 

@@ -2097,3 +2097,53 @@ td.section-click.section-two-line .bar.bar-subc.bar-end{
   border-top-right-radius:5px !important;
   border-bottom-right-radius:5px !important;
 }
+
+/* =========================
+   PROJECT ROW – compact separated planning lines
+========================= */
+td.project-two-line .plan-stack.plan-stack-project{
+  gap:2px !important;
+}
+
+td.project-two-line .marker-row{
+  height:14px;
+}
+
+td.project-two-line .marker-row .marker{
+  height:14px !important;
+  line-height:14px !important;
+  font-size:9px !important;
+  border-radius:7px !important;
+}
+
+td.project-two-line .bar.bar-real,
+td.project-two-line .bar.bar-concept{
+  height:17px !important;
+  min-height:17px !important;
+  font-size:10px !important;
+  line-height:1 !important;
+  border-radius:0 !important;
+}
+
+td.project-two-line .bar.bar-real.bar-start,
+td.project-two-line .bar.bar-concept.bar-start{
+  border-top-left-radius:5px !important;
+  border-bottom-left-radius:5px !important;
+}
+
+td.project-two-line .bar.bar-real.bar-end,
+td.project-two-line .bar.bar-concept.bar-end{
+  border-top-right-radius:5px !important;
+  border-bottom-right-radius:5px !important;
+}
+
+td.project-two-line .bar.bar-concept{
+  outline:1px dashed rgba(0,0,0,.38) !important;
+  outline-offset:-1px !important;
+}
+
+td.project-two-line .bar.placeholder{
+  opacity:0 !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
