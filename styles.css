@@ -271,9 +271,6 @@ a{ color:inherit; text-decoration:none; }
   justify-content:flex-end;
   gap:10px;
 }
-.modal .ft #amAutoProd:not([hidden]){
-  margin-right:auto;
-}
 
 .split2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 @media (max-width:720px){ .split2{ grid-template-columns:1fr; } }
@@ -586,42 +583,6 @@ td.details-fill{ text-align:left !important; vertical-align:top; padding:0 !impo
   border:1px solid rgba(0,0,0,.15);
 }
 .plan-stack .marker.placeholder{ visibility:hidden; }
-.project-date-marker{
-  cursor:grab;
-}
-.project-date-marker:active,
-.project-date-marker.is-dragging{
-  cursor:grabbing;
-}
-
-.planner-table td.project-delivery-col{
-  background:#fff3bf !important;
-  position:relative;
-}
-.planner-table td.project-completion-col{
-  background:#ffd8a8 !important;
-  position:relative;
-}
-.planner-table td.project-delivery-col.project-completion-col{
-  background:linear-gradient(90deg, #fff3bf 0 50%, #ffd8a8 50% 100%) !important;
-}
-.planner-table td.project-delivery-col .marker-row,
-.planner-table td.project-completion-col .marker-row{
-  position:absolute;
-  inset:0;
-  min-height:100%;
-}
-.planner-table td.project-delivery-col .project-date-marker,
-.planner-table td.project-completion-col .project-date-marker{
-  position:absolute;
-  inset:0;
-  width:100%;
-  height:100%;
-  padding:0;
-  border:0;
-  border-radius:0;
-  background:transparent !important;
-}
 
 /* stack bars */
 .plan-stack .bar{
@@ -674,26 +635,6 @@ td.plan-cell.bar-generic .bar{ background:#e5e7eb !important; }
   overflow:hidden;
 }
 
-.bar-resize-handle{
-  position:absolute;
-  top:0;
-  right:0;
-  width:8px;
-  height:100%;
-  cursor:ew-resize;
-  z-index:3;
-}
-.bar-resize-handle::after{
-  content:"";
-  position:absolute;
-  top:3px;
-  bottom:3px;
-  right:2px;
-  width:2px;
-  border-radius:2px;
-  background:rgba(17,24,39,.45);
-}
-
 .plan-stack .bar.dummy-hatch::after{
   content:"";
   position:absolute;
@@ -709,39 +650,6 @@ background:repeating-linear-gradient(
   );
 }
 
-.plan-stack .bar.bar-mixed{
-  padding:0 !important;
-  gap:0;
-}
-.plan-stack .bar .bar-part{
-  align-self:stretch;
-  min-width:0;
-  padding:0 2px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  overflow:hidden;
-  text-overflow:ellipsis;
-  white-space:nowrap;
-  position:relative;
-}
-.plan-stack .bar .bar-part-concept{
-  outline:1px dashed rgba(0,0,0,.35);
-  outline-offset:-1px;
-}
-.plan-stack .bar .bar-part-concept::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  background:repeating-linear-gradient(
-    45deg,
-    rgba(0,0,0,0.00) 0px,
-    rgba(0,0,0,0.00) 2px,
-    rgba(0,0,0,0.18) 2px,
-    rgba(0,0,0,0.18) 3px
-  );
-}
 
 /* =========================
    PROJECT ROW OPEN HIGHLIGHT
@@ -957,14 +865,11 @@ td.section-click{
 .plan-stack .marker-row{
   display:flex;
   gap:6px;
-  min-height:var(--stack-h);
-  justify-content:flex-start;
 }
 
 .plan-stack .marker-row .marker{
-  flex:0 0 auto;
-  width:auto;
-  max-width:100%;
+  flex:1;               /* beide nemen evenveel ruimte */
+  width:auto;           /* override oude 100% */
   height:var(--stack-h);
   line-height:var(--stack-h);
   padding:0 8px;
@@ -972,9 +877,6 @@ td.section-click{
   font-size:12px;
   text-align:left;
   box-sizing:border-box;
-}
-.plan-stack .marker-row .marker.placeholder{
-  display:none !important;
 }
 
 
@@ -1974,4 +1876,49 @@ td.hourscol{
   background: #2563eb;
   color: #fff;
   border-color: #2563eb;
+}
+/* Gemengde sectiebalk: echte geplande uren + concepturen in één sectieregel */
+.planner-table .bar.bar-mixed{
+  display:flex;
+  align-items:stretch;
+  justify-content:stretch;
+  gap:0;
+  padding:0 !important;
+  overflow:hidden;
+}
+.planner-table .bar.bar-mixed .bar-part{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:100%;
+  line-height:1;
+  font-size:11px;
+}
+.planner-table .bar.bar-mixed .bar-part-concept{
+  position:relative;
+  outline:2px dashed rgba(0,0,0,.35);
+  outline-offset:-2px;
+}
+.planner-table .bar.bar-mixed .bar-part-concept::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0.00) 0px,
+    rgba(0,0,0,0.00) 2px,
+    rgba(0,0,0,0.18) 2px,
+    rgba(0,0,0,0.18) 3px
+  );
+}
+.bar-resize-handle{
+  position:absolute;
+  right:0;
+  top:0;
+  width:6px;
+  height:100%;
+  cursor:ew-resize;
+  z-index:5;
 }
