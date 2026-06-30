@@ -6117,43 +6117,72 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     // ===== HTML: vaste layout met placeholders =====
     let html = `<div class="plan-stack plan-stack-section">`;
 
-    // PROD slot
-    {
-      const isProd = (key === "prod" || key === "both");
-      const isStart = isProd && key !== prevKey;
-      const isEnd   = isProd && key !== nextKey;
-      const startCls = isStart ? " bar-start" : "";
-      const endCls   = isEnd   ? " bar-end"   : "";
-      const hasMixedProd = prodReal > 0 && prodDummyHours > 0;
-      const dummyCls = dummyProd && !hasMixedProd ? " dummy-hatch" : "";
-      const mixedCls = hasMixedProd ? " bar-mixed" : "";
+    // SECTION SLOT HELPERS
+    const cellAt = (idx) => {
+      if (idx < 0 || idx >= dates.length) return null;
+      const xIso = toISODate(dates[idx]);
+      return assignCountByDay?.[xIso] || {};
+    };
 
-      if (isProd) {
-        const prodTxt = mixedBarContent(prodReal, prodDummyHours, prod);
-        const resizeHandle = hasSectionConceptProd && isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="productie" title="Concepturen groter/kleiner trekken"></span>` : "";
-        html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}${mixedCls}">${prodTxt}${resizeHandle}</div>`;
+    const slotState = (idx, slot) => {
+      const c = cellAt(idx);
+      if (!c) return false;
+      if (slot === "prodReal") return Number(c.prodReal || 0) > 0;
+      if (slot === "prodConcept") return Number(c.prodDummy || 0) > 0;
+      if (slot === "montReal") return Number(c.montReal || 0) > 0;
+      if (slot === "montConcept") return Number(c.montDummy || 0) > 0;
+      return false;
+    };
+
+    const slotClasses = (slot, baseCls) => {
+      const active = slotState(i, slot);
+      if (!active) return `${baseCls} placeholder`;
+      const isStart = !slotState(i - 1, slot);
+      const isEnd   = !slotState(i + 1, slot);
+      return `${baseCls}${isStart ? " bar-start" : ""}${isEnd ? " bar-end" : ""}`;
+    };
+
+    // 1) Productie - echte medewerkers
+    {
+      const clsP = slotClasses("prodReal", "bar bar-prod bar-real bar-prod-real");
+      if (prodReal > 0) {
+        html += `<div class="${clsP}">${escapeHtml(formatHoursCell(prodReal))}</div>`;
       } else {
-        html += `<div class="bar bar-prod placeholder">\u00A0</div>`;
+        html += `<div class="${clsP}">&nbsp;</div>`;
       }
     }
 
-    // MONT slot
+    // 2) Productie - concept
     {
-      const isMont = (key === "mont" || key === "both");
-      const isStart = isMont && key !== prevKey;
-      const isEnd   = isMont && key !== nextKey;
-      const startCls = isStart ? " bar-start" : "";
-      const endCls   = isEnd   ? " bar-end"   : "";
-      const hasMixedMont = montReal > 0 && montDummyHours > 0;
-      const dummyCls = dummyMont && !hasMixedMont ? " dummy-hatch" : "";
-      const mixedCls = hasMixedMont ? " bar-mixed" : "";
-
-      if (isMont) {
-        const montTxt = mixedBarContent(montReal, montDummyHours, mont);
-        const resizeHandle = hasSectionConceptMont && isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="montage" title="Concepturen groter/kleiner trekken"></span>` : "";
-        html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}${mixedCls}">${montTxt}${resizeHandle}</div>`;
+      const clsP = slotClasses("prodConcept", "bar bar-prod bar-concept bar-prod-concept dummy-hatch");
+      if (prodDummyHours > 0) {
+        const isEnd = !slotState(i + 1, "prodConcept");
+        const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="productie" title="Concepturen groter/kleiner trekken"></span>` : "";
+        html += `<div class="${clsP}" data-work-type="productie">${escapeHtml(formatHoursCell(prodDummyHours))}${resizeHandle}</div>`;
       } else {
-        html += `<div class="bar bar-mont placeholder">\u00A0</div>`;
+        html += `<div class="${clsP}">&nbsp;</div>`;
+      }
+    }
+
+    // 3) Montage - echte medewerkers
+    {
+      const clsM = slotClasses("montReal", "bar bar-mont bar-real bar-mont-real");
+      if (montReal > 0) {
+        html += `<div class="${clsM}">${escapeHtml(formatHoursCell(montReal))}</div>`;
+      } else {
+        html += `<div class="${clsM}">&nbsp;</div>`;
+      }
+    }
+
+    // 4) Montage - concept
+    {
+      const clsM = slotClasses("montConcept", "bar bar-mont bar-concept bar-mont-concept dummy-hatch");
+      if (montDummyHours > 0) {
+        const isEnd = !slotState(i + 1, "montConcept");
+        const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="montage" title="Concepturen groter/kleiner trekken"></span>` : "";
+        html += `<div class="${clsM}" data-work-type="montage">${escapeHtml(formatHoursCell(montDummyHours))}${resizeHandle}</div>`;
+      } else {
+        html += `<div class="${clsM}">&nbsp;</div>`;
       }
     }
 
