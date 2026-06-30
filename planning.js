@@ -6971,31 +6971,139 @@ async function removeSectionConceptRange(sectionId, workType, startISO, endISO){
   return true;
 }
 
+function getSectionRequiredConceptHours(sectionId, workType){
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  if (!sid || !["productie", "montage"].includes(type)) return 0;
+
+  const ctx = window.__plannerCtx || {};
+  const sObj = ctx.sectById?.get(sid);
+  if (!sObj) return 0;
+
+  return type === "productie"
+    ? roundHours2(
+        pickSectionNumber(sObj, ["uren_prod"]) +
+        pickSectionNumber(sObj, ["uren_cnc", "uren_cnc_prod", "cnc_uren"])
+      )
+    : roundHours2(
+        pickSectionNumber(sObj, ["uren_montage", "uren_mont"]) +
+        pickSectionNumber(sObj, ["uren_reis", "reis_uren"])
+      );
+}
+
+function conceptRowPlannedHours(row){
+  const emp = String(row?.werknemer_id ?? "").trim();
+  const note = String(row?.note || "");
+  if (emp === String(DUMMY_SEC_ID)) {
+    if (note.startsWith("inhuur:")) return PROJECT_DUMMY_HOURS_PER_DAY;
+    if (parseProjectDummyHours(note, 0) > 0) return parseProjectDummyHours(note, 0);
+    return PROJECT_DUMMY_HOURS_PER_DAY;
+  }
+  return Number(row?.hours || 0);
+}
+
+async function getSectionConceptMaxHoursFresh(sectionId, workType, excludeStartISO = "", excludeEndISO = "") {
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  if (!sid || !["productie", "montage"].includes(type)) return 0;
+
+  const required = getSectionRequiredConceptHours(sid, type);
+  if (!(required > 0)) return 0;
+
+  const countedTypes = type === "productie" ? ["productie", "cnc"] : ["montage", "reis"];
+  const start = String(excludeStartISO || "").trim();
+  const end = String(excludeEndISO || "").trim();
+
+  const { data, error } = await sb
+    .from("section_assignments")
+    .select("id, section_id, work_date, werknemer_id, work_type, note, hours")
+    .eq("section_id", sid)
+    .in("work_type", countedTypes)
+    .limit(200000);
+
+  if (error) {
+    console.warn("getSectionConceptMaxHoursFresh error:", error.message);
+    // Fallback op de render-cache. Dit is minder sterk, maar voorkomt blokkeren bij een tijdelijke select-fout.
+    return getSectionConceptMaxHoursFromCache(sid, type, start, end);
+  }
+
+  let plannedOutsideRun = 0;
+  for (const row of (data || [])) {
+    const d = String(row?.work_date || "").trim();
+    const wt = String(row?.work_type || "").toLowerCase().trim();
+
+    // De huidige conceptreeks wordt vervangen. Die mag dus niet meetellen als "al gepland".
+    const isCurrentRunConcept = start && end && d >= start && d <= end && wt === type && isSectionConceptRow(row, type);
+    if (isCurrentRunConcept) continue;
+
+    plannedOutsideRun += conceptRowPlannedHours(row);
+  }
+
+  return Math.max(0, roundHours2(required - plannedOutsideRun));
+}
+
+function getSectionConceptMaxHoursFromCache(sectionId, workType, excludeStartISO = "", excludeEndISO = "") {
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  if (!sid || !["productie", "montage"].includes(type)) return 0;
+
+  const required = getSectionRequiredConceptHours(sid, type);
+  if (!(required > 0)) return 0;
+
+  const countedTypes = type === "productie"
+    ? new Set(["productie", "cnc"])
+    : new Set(["montage", "reis"]);
+
+  const start = String(excludeStartISO || "").trim();
+  const end = String(excludeEndISO || "").trim();
+
+  let plannedOutsideRun = 0;
+  const dm = window.__plannerCtx?.assignMap?.get(sid);
+  if (dm) {
+    for (const [, entry] of dm) {
+      for (const row of (entry?.rows || [])) {
+        const d = String(row?.work_date || "").trim();
+        const wt = String(row?.work_type || "").toLowerCase().trim();
+        if (!countedTypes.has(wt)) continue;
+
+        const isCurrentRunConcept = start && end && d >= start && d <= end && wt === type && isSectionConceptRow(row, type);
+        if (isCurrentRunConcept) continue;
+
+        plannedOutsideRun += conceptRowPlannedHours(row);
+      }
+    }
+  }
+
+  return Math.max(0, roundHours2(required - plannedOutsideRun));
+}
+
 async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEndISO, targetEndISO, currentHours }){
   const sid = String(sectionId || "").trim();
   const type = String(workType || "").toLowerCase().trim();
   const startISO = String(runStartISO || "").trim();
-  const endISO = String(runEndISO || "").trim();
+  const oldEndISO = String(runEndISO || "").trim();
   const targetISO = String(targetEndISO || "").trim();
-  if (!sid || !["productie", "montage"].includes(type) || !startISO || !endISO || !targetISO) return;
+  if (!sid || !["productie", "montage"].includes(type) || !startISO || !oldEndISO || !targetISO) return;
 
+  // Bij resize is de nieuwe lengte altijd: aantal werkdagen vanaf de startcel * 7,5 uur,
+  // afgetopt op het maximale sectietotaal minus wat buiten deze conceptreeks al gepland is.
+  // Dus kleiner trekken kan nooit uren toevoegen, en groter trekken kan nooit boven de sectie-uren uitkomen.
   const targetDays = countPlannerWorkdaysInclusive(startISO, targetISO);
-  if (targetDays <= 0) return;
+  const wantedHours = targetDays > 0
+    ? roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY)
+    : 0;
 
-  const currentDays = countPlannerWorkdaysInclusive(startISO, endISO);
-  const current = Math.max(0, Number(currentHours || 0));
-  const dayDelta = targetDays - currentDays;
-  const newHours = dayDelta >= 0
-    ? roundHours2(current + (dayDelta * PROJECT_DUMMY_HOURS_PER_DAY))
-    : roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
+  const maxHours = await getSectionConceptMaxHoursFresh(sid, type, startISO, oldEndISO);
+  const newHours = Math.max(0, Math.min(wantedHours, maxHours));
+
   const { data: rows, error: selErr } = await sb
     .from("section_assignments")
-    .select("id, note")
+    .select("id, section_id, work_date, werknemer_id, work_type, note")
     .eq("section_id", sid)
     .eq("work_type", type)
     .eq("werknemer_id", DUMMY_SEC_ID)
     .gte("work_date", startISO)
-    .lte("work_date", endISO)
+    .lte("work_date", oldEndISO)
     .limit(200000);
 
   if (selErr) { alert("Concept resize select fout: " + selErr.message); return; }
@@ -7006,7 +7114,9 @@ async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEn
     if (del.error) { alert("Concept resize delete fout: " + del.error.message); return; }
   }
 
-  const segments = buildProjectDummyHoursSegments(startISO, newHours);
+  if (!(newHours > 0)) return;
+
+  const segments = buildSectionConceptHoursSegments(startISO, newHours);
   const newRows = segments.map(seg => ({
     section_id: sid,
     work_date: seg.work_date,
