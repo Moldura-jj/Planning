@@ -5902,6 +5902,7 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     else if (key === "mont") cls += " bar-mont";
     else if (key.startsWith("lbl:")) cls += ` ${barClass(label)}`;
     td.className = cls;
+    td.classList.add("section-two-line");
     td.classList.add("project-date-dropzone");
 
     let html = `<div class="plan-stack">`;
@@ -6114,15 +6115,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     }
 
     // ===== HTML: vaste layout met placeholders =====
-    let html = `<div class="plan-stack">`;
-
-    // markers (vaste hoogte)
-    html += `
-      <div class="marker-row">
-        <div class="marker delivery placeholder">lever</div>
-        <div class="marker deadline placeholder">oplever</div>
-      </div>
-    `;
+    let html = `<div class="plan-stack plan-stack-section">`;
 
     // PROD slot
     {

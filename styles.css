@@ -1922,3 +1922,85 @@ td.hourscol{
   cursor:ew-resize;
   z-index:5;
 }
+
+
+/* =========================
+   SECTION ROWS – compact 2-line layout
+========================= */
+td.section-click.section-two-line .plan-stack.plan-stack-section{
+  gap:2px;
+}
+
+td.section-click.section-two-line .bar{
+  height:14px !important;
+  min-height:14px;
+  font-size:10px !important;
+  border-radius:5px !important;
+}
+
+td.section-click.section-two-line .bar.placeholder{
+  opacity:0;
+  visibility:hidden;
+}
+
+td.section-click.section-two-line .bar.bar-subc,
+td.section-click.section-two-line .bar-subc.subc-ph{
+  height:12px !important;
+  min-height:12px;
+  font-size:9px !important;
+}
+
+td.section-click.section-two-line .bar.bar-mixed{
+  background: transparent !important;
+  justify-content:stretch !important;
+  gap:2px;
+  padding:0 !important;
+}
+
+td.section-click.section-two-line .bar.bar-mixed .bar-part{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-width:0;
+  height:100%;
+  border-radius:5px;
+  overflow:hidden;
+  font-size:10px !important;
+  line-height:1;
+}
+
+td.section-click.section-two-line .bar.bar-prod.bar-mixed .bar-part-real{
+  background:#b7f0c2;
+  color:#0f172a;
+}
+
+td.section-click.section-two-line .bar.bar-prod.bar-mixed .bar-part-concept{
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(0,0,0,0.00) 0px,
+      rgba(0,0,0,0.00) 2px,
+      rgba(0,0,0,0.18) 2px,
+      rgba(0,0,0,0.18) 3px
+    ),
+    #b7f0c2;
+  color:#0f172a;
+}
+
+td.section-click.section-two-line .bar.bar-mont.bar-mixed .bar-part-real{
+  background:#fde68a;
+  color:#111827;
+}
+
+td.section-click.section-two-line .bar.bar-mont.bar-mixed .bar-part-concept{
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(0,0,0,0.00) 0px,
+      rgba(0,0,0,0.00) 2px,
+      rgba(0,0,0,0.18) 2px,
+      rgba(0,0,0,0.18) 3px
+    ),
+    #fde68a;
+  color:#111827;
+}
