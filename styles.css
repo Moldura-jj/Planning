@@ -2155,3 +2155,23 @@ td.project-two-line .bar.placeholder{
 .mini-hours.mini-hours-combined .mh-l{
   font-size:10.5px;
 }
+
+
+/* Opruimen: geen functieloze pijlen meer bij secties / productie / montage */
+.sect-indent{
+  display:inline-block;
+  width:18px;
+}
+
+.sectext.no-expander{
+  display:inline-block;
+}
+
+.expander-sec{
+  display:none !important;
+}
+
+#btnHoursCol,
+.hourscol-toggle{
+  display:none !important;
+}

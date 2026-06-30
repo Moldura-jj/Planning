@@ -2550,12 +2550,7 @@ for (const p of (projecten || [])) {
     const trMonth = document.createElement("tr");
     trMonth.className = "hdr hdr-month";
     trMonth.appendChild(hdrCell(
-      `<div class="rowhdr-flex">
-        <span>Planning</span>
-        <button class="hourscol-toggle" id="btnHoursCol" type="button" title="Urenkolom tonen/verbergen">
-          ${hoursColOpen ? "◀" : "▶"}
-        </button>
-      </div>`,
+      `<div class="rowhdr-flex"><span>Planning</span></div>`,
       "hdr-cell rowhdr sticky-left sticky-top"
     ));
 
@@ -2901,8 +2896,8 @@ for (const dd of dates) {
         const sn0  = s?.[sectNameKey] || "sectie";
         const paraHtml = para ? `<span class="secNo">${escapeHtml(para)}</span>` : "";
         leftS.innerHTML = `
-          <button class="expander expander-sec" data-sect="${escapeAttr(sid)}" aria-label="toggle sectie">▶</button>
-          <span class="sectext sectname" data-sect="${escapeAttr(sid)}">↳ ${paraHtml}${escapeHtml(sn0)}</span>
+          <span class="sect-indent" aria-hidden="true"></span>
+          <span class="sectext sectname no-expander" data-sect="${escapeAttr(sid)}">${paraHtml}${escapeHtml(sn0)}</span>
         `;
 
 
@@ -3191,7 +3186,7 @@ for (const dd of dates) {
 
       const leftP = document.createElement("td");
       leftP.className = "rowhdr sticky-left section-cell";
-      leftP.innerHTML = `<span class="sectext">↳ Productie</span>`;
+      leftP.innerHTML = `<span class="sect-indent" aria-hidden="true"></span><span class="sectext no-expander">Productie</span>`;
       prodRow.appendChild(leftP);
 
       const hoursTdP = document.createElement("td");
@@ -3289,7 +3284,7 @@ for (const dd of dates) {
 
       const leftM = document.createElement("td");
       leftM.className = "rowhdr sticky-left section-cell";
-      leftM.innerHTML = `<span class="sectext">↳ Montage</span>`;
+      leftM.innerHTML = `<span class="sect-indent" aria-hidden="true"></span><span class="sectext no-expander">Montage</span>`;
       montRow.appendChild(leftM);
 
       // ===== lege uren-kolom cel (montage samenvatting) =====
@@ -5367,12 +5362,7 @@ loadAndRender();
 
     const btnHoursCol = gridEl.querySelector("#btnHoursCol");
     if (btnHoursCol) {
-      btnHoursCol.onclick = (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        hoursColOpen = !hoursColOpen;
-        loadAndRender();
-      };
+      btnHoursCol.onclick = null;
     }
 
 
