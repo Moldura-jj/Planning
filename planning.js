@@ -732,6 +732,7 @@ function asISODate(v){
 
     capModal = { wrap, close };
     return capModal;
+  }
 
 
 // -------- VERLOF MODAL (per medewerker / dag) --------
@@ -884,7 +885,6 @@ async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0 })
   syncHours();
   wrap.classList.add("show");
 }
-  }
 
 // -------- INHUUR MODAL (uren per inhuur per week) --------
 let inhuurModal = null;
