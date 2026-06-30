@@ -6087,7 +6087,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       td.removeAttribute("title");
     }
 
-    let cls = `cell plan-cell section-click ${isWeekend(d) ? "wknd" : ""}`.trim();
+    let cls = `cell plan-cell section-click section-two-line ${isWeekend(d) ? "wknd" : ""}`.trim();
     // géén bar-prod/mont/both op de TD, alleen de bars zelf kleuren
     td.className = cls;
 
