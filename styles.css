@@ -2046,3 +2046,54 @@ td.section-click.section-two-line .bar-resize-handle{
   width:5px;
   right:0;
 }
+
+/* =========================
+   SECTION ROWS – connected compact bars, 1.5x height
+========================= */
+td.section-click.section-two-line .plan-stack.plan-stack-section{
+  gap:2px !important;
+}
+
+td.section-click.section-two-line .bar.bar-real,
+td.section-click.section-two-line .bar.bar-concept{
+  height:17px !important;
+  min-height:17px !important;
+  font-size:10px !important;
+  line-height:1 !important;
+  border-radius:0 !important;       /* naast elkaar weer strak aansluiten */
+}
+
+td.section-click.section-two-line .bar.bar-real.bar-start,
+td.section-click.section-two-line .bar.bar-concept.bar-start{
+  border-top-left-radius:5px !important;
+  border-bottom-left-radius:5px !important;
+}
+
+td.section-click.section-two-line .bar.bar-real.bar-end,
+td.section-click.section-two-line .bar.bar-concept.bar-end{
+  border-top-right-radius:5px !important;
+  border-bottom-right-radius:5px !important;
+}
+
+td.section-click.section-two-line .bar.bar-concept{
+  outline:1px dashed rgba(0,0,0,.38) !important;
+  outline-offset:-1px !important;
+}
+
+td.section-click.section-two-line .bar.bar-subc,
+td.section-click.section-two-line .bar-subc.subc-ph{
+  height:15px !important;
+  min-height:15px !important;
+  font-size:10px !important;
+  border-radius:0 !important;
+}
+
+td.section-click.section-two-line .bar.bar-subc.bar-start{
+  border-top-left-radius:5px !important;
+  border-bottom-left-radius:5px !important;
+}
+
+td.section-click.section-two-line .bar.bar-subc.bar-end{
+  border-top-right-radius:5px !important;
+  border-bottom-right-radius:5px !important;
+}
