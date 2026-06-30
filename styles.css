@@ -2218,3 +2218,25 @@ td.project-two-line .bar.placeholder{
 
 .cap-right .cap-planseg.prod{ background: var(--chip-green); }
 .cap-right .cap-planseg.mont{ background: #fde68a; }
+
+
+.cap-right.cap-absence-target{ cursor:pointer; }
+.cap-right.cap-absence-target:hover{ outline:1px solid rgba(0,0,0,.12); }
+.cap-right .cap-planseg.absence{ background:#fed7aa; }
+
+.planner-table tr.planned-absence td.sum-cell.has-val:not(.wknd){
+  background:#fed7aa !important;
+}
+
+.absence-modal{ width:min(620px, calc(100vw - 24px)); }
+.absence-existing{ display:flex; flex-direction:column; gap:8px; }
+.absence-existing-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff7ed;
+}

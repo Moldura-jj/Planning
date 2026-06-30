@@ -732,6 +732,158 @@ function asISODate(v){
 
     capModal = { wrap, close };
     return capModal;
+
+
+// -------- VERLOF MODAL (per medewerker / dag) --------
+let absenceModal = null;
+
+function ensureAbsenceModal(){
+  if (absenceModal) return absenceModal;
+
+  const wrap = document.createElement("div");
+  wrap.className = "modal-backdrop";
+  wrap.id = "absenceModalBackdrop";
+  wrap.innerHTML = `
+    <div class="modal assign-modal absence-modal" role="dialog" aria-modal="true">
+      <div class="hd">
+        <div>
+          <div class="assign-title">Verlof invullen</div>
+          <div class="assign-sub" id="abSub"></div>
+        </div>
+        <button class="btn small" id="abClose" type="button">✕</button>
+      </div>
+      <div class="bd">
+        <div id="abExisting" class="absence-existing"></div>
+        <div class="hr"></div>
+        <div class="fieldgrid" style="grid-template-columns: 150px 1fr;">
+          <div class="label">Specificatie</div>
+          <input class="input" id="abTitle" type="text" value="Verlof" placeholder="Bijv. verlof, dokter, cursus" />
+
+          <div class="label">Hele dag</div>
+          <label class="row" style="gap:8px; align-items:center;">
+            <input id="abAllDay" type="checkbox" />
+            <span class="muted">Gebruik beschikbare uren van deze dag</span>
+          </label>
+
+          <div class="label">Aantal uur</div>
+          <input class="input" id="abHours" type="text" inputmode="decimal" placeholder="0" />
+
+          <div class="label">Notitie</div>
+          <textarea class="input" id="abNote" rows="3" placeholder="Optioneel"></textarea>
+        </div>
+      </div>
+      <div class="ft">
+        <button class="btn" id="abCancel" type="button">Annuleren</button>
+        <button class="btn primary" id="abSave" type="button">Opslaan</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(wrap);
+  const close = () => wrap.classList.remove("show");
+  wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+  wrap.querySelector("#abClose").onclick = close;
+  wrap.querySelector("#abCancel").onclick = close;
+  absenceModal = { wrap, close };
+  return absenceModal;
+}
+
+async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0 }){
+  const modal = ensureAbsenceModal();
+  const wrap = modal.wrap;
+  const sub = wrap.querySelector("#abSub");
+  const existing = wrap.querySelector("#abExisting");
+  const title = wrap.querySelector("#abTitle");
+  const allDay = wrap.querySelector("#abAllDay");
+  const hours = wrap.querySelector("#abHours");
+  const note = wrap.querySelector("#abNote");
+  const save = wrap.querySelector("#abSave");
+
+  const avail = Number(availableHours || 0);
+  sub.textContent = `${empName || empId} • ${dateISO}`;
+  title.value = "Verlof";
+  allDay.checked = false;
+  hours.value = "";
+  note.value = "";
+
+  const syncHours = () => {
+    if (allDay.checked) {
+      hours.value = (avail > 0 ? String(avail) : "7,5").replace(".", ",");
+      hours.disabled = true;
+    } else {
+      hours.disabled = false;
+    }
+  };
+  allDay.onchange = syncHours;
+  hours.oninput = () => { hours.value = hours.value.replace(/[^0-9.,]/g, ""); };
+  hours.onblur = () => { hours.value = hours.value.replace(".", ","); };
+
+  async function refreshExisting(){
+    const { data, error } = await sb
+      .from("employee_absences")
+      .select("id, title, note, hours, all_day")
+      .eq("werknemer_id", Number(empId))
+      .eq("work_date", dateISO)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      existing.innerHTML = `<div class="error">Verlof laden mislukt: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    const rows = data || [];
+    existing.innerHTML = rows.length
+      ? `<div class="assign-col-title">Bestaand verlof</div>${rows.map(r => `
+          <div class="absence-existing-row">
+            <div>
+              <b>${escapeHtml(r.title || "Verlof")}</b>
+              <span class="muted">${escapeHtml(formatHoursCell(Number(r.hours || 0)))}u${r.all_day ? " • hele dag" : ""}</span>
+              ${r.note ? `<div class="muted">${escapeHtml(r.note)}</div>` : ""}
+            </div>
+            <button class="btn small abDelete" type="button" data-id="${escapeAttr(r.id)}">Verwijderen</button>
+          </div>
+        `).join("")}`
+      : `<div class="muted">Nog geen verlof op deze dag.</div>`;
+
+    existing.querySelectorAll(".abDelete").forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm("Verlof verwijderen?")) return;
+        const id = String(btn.dataset.id || "");
+        const del = await sb.from("employee_absences").delete().eq("id", id);
+        if (del.error) { alert("Fout verwijderen: " + del.error.message); return; }
+        modal.close();
+        if (capModal) capModal.close();
+        await loadAndRender();
+      };
+    });
+  }
+
+  save.onclick = async () => {
+    const hRaw = String(hours.value || "").trim().replace(",", ".");
+    const h = allDay.checked ? (avail > 0 ? avail : 7.5) : Number(hRaw || 0);
+    if (!(h > 0)) { alert("Vul een aantal uur in of kies hele dag."); return; }
+
+    const row = {
+      werknemer_id: Number(empId),
+      work_date: dateISO,
+      hours: Math.round(h * 100) / 100,
+      all_day: !!allDay.checked,
+      title: String(title.value || "Verlof").trim() || "Verlof",
+      note: String(note.value || "").trim() || null
+    };
+
+    const ins = await sb.from("employee_absences").insert(row);
+    if (ins.error) { alert("Fout opslaan verlof: " + ins.error.message); return; }
+
+    modal.close();
+    if (capModal) capModal.close();
+    await loadAndRender();
+  };
+
+  await refreshExisting();
+  syncHours();
+  wrap.classList.add("show");
+}
   }
 
 // -------- INHUUR MODAL (uren per inhuur per week) --------
@@ -1217,6 +1369,16 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
     const safePAssigns = paErr ? [] : (pAssigns || []);
     if (paErr) console.warn("project_assignments niet geladen:", paErr.message);
 
+    // 6c) verlof / afwezigheid in range
+    const { data: absences, error: absErr } = await sb
+      .from("employee_absences")
+      .select("id, werknemer_id, work_date, hours, all_day, title, note, created_at")
+      .gte("work_date", startISO)
+      .lte("work_date", endISO)
+      .limit(200000);
+
+    const safeAbsences = absErr ? [] : (absences || []);
+    if (absErr) console.warn("employee_absences niet geladen:", absErr.message);
 
     statusEl.textContent = "";
 
@@ -1233,7 +1395,8 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
       pAssigns: safePAssigns,
       orders,
       inhuurEntries,
-      inhuurPeopleVisible
+      inhuurPeopleVisible,
+      absences: safeAbsences
     });
 
 
@@ -1750,7 +1913,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
 
 
     // -------- RENDER --------
-    function renderPlanner({ start, days, projecten, secties, work, cap, werknemers, werknemersCap, assigns, pAssigns, orders, inhuurEntries, inhuurPeopleVisible }) {
+    function renderPlanner({ start, days, projecten, secties, work, cap, werknemers, werknemersCap, assigns, pAssigns, orders, inhuurEntries, inhuurPeopleVisible, absences = [] }) {
     const DEBUG_OFFNR = "2600013";   // <-- zet hier jouw projectnr uit de screenshot
     const DEBUG_ISO   = null;        // bv "2026-02-12" of null = alle dagen in range
 
@@ -2355,6 +2518,22 @@ for (const p of (projecten || [])) {
       }
     }
 
+    // ===== Verlof aggregatie (per werknemer per dag + totaal per dag) =====
+    const absenceByEmp = new Map(); // empId -> Map(dateISO -> rows[])
+    const absenceTotalByDay = {};
+    for (const r of (absences || [])) {
+      const empStr = String(r.werknemer_id ?? "").trim();
+      const d = String(r.work_date || "").trim();
+      const h = Number(r.hours || 0);
+      if (!empStr || !d || !(h > 0)) continue;
+
+      if (!absenceByEmp.has(empStr)) absenceByEmp.set(empStr, new Map());
+      const dm = absenceByEmp.get(empStr);
+      if (!dm.has(d)) dm.set(d, []);
+      dm.get(d).push(r);
+      absenceTotalByDay[d] = (absenceTotalByDay[d] || 0) + h;
+    }
+
     // ===== Inhuur aggregatie (per inhuur_id per dag + totaal per dag) =====
     const inhuurById = new Map(); // inhuur_id -> { name }
     for (const p of (inhuurPeopleVisible || [])) {
@@ -2390,6 +2569,7 @@ for (const p of (projecten || [])) {
     const plannedCncByDay = {};
     const plannedMontByDay = {};
     const plannedReisByDay = {};
+    const plannedAbsenceByDay = {};
 
     // ✅ ook projectniveau mee nemen (↳ Montage / ↳ Productie)
     const plannedSetsByDay = buildPlannedSetsByDay([...(assigns || []), ...(pAssigns || [])]);
@@ -2420,6 +2600,7 @@ for (const p of (projecten || [])) {
       plannedCncByDay[iso] = 0;
       plannedMontByDay[iso] = 0;
       plannedReisByDay[iso] = 0;
+      plannedAbsenceByDay[iso] = Number(absenceTotalByDay[iso] || 0);
     }
 
     for (const [sid, dm] of assignMap) {
@@ -3505,12 +3686,15 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
     // Gepland montage
     tbody.appendChild(labelRow("Gepland montage", dates, plannedMontByDay, "planned-mont"));
 
+    // Verlof
+    tbody.appendChild(labelRow("Verlof", dates, plannedAbsenceByDay, "planned-absence"));
+
     // Saldo (capaciteit - gepland)
     const saldoByDay = {};
     for (const d of dates) {
       const iso = toISODate(d);
       const capTot = Number(capTotalByDay?.[iso] || 0);
-      const planned = Number(plannedProdByDay?.[iso] || 0) + Number(plannedMontByDay?.[iso] || 0);
+      const planned = Number(plannedProdByDay?.[iso] || 0) + Number(plannedMontByDay?.[iso] || 0) + Number(plannedAbsenceByDay?.[iso] || 0);
       // afronden op 2 decimalen om “-0” en float-ruis te vermijden
       saldoByDay[iso] = Math.round((capTot - planned) * 100) / 100;
     }
@@ -3897,6 +4081,16 @@ function getPlannedForEmpDate(empIdStr, dateISO) {
     }
   }
 
+  // 3) verlof / afwezigheid
+  const absRows = absenceByEmp.get(emp)?.get(dateISO) || [];
+  for (const r of absRows) {
+    pushItem({
+      type: "absence",
+      text: String(r.title || "Verlof"),
+      hours: Number(r.hours || 0)
+    });
+  }
+
   // gelijke taak/type op dezelfde dag samenvoegen
   const grouped = new Map();
   for (const it of out) {
@@ -3931,7 +4125,7 @@ formEl.innerHTML = `
         ? `<div class="cap-planbar">${planned.map(p => {
             const h = Number(p.hours || 0);
             const pct = Math.max(0, Math.min(100, (h / 7.5) * 100));
-            const cls = p.type === "montage" ? "mont" : "prod";
+            const cls = p.type === "absence" ? "absence" : (p.type === "montage" ? "mont" : "prod");
             return `
               <div class="cap-planchip cap-planseg ${cls}" style="flex-basis:${pct}%;" title="${escapeAttr(formatHoursCell(h))} uur">
                 <div class="cap-planseg-title">${escapeHtml(String(p.text)).replace(/\n/g, "<br>")}</div>
@@ -3957,7 +4151,7 @@ formEl.innerHTML = `
               />
             </div>
           </div>
-          <div class="cap-right">${plannedHtml}</div>
+          <div class="cap-right cap-absence-target" data-iso="${iso}" data-available="${val || 0}">${plannedHtml}</div>
         </div>
       `;
     }).join("")}
@@ -3970,6 +4164,16 @@ formEl.innerHTML = `
       });
       inp.addEventListener("blur", () => {
         inp.value = inp.value.replace(".", ",");
+      });
+    });
+
+    formEl.querySelectorAll(".cap-absence-target[data-iso]").forEach(box => {
+      box.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const iso = String(box.dataset.iso || "");
+        const available = Number(box.dataset.available || 0);
+        if (!iso) return;
+        await openAbsenceModal({ empId, empName, dateISO: iso, availableHours: available });
       });
     });
   };
