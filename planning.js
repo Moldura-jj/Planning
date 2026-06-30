@@ -581,12 +581,12 @@ function asISODate(v){
           <div class="fieldgrid" style="grid-template-columns: 170px 1fr;">
             <div class="label">Opleverdatum</div><div class="value">${escapeHtml(complTxt || "-")}</div>
 
-            <div class="label">Werkvoorbereiding</div><div class="value">${escapeHtml(formatHoursCell(totals.prep))} uur</div>
-            <div class="label">Productie</div><div class="value">${escapeHtml(formatHoursCell(totals.prod))} uur</div>
-            <div class="label">CNC</div><div class="value">${escapeHtml(formatHoursCell(totals.cnc))} uur</div>
+            <div class="label">Werkvoorbereiding</div><div class="value">${escapeHtml(fmtHours(totals.prep))} uur</div>
+            <div class="label">Productie</div><div class="value">${escapeHtml(fmtHours(totals.prod))} uur</div>
+            <div class="label">CNC</div><div class="value">${escapeHtml(fmtHours(totals.cnc))} uur</div>
 
-            <div class="label">Montage</div><div class="value">${escapeHtml(formatHoursCell(totals.mont))} uur</div>
-            <div class="label">Reis</div><div class="value">${escapeHtml(formatHoursCell(totals.reis))} uur</div>
+            <div class="label">Montage</div><div class="value">${escapeHtml(fmtHours(totals.mont))} uur</div>
+            <div class="label">Reis</div><div class="value">${escapeHtml(fmtHours(totals.reis))} uur</div>
           </div>
         `;
     }
@@ -789,7 +789,7 @@ function ensureAbsenceModal(){
   return absenceModal;
 }
 
-async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0 }){
+async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0, absenceId = "" }){
   const modal = ensureAbsenceModal();
   const wrap = modal.wrap;
   const sub = wrap.querySelector("#abSub");
@@ -799,6 +799,7 @@ async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0 })
   const hours = wrap.querySelector("#abHours");
   const note = wrap.querySelector("#abNote");
   const save = wrap.querySelector("#abSave");
+  let editId = String(absenceId || "").trim();
 
   const avail = Number(availableHours || 0);
   sub.textContent = `${empName || empId} • ${dateISO}`;
@@ -806,6 +807,7 @@ async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0 })
   allDay.checked = false;
   hours.value = "";
   note.value = "";
+  save.textContent = editId ? "Bijwerken" : "Opslaan";
 
   const syncHours = () => {
     if (allDay.checked) {
@@ -833,18 +835,41 @@ async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0 })
     }
 
     const rows = data || [];
+    const fillForEdit = (r) => {
+      editId = String(r?.id || "").trim();
+      title.value = String(r?.title || "Verlof");
+      allDay.checked = !!r?.all_day;
+      hours.value = Number(r?.hours || 0) ? fmtHours(Number(r.hours || 0)) : "";
+      note.value = String(r?.note || "");
+      save.textContent = editId ? "Bijwerken" : "Opslaan";
+      syncHours();
+    };
     existing.innerHTML = rows.length
       ? `<div class="assign-col-title">Bestaand verlof</div>${rows.map(r => `
-          <div class="absence-existing-row">
-            <div>
+          <div class="absence-existing-row" data-id="${escapeAttr(r.id)}" title="Klik om te bewerken">
+            <div class="abEdit" data-id="${escapeAttr(r.id)}">
               <b>${escapeHtml(r.title || "Verlof")}</b>
-              <span class="muted">${escapeHtml(formatHoursCell(Number(r.hours || 0)))}u${r.all_day ? " • hele dag" : ""}</span>
+              <span class="muted">${escapeHtml(fmtHours(Number(r.hours || 0)))}u${r.all_day ? " • hele dag" : ""}</span>
               ${r.note ? `<div class="muted">${escapeHtml(r.note)}</div>` : ""}
             </div>
-            <button class="btn small abDelete" type="button" data-id="${escapeAttr(r.id)}">Verwijderen</button>
+            <div class="row" style="gap:6px;"><button class="btn small abEdit" type="button" data-id="${escapeAttr(r.id)}">Bewerken</button><button class="btn small abDelete" type="button" data-id="${escapeAttr(r.id)}">Verwijderen</button></div>
           </div>
         `).join("")}`
       : `<div class="muted">Nog geen verlof op deze dag.</div>`;
+
+    existing.querySelectorAll(".abEdit").forEach(btn => {
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        const id = String(btn.dataset.id || "");
+        const row = rows.find(x => String(x.id) === id);
+        if (row) fillForEdit(row);
+      };
+    });
+
+    if (editId) {
+      const row = rows.find(x => String(x.id) === editId);
+      if (row) fillForEdit(row);
+    }
 
     existing.querySelectorAll(".abDelete").forEach(btn => {
       btn.onclick = async () => {
@@ -873,8 +898,10 @@ async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0 })
       note: String(note.value || "").trim() || null
     };
 
-    const ins = await sb.from("employee_absences").insert(row);
-    if (ins.error) { alert("Fout opslaan verlof: " + ins.error.message); return; }
+    const res = editId
+      ? await sb.from("employee_absences").update(row).eq("id", editId)
+      : await sb.from("employee_absences").insert(row);
+    if (res.error) { alert("Fout opslaan verlof: " + res.error.message); return; }
 
     modal.close();
     if (capModal) capModal.close();
@@ -1066,7 +1093,7 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
   // dedupe
   const seen = new Set();
   return out.filter(it => {
-    const k = `${it.type}||${it.text}`;
+    const k = it.type === "absence" ? `${it.type}||${it.absenceId || it.text}` : `${it.type}||${it.text}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -4087,7 +4114,10 @@ function getPlannedForEmpDate(empIdStr, dateISO) {
     pushItem({
       type: "absence",
       text: String(r.title || "Verlof"),
-      hours: Number(r.hours || 0)
+      hours: Number(r.hours || 0),
+      absenceId: String(r.id || ""),
+      allDay: !!r.all_day,
+      note: String(r.note || "")
     });
   }
 
@@ -4127,9 +4157,9 @@ formEl.innerHTML = `
             const pct = Math.max(0, Math.min(100, (h / 7.5) * 100));
             const cls = p.type === "absence" ? "absence" : (p.type === "montage" ? "mont" : "prod");
             return `
-              <div class="cap-planchip cap-planseg ${cls}" style="flex-basis:${pct}%;" title="${escapeAttr(formatHoursCell(h))} uur">
+              <div class="cap-planchip cap-planseg ${cls}" style="flex-basis:${pct}%;" title="${escapeAttr(fmtHours(h))} uur">
                 <div class="cap-planseg-title">${escapeHtml(String(p.text)).replace(/\n/g, "<br>")}</div>
-                <div class="cap-planseg-hours">${escapeHtml(formatHoursCell(h))}u</div>
+                <div class="cap-planseg-hours">${escapeHtml(fmtHours(h))}u</div>
               </div>
             `;
           }).join("")}</div>`
@@ -4172,8 +4202,10 @@ formEl.innerHTML = `
         ev.stopPropagation();
         const iso = String(box.dataset.iso || "");
         const available = Number(box.dataset.available || 0);
+        const absChip = ev.target.closest("[data-absence-id]");
+        const absenceId = absChip ? String(absChip.dataset.absenceId || "") : "";
         if (!iso) return;
-        await openAbsenceModal({ empId, empName, dateISO: iso, availableHours: available });
+        await openAbsenceModal({ empId, empName, dateISO: iso, availableHours: available, absenceId });
       });
     });
   };
@@ -4355,7 +4387,7 @@ if (autoPlanTd) {
     const deleteHours = getRunHoursBetweenFromDom(autoPlanTd, deleteStart, deleteEnd);
     const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
     const msg =
-      `${formatHoursCell(deleteHours || plannedHours)} uur ${typeLabel} verwijderen van ${dateTxt}?`;
+      `${fmtHours(deleteHours || plannedHours)} uur ${typeLabel} verwijderen van ${dateTxt}?`;
     if (!confirm(msg)) return;
 
     const ok = await removeProjectDummyRange(projectId, deleteStart, deleteEnd, workType);
@@ -4372,7 +4404,7 @@ if (autoPlanTd) {
   const deliveryTxt = deliveryDate ? `\nEr wordt gepland vóór leverdatum ${deliveryDate}.` : "";
   const msg =
     `Sectie plannen?\n\n` +
-    `${typeLabel}: ${formatHoursCell(totalHours)} uur / ${String(PROJECT_DUMMY_HOURS_PER_DAY).replace(".", ",")} uur per dag = ${dayCount} dag(en).\n` +
+    `${typeLabel}: ${fmtHours(totalHours)} uur / ${String(PROJECT_DUMMY_HOURS_PER_DAY).replace(".", ",")} uur per dag = ${dayCount} dag(en).\n` +
     `Vanaf ${dateISO} worden werkdagen automatisch gevuld met conceptplanning.${deliveryTxt}`;
 
   if (!confirm(msg)) return;
@@ -4631,7 +4663,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
   const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
   const typeLabel = workType === "montage" ? "montage" : "productie";
 
-  if (!confirm(`${formatHoursCell(deleteHours || plannedHours)} uur concept ${typeLabel} verwijderen van ${dateTxt}?`)) return;
+  if (!confirm(`${fmtHours(deleteHours || plannedHours)} uur concept ${typeLabel} verwijderen van ${dateTxt}?`)) return;
 
   const ok = await removeSectionConceptRange(sectionId, workType, deleteStart, deleteEnd);
   if (ok) await loadAndRender();
@@ -4766,8 +4798,8 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
         btn.hidden = false;
         btn.disabled = !(hours > 0);
         btn.textContent = type === "productie"
-          ? `Auto productie (${formatHoursCell(hours)}u)`
-          : `Auto montage (${formatHoursCell(hours)}u)`;
+          ? `Auto productie (${fmtHours(hours)}u)`
+          : `Auto montage (${fmtHours(hours)}u)`;
         btn.onclick = async () => {
           if (!(hours > 0)) {
             alert("Geen resterende uren om automatisch te plannen.");

@@ -2240,3 +2240,8 @@ td.project-two-line .bar.placeholder{
   border-radius:12px;
   background:#fff7ed;
 }
+
+
+/* Verlof bewerken in beschikbaarheidsmodal */
+.absence-existing-row{ cursor:pointer; }
+.cap-planseg.absence{ cursor:pointer; }
