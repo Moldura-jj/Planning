@@ -3844,50 +3844,70 @@ function buildPlanLabel({ pid, sid, type }) {
 
 // --- helper: geplande items voor medewerker op datum ---
 function getPlannedForEmpDate(empIdStr, dateISO) {
-  const out = []; // { type:'productie'|'montage', text:string }
+  const emp = String(empIdStr).trim();
+  const out = []; // { type:'productie'|'montage', text:string, hours:number }
 
-  // 1) sectie assignments (assignMap: sid -> dateISO -> entry)
+  const pushItem = ({ type, text, hours }) => {
+    const h = Number(hours || 0);
+    if (!type || !text || !(h > 0)) return;
+    out.push({ type, text, hours: h });
+  };
+
+  // 1) sectie assignments (section_assignments heeft echte uren per row)
   for (const [sid, dm] of (assignMap || new Map())) {
     const entry = dm?.get(dateISO);
-    if (!entry) continue;
+    if (!entry?.rows) continue;
 
-const emp = String(empIdStr).trim();
+    const sObj = sectById.get(String(sid));
+    const pid = String(sObj?.[sectProjKey] || "").trim();
+    if (!pid) continue;
 
-if (entry.productie?.has(emp)) {
-  const sObj = sectById.get(String(sid));
-  const pid = String(sObj?.[sectProjKey] || "").trim();
-  if (pid) out.push({ type: "productie", text: buildPlanLabel({ pid, sid, type: "productie" }) });
-}
+    for (const r of entry.rows || []) {
+      const rEmp = String(r.werknemer_id ?? "").trim();
+      if (rEmp !== emp) continue;
 
-if (entry.montage?.has(emp)) {
-  const sObj = sectById.get(String(sid));
-  const pid = String(sObj?.[sectProjKey] || "").trim();
-  if (pid) out.push({ type: "montage", text: buildPlanLabel({ pid, sid, type: "montage" }) });
-}
+      const wt = String(r.work_type || "").toLowerCase().trim();
+      if (wt !== "productie" && wt !== "montage") continue;
+
+      pushItem({
+        type: wt,
+        text: buildPlanLabel({ pid, sid, type: wt }),
+        hours: Number(r.hours || 0) || 7.5
+      });
+    }
   }
 
-  // 2) project assignments (projectAssignMap: pid -> dateISO -> entry)
+  // 2) project assignments (geen hours-kolom vereist: standaard hele dag)
   for (const [pid, dm] of (projectAssignMap || new Map())) {
     const entry = dm?.get(dateISO);
-    if (!entry) continue;
+    if (!entry?.rows) continue;
 
-    if (entry.productie?.has(empIdStr)) {
-      out.push({ type: "productie", text: buildPlanLabel({ pid, sid: null, type: "productie" }) });
-    }
-    if (entry.montage?.has(empIdStr)) {
-      out.push({ type: "montage", text: buildPlanLabel({ pid, sid: null, type: "montage" }) });
+    for (const r of entry.rows || []) {
+      const rEmp = String(r.werknemer_id ?? "").trim();
+      if (rEmp !== emp) continue;
+
+      const wt = String(r.work_type || "").toLowerCase().trim();
+      if (wt !== "productie" && wt !== "montage") continue;
+
+      pushItem({
+        type: wt,
+        text: buildPlanLabel({ pid, sid: null, type: wt }),
+        hours: Number(r.hours || 0) || 7.5
+      });
     }
   }
 
-  // kleine dedupe (zelfde tekst/type)
-  const seen = new Set();
-  return out.filter(it => {
+  // gelijke taak/type op dezelfde dag samenvoegen
+  const grouped = new Map();
+  for (const it of out) {
     const k = `${it.type}||${it.text}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+    if (!grouped.has(k)) grouped.set(k, { ...it });
+    else grouped.get(k).hours += Number(it.hours || 0);
+  }
+
+  return Array.from(grouped.values());
 }
+
 
 
   const renderWeek = () => {
@@ -3908,11 +3928,18 @@ formEl.innerHTML = `
 
       const planned = getPlannedForEmpDate(String(empId).trim(), iso);
       const plannedHtml = planned.length
-        ? planned.map(p => `
-            <div class="cap-planchip ${p.type === "montage" ? "mont" : "prod"}">
-              ${String(p.text).replace(/\n/g, "<br>")}
-            </div>
-          `).join("")
+        ? `<div class="cap-planbar">${planned.map(p => {
+            const h = Number(p.hours || 0);
+            const pct = Math.max(0, Math.min(100, (h / 7.5) * 100));
+            const cls = p.type === "montage" ? "mont" : "prod";
+            return `
+              <div class="cap-planchip cap-planseg ${cls}" style="flex-basis:${pct}%;" title="${escapeAttr(formatHoursCell(h))} uur">
+                <div class="cap-planseg-title">${String(p.text).replace(/
+/g, "<br>")}</div>
+                <div class="cap-planseg-hours">${escapeHtml(formatHoursCell(h))}u</div>
+              </div>
+            `;
+          }).join("")}</div>`
         : `<div class="cap-planempty">—</div>`;
 
       return `
