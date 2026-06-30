@@ -3934,8 +3934,7 @@ formEl.innerHTML = `
             const cls = p.type === "montage" ? "mont" : "prod";
             return `
               <div class="cap-planchip cap-planseg ${cls}" style="flex-basis:${pct}%;" title="${escapeAttr(formatHoursCell(h))} uur">
-                <div class="cap-planseg-title">${String(p.text).replace(/
-/g, "<br>")}</div>
+                <div class="cap-planseg-title">${escapeHtml(String(p.text)).replace(/\n/g, "<br>")}</div>
                 <div class="cap-planseg-hours">${escapeHtml(formatHoursCell(h))}u</div>
               </div>
             `;
