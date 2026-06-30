@@ -2671,8 +2671,9 @@ projRow.appendChild(hoursTd);
 // ===== required (bron) uren uit secties optellen =====
 const secsForProj = (sectiesByProject.get(pid) || []);
 
-const req = { prod: 0, cnc: 0, mont: 0, reis: 0 };
+const req = { prep: 0, prod: 0, cnc: 0, mont: 0, reis: 0 };
 for (const s of secsForProj) {
+  req.prep += Number(s?.uren_wvb ?? s?.uren_prep ?? s?.uren_werkvoorbereiding ?? 0);
   req.prod += Number(s?.uren_prod ?? 0);
   req.cnc  += Number(s?.uren_cnc ?? s?.uren_cnc_prod ?? 0);
   req.mont += Number(s?.uren_montage ?? s?.uren_mont ?? 0);
@@ -2681,7 +2682,7 @@ for (const s of secsForProj) {
  
  // ===== planned (gepland) uren voor project (uit assignments) =====
 const pfP = (settings.planFactor ?? 1);
-const plP = { prod: 0, cnc: 0, mont: 0, reis: 0 };
+const plP = { prep: 0, prod: 0, cnc: 0, mont: 0, reis: 0 };
 
 const secsP = (sectiesByProject.get(pid) || []);
 
@@ -2915,6 +2916,7 @@ for (const dd of dates) {
 
       // ===== Sectie uren: required (bron) vs gepland (section_assignments) =====
       const reqS = {
+        prep: Number(s?.uren_wvb ?? s?.uren_prep ?? s?.uren_werkvoorbereiding ?? 0),
         prod: Number(s?.uren_prod ?? 0),
         cnc:  Number(s?.uren_cnc ?? s?.uren_cnc_prod ?? 0),
         mont: Number(s?.uren_montage ?? s?.uren_mont ?? 0),
@@ -2922,7 +2924,7 @@ for (const dd of dates) {
       };
 
       const pfS = (settings.planFactor ?? 1);
-      const plS = { prod: 0, cnc: 0, mont: 0, reis: 0 };
+      const plS = { prep: 0, prod: 0, cnc: 0, mont: 0, reis: 0 };
 
       const sidC = sectLookup.get(String(sid)) || String(sid);
       const dmSec = assignMap.get(sidC);
@@ -7120,33 +7122,31 @@ function fmt0(n){
 }
 
 function miniHoursHtml(req, pl){
-  // req/pl zijn getallen
+  // Linker waarde = bronuren uit sectie/project.
+  // Rechter waarde = gepland. Productie+CNC en Montage+Reis worden hier samengevoegd.
   const f = (n) => escapeHtml(formatHoursCell(Number(n || 0)));
 
-  const limits = {
-    // Productie gebruikt productie + cnc uit bronuren
-    prod: Number(req.prod || 0) + Number(req.cnc || 0),
-    cnc: Number(req.cnc || 0),
-    // Montage gebruikt montage + reis uit bronuren
-    mont: Number(req.mont || 0) + Number(req.reis || 0),
-    reis: Number(req.reis || 0),
-  };
+  const reqWvb  = Number(req.prep ?? req.wvb ?? 0);
+  const reqProd = Number(req.prod || 0) + Number(req.cnc || 0);
+  const reqMont = Number(req.mont || 0) + Number(req.reis || 0);
+
+  const plWvb  = Number(pl.prep ?? pl.wvb ?? 0);
+  const plProd = Number(pl.prod || 0) + Number(pl.cnc || 0);
+  const plMont = Number(pl.mont || 0) + Number(pl.reis || 0);
 
   const over = {
-    prod: Number(pl.prod || 0) > limits.prod,
-    cnc: Number(pl.cnc || 0) > limits.cnc,
-    mont: Number(pl.mont || 0) > limits.mont,
-    reis: Number(pl.reis || 0) > limits.reis,
+    wvb:  plWvb  > reqWvb,
+    prod: plProd > reqProd,
+    mont: plMont > reqMont,
   };
 
   const clsPl = (isOver) => isOver ? "mh-v2 mh-over" : "mh-v2";
 
   return `
-    <div class="mini-hours">
-      <div class="mh-row"><span class="mh-l">Prod.</span><span class="mh-v">${f(req.prod)}</span><span class="mh-sep">|</span><span class="${clsPl(over.prod)}">${f(pl.prod)}</span></div>
-      <div class="mh-row"><span class="mh-l">CNC</span><span class="mh-v">${f(req.cnc)}</span><span class="mh-sep">|</span><span class="${clsPl(over.cnc)}">${f(pl.cnc)}</span></div>
-      <div class="mh-row"><span class="mh-l">Mont.</span><span class="mh-v">${f(req.mont)}</span><span class="mh-sep">|</span><span class="${clsPl(over.mont)}">${f(pl.mont)}</span></div>
-      <div class="mh-row"><span class="mh-l">Reis</span><span class="mh-v">${f(req.reis)}</span><span class="mh-sep">|</span><span class="${clsPl(over.reis)}">${f(pl.reis)}</span></div>
+    <div class="mini-hours mini-hours-combined">
+      <div class="mh-row"><span class="mh-l">Wvb</span><span class="mh-v">${f(reqWvb)}</span><span class="mh-sep">|</span><span class="${clsPl(over.wvb)}">${f(plWvb)}</span></div>
+      <div class="mh-row"><span class="mh-l">Prod.+CNC</span><span class="mh-v">${f(reqProd)}</span><span class="mh-sep">|</span><span class="${clsPl(over.prod)}">${f(plProd)}</span></div>
+      <div class="mh-row"><span class="mh-l">Mont.+Reis</span><span class="mh-v">${f(reqMont)}</span><span class="mh-sep">|</span><span class="${clsPl(over.mont)}">${f(plMont)}</span></div>
     </div>
   `;
 }

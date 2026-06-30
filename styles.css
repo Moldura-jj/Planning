@@ -2147,3 +2147,11 @@ td.project-two-line .bar.placeholder{
   visibility:hidden !important;
   pointer-events:none !important;
 }
+
+/* Urenkolom: gecombineerde regels WVB / Prod+CNC / Mont+Reis */
+.mini-hours.mini-hours-combined .mh-row{
+  grid-template-columns: 58px 1fr 8px 1fr;
+}
+.mini-hours.mini-hours-combined .mh-l{
+  font-size:10.5px;
+}
