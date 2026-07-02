@@ -982,10 +982,38 @@ td.section-click{
   overflow:auto;
 }
 
+.project-edit-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(220px, 1fr));
+  gap:12px;
+  margin-bottom:16px;
+}
+
+.project-edit-grid label{
+  display:grid;
+  gap:5px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.project-edit-grid input{
+  color:var(--text);
+  font-weight:500;
+}
+
+.project-sections-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin:4px 0 10px;
+}
+
 .project-sections-table{
   display:grid;
   gap:0;
-  min-width:760px;
+  min-width:860px;
   border:1px solid var(--line);
   border-radius:10px;
   overflow:hidden;
@@ -994,7 +1022,7 @@ td.section-click{
 .project-sections-head,
 .project-sections-row{
   display:grid;
-  grid-template-columns:minmax(240px, 1.5fr) repeat(5, minmax(82px, .45fr));
+  grid-template-columns:70px minmax(220px, 1.5fr) repeat(5, minmax(82px, .45fr));
   align-items:center;
 }
 
@@ -1032,6 +1060,13 @@ td.section-click{
   padding:7px 8px;
   text-align:right;
   font-variant-numeric:tabular-nums;
+}
+
+.project-section-para,
+.project-section-name-input{
+  width:100%;
+  min-height:34px;
+  padding:7px 8px;
 }
 
 .assign-modal .hd{

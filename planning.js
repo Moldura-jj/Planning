@@ -992,6 +992,7 @@ function asISODate(v){
     const bodyEl = modal.wrap.querySelector("#psmBody");
     const saveBtn = modal.wrap.querySelector("#psmSave");
 
+    const projectRaw = project?.raw || {};
     const projectNr = String(project?.nr || "").trim();
     const projectName = String(project?.name || "").trim();
     if (titleEl) titleEl.textContent = "Project secties";
@@ -1009,17 +1010,55 @@ function asISODate(v){
     const sectionIdKeyForUpdate = keys?.sectIdKey || "id";
     const paraKey = keys?.sectParaKey || "paragraph";
     const nameKey = keys?.sectNameKey || "name";
+    const projIdKeyForUpdate = keys?.projIdKey || "project_id";
+    const projNameKeyForUpdate = keys?.projNameKey || "projectname";
+    const klantKeyForUpdate = keys?.klantKey || "deliveryname";
+    const addressKeyForUpdate = keys?.addressKey || "";
+    const deliveryKeyForUpdate = keys?.deliveryKey || "deliverydate_d";
+    const completionKeyForUpdate = keys?.completionKey || "completiondate_d";
+    const sectProjKeyForInsert = keys?.sectProjKey || "project_id";
+    const includePlanningColForInsert = keys?.includePlanningCol || "";
 
-    const sortedSections = [...(sections || [])].sort((a,b) => {
+    let workingSections = [...(sections || [])].sort((a,b) => {
       const ap = String(a?.[paraKey] ?? a?.paragraph ?? "");
       const bp = String(b?.[paraKey] ?? b?.paragraph ?? "");
       return ap.localeCompare(bp, "nl", { numeric:true, sensitivity:"base" });
     });
 
-    if (bodyEl) {
-      bodyEl.innerHTML = sortedSections.length ? `
+    const renderBody = () => {
+      if (!bodyEl) return;
+      bodyEl.innerHTML = `
+        <div class="project-edit-grid">
+          <label>
+            <span>Projectnaam</span>
+            <input class="input" id="psmProjectName" type="text" value="${escapeAttr(projectName)}" />
+          </label>
+          <label>
+            <span>Klant</span>
+            <input class="input" id="psmCustomer" type="text" value="${escapeAttr(String(projectRaw?.[klantKeyForUpdate] ?? project?.customer ?? ""))}" />
+          </label>
+          <label>
+            <span>Afleveradres</span>
+            <input class="input" id="psmAddress" type="text" value="${escapeAttr(addressKeyForUpdate ? String(projectRaw?.[addressKeyForUpdate] ?? "") : "")}" ${addressKeyForUpdate ? "" : "disabled"} />
+          </label>
+          <label>
+            <span>Leverdatum</span>
+            <input class="input" id="psmDelivery" type="date" value="${escapeAttr(asISODate(projectRaw?.[deliveryKeyForUpdate] ?? ""))}" />
+          </label>
+          <label>
+            <span>Opleverdatum</span>
+            <input class="input" id="psmCompletion" type="date" value="${escapeAttr(asISODate(projectRaw?.[completionKeyForUpdate] ?? ""))}" />
+          </label>
+        </div>
+
+        <div class="project-sections-toolbar">
+          <div class="assign-title">Secties</div>
+          <button class="btn small" id="psmAddSection" type="button">+ Sectie</button>
+        </div>
+
         <div class="project-sections-table">
           <div class="project-sections-head">
+            <div>Nr.</div>
             <div>Sectie</div>
             <div>WVB</div>
             <div>Prod.</div>
@@ -1027,11 +1066,10 @@ function asISODate(v){
             <div>Mont.</div>
             <div>Reis</div>
           </div>
-          ${sortedSections.map(s => {
+          ${workingSections.map((s, idx) => {
             const sid = String(s?.[sectionIdKeyForUpdate] ?? "").trim();
-            const para = String(s?.[paraKey] ?? s?.paragraph ?? "").trim();
+            const para = String(s?.[paraKey] ?? s?.paragraph ?? (idx + 1)).trim();
             const name = String(s?.[nameKey] ?? s?.name ?? s?.naam ?? "").trim();
-            const label = [para, name].filter(Boolean).join(" ");
             const input = (field, value) => `
               <input class="input project-section-hours"
                 type="text"
@@ -1043,7 +1081,8 @@ function asISODate(v){
             `;
             return `
               <div class="project-sections-row" data-section-id="${escapeAttr(sid)}">
-                <div class="project-section-name">${escapeHtml(label || sid || "Sectie")}</div>
+                <div><input class="input project-section-para" type="text" value="${escapeAttr(para)}" /></div>
+                <div><input class="input project-section-name-input" type="text" value="${escapeAttr(name)}" placeholder="Sectienaam" /></div>
                 <div>${input("prep", s?.[col.prep])}</div>
                 <div>${input("prod", s?.[col.prod])}</div>
                 <div>${input("cnc", s?.[col.cnc])}</div>
@@ -1053,28 +1092,66 @@ function asISODate(v){
             `;
           }).join("")}
         </div>
-      ` : `<div class="muted">Geen secties gevonden bij dit project.</div>`;
-    }
+      `;
 
-    bodyEl?.querySelectorAll(".project-section-hours").forEach(inp => {
-      inp.oninput = () => { inp.value = inp.value.replace(/[^0-9.,]/g, ""); };
-      inp.onblur = () => { inp.value = inp.value.replace(".", ","); };
-    });
+      bodyEl.querySelectorAll(".project-section-hours").forEach(inp => {
+        inp.oninput = () => { inp.value = inp.value.replace(/[^0-9.,]/g, ""); };
+        inp.onblur = () => { inp.value = inp.value.replace(".", ","); };
+      });
+
+      const addBtn = bodyEl.querySelector("#psmAddSection");
+      if (addBtn) {
+        addBtn.onclick = () => {
+          workingSections.push({
+            [paraKey]: String(workingSections.length + 1).padStart(2, "0"),
+            [nameKey]: "",
+            [col.prep]: 0,
+            [col.prod]: 0,
+            [col.cnc]: 0,
+            [col.mont]: 0,
+            [col.reis]: 0,
+          });
+          renderBody();
+          setTimeout(() => bodyEl.querySelector(".project-sections-row:last-child .project-section-name-input")?.focus(), 0);
+        };
+      }
+    };
+
+    renderBody();
 
     if (saveBtn) {
       saveBtn.onclick = async () => {
         const bySection = new Map();
-        bodyEl?.querySelectorAll(".project-section-hours[data-section-id]").forEach(inp => {
-          const sid = String(inp.dataset.sectionId || "").trim();
-          const column = String(inp.dataset.col || "").trim();
-          if (!sid || !column) return;
-          if (!bySection.has(sid)) bySection.set(sid, {});
-          bySection.get(sid)[column] = parseHoursInput(inp.value);
+        const newSections = [];
+        bodyEl?.querySelectorAll(".project-sections-row").forEach(row => {
+          const sid = String(row.dataset.sectionId || "").trim();
+          const payload = {};
+          payload[paraKey] = String(row.querySelector(".project-section-para")?.value || "").trim();
+          payload[nameKey] = String(row.querySelector(".project-section-name-input")?.value || "").trim();
+          row.querySelectorAll(".project-section-hours").forEach(inp => {
+            const column = String(inp.dataset.col || "").trim();
+            if (column) payload[column] = parseHoursInput(inp.value);
+          });
+          if (sid) bySection.set(sid, payload);
+          else if (payload[nameKey] || payload[paraKey]) newSections.push(payload);
         });
 
         saveBtn.disabled = true;
         saveBtn.textContent = "Opslaan...";
         try {
+          const projectPayload = {};
+          projectPayload[projNameKeyForUpdate] = String(bodyEl.querySelector("#psmProjectName")?.value || "").trim();
+          projectPayload[klantKeyForUpdate] = String(bodyEl.querySelector("#psmCustomer")?.value || "").trim();
+          if (addressKeyForUpdate) projectPayload[addressKeyForUpdate] = String(bodyEl.querySelector("#psmAddress")?.value || "").trim() || null;
+          if (deliveryKeyForUpdate) projectPayload[deliveryKeyForUpdate] = String(bodyEl.querySelector("#psmDelivery")?.value || "").trim() || null;
+          if (completionKeyForUpdate) projectPayload[completionKeyForUpdate] = String(bodyEl.querySelector("#psmCompletion")?.value || "").trim() || null;
+
+          const updProject = await sb
+            .from("projecten")
+            .update(projectPayload)
+            .eq(projIdKeyForUpdate, project.id);
+          if (updProject.error) throw updProject.error;
+
           for (const [sid, payload] of bySection.entries()) {
             const res = await sb
               .from("secties")
@@ -1082,10 +1159,19 @@ function asISODate(v){
               .eq(sectionIdKeyForUpdate, sid);
             if (res.error) throw res.error;
           }
+          if (newSections.length) {
+            const rows = newSections.map(payload => ({
+              ...payload,
+              [sectProjKeyForInsert]: project.id,
+              ...(includePlanningColForInsert ? { [includePlanningColForInsert]: true } : {})
+            }));
+            const ins = await sb.from("secties").insert(rows);
+            if (ins.error) throw ins.error;
+          }
           modal.close();
           await loadAndRender();
         } catch (e) {
-          alert("Fout opslaan sectie-uren: " + (e?.message || e));
+          alert("Fout opslaan projectgegevens: " + (e?.message || e));
         } finally {
           saveBtn.disabled = false;
           saveBtn.textContent = "Opslaan";
@@ -5042,6 +5128,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
 
       ev.stopPropagation();
       const projectMeta = projById.get(pid) || projMetaById.get(pid) || {};
+      const projectRow = (projecten || []).find(p => String(p?.[projIdKey] ?? "").trim() === pid) || {};
       const projectSections = (secties || [])
         .filter(s => String(s?.[sectProjKey] ?? "").trim() === pid);
 
@@ -5050,12 +5137,22 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
           id: pid,
           nr: projectMeta.nr || "",
           name: projectMeta.nm || projectMeta.name || "",
+          customer: projectRow?.[klantKey] || "",
+          raw: projectRow,
         },
         sections: projectSections,
         keys: {
+          projIdKey,
+          projNameKey,
+          klantKey,
+          addressKey,
+          deliveryKey,
+          completionKey,
+          sectProjKey,
           sectIdKey,
           sectNameKey,
           sectParaKey,
+          includePlanningCol,
         }
       });
       return;
