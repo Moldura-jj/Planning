@@ -88,9 +88,21 @@
         <div class="settings-section-head">
           <div>
             <div class="field-label">Vaste medewerkers</div>
-            <div class="field-help">Weekuren worden over maandag t/m vrijdag verdeeld in de zichtbare planning.</div>
+            <div class="field-help">Vul de beschikbare uren per dag in. Gebruik doorvoeren om deze week te herhalen.</div>
           </div>
           <button class="btn small" id="btnEmployeeAdd" type="button">+ Medewerker</button>
+        </div>
+
+        <div class="settings-weekbar">
+          <button class="btn small" id="settingsEmpPrevWeek" type="button">◀ Week</button>
+          <div class="settings-weeklabel" id="settingsEmpWeekLabel">Week --</div>
+          <button class="btn small" id="settingsEmpNextWeek" type="button">Week ▶</button>
+        </div>
+
+        <div class="settings-applybar">
+          <button class="btn small" id="settingsEmpApplyEven" type="button">Doorvoeren in even weken</button>
+          <button class="btn small" id="settingsEmpApplyOdd" type="button">Doorvoeren in oneven weken</button>
+          <button class="btn small" id="settingsEmpApplyAll" type="button">Doorvoeren in alle weken</button>
         </div>
 
         <div class="settings-employees" id="settingsEmployees">

@@ -1021,7 +1021,7 @@ td.section-click{
   top:50% !important;
   transform:translate(-50%, -50%) !important;
   z-index:5001 !important;
-  width:min(760px, calc(100vw - 24px)) !important;
+  width:min(1080px, calc(100vw - 24px)) !important;
   max-height:calc(100vh - 24px) !important;
   overflow:auto !important;
 }
@@ -1041,18 +1041,41 @@ td.section-click{
   margin-bottom:10px;
 }
 
-.settings-employees{
+.settings-weekbar{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  gap:10px;
+  align-items:center;
+  margin:10px 0;
+}
+
+.settings-weeklabel{
+  text-align:center;
+  color:var(--muted);
+  font-weight:700;
+}
+
+.settings-applybar{
   display:flex;
-  flex-direction:column;
+  gap:8px;
+  flex-wrap:wrap;
+  margin:0 0 12px;
+}
+
+.settings-employees{
+  display:grid;
   gap:6px;
+  overflow:auto;
+  padding-bottom:2px;
 }
 
 .settings-employee-head,
 .settings-employee-row{
   display:grid;
-  grid-template-columns:minmax(220px, 1fr) 120px;
+  grid-template-columns:minmax(220px, 1.3fr) repeat(7, minmax(72px, .45fr));
   gap:8px;
   align-items:center;
+  min-width:820px;
 }
 
 .settings-employee-head{

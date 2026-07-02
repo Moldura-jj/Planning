@@ -302,6 +302,7 @@ const defaultSettings = {
 
   let settings = loadSettings();
   let settingsEmployeesSnapshot = [];
+  let settingsEmployeeWeekStart = startOfISOWeek(new Date(rangeStart));
 
   function getEmployeeDisplayName(row){
     return String(row?.naam ?? row?.name ?? row?.fullname ?? row?.display_name ?? "").trim();
@@ -324,6 +325,12 @@ const defaultSettings = {
     if (!box) return;
 
     box.innerHTML = `<div class="muted">Medewerkers laden...</div>`;
+    const weekDays = buildSettingsEmployeeWeekDays();
+    const startISO = toISODate(weekDays[0]);
+    const endISO = toISODate(weekDays[6]);
+    const weekLabel = el("settingsEmpWeekLabel");
+    if (weekLabel) weekLabel.textContent = `Week ${weekNumberISO(weekDays[0])}`;
+
     const { data, error } = await sb
       .from("werknemers")
       .select("*")
@@ -335,32 +342,74 @@ const defaultSettings = {
       return;
     }
 
+    const employeeIds = (data || [])
+      .filter(w => String(w?.id) !== String(DUMMY_EMP_ID))
+      .map(w => Number(getEmployeeId(w)))
+      .filter(Number.isFinite);
+
+    let capacityMap = new Map();
+    if (employeeIds.length) {
+      const capRes = await sb
+        .from("capacity_entries")
+        .select("werknemer_id, work_date, hours")
+        .in("werknemer_id", employeeIds)
+        .eq("type", "werk")
+        .gte("work_date", startISO)
+        .lte("work_date", endISO)
+        .limit(5000);
+
+      if (!capRes.error) {
+        for (const r of capRes.data || []) {
+          const empId = String(r.werknemer_id ?? "").trim();
+          const iso = String(r.work_date || "").slice(0,10);
+          if (!capacityMap.has(empId)) capacityMap.set(empId, new Map());
+          capacityMap.get(empId).set(iso, Number(r.hours || 0));
+        }
+      }
+    }
+
     settingsEmployeesSnapshot = (data || [])
       .filter(w => String(w?.id) !== String(DUMMY_EMP_ID))
-      .map(w => ({
-        id: getEmployeeId(w),
-        idField: getEmployeeIdField(w),
-        name: getEmployeeDisplayName(w),
-        weekHours: Number(settings.employeeWeeklyHours?.[getEmployeeId(w)] || 0),
-        isNew: false
-      }));
+      .map(w => {
+        const empId = getEmployeeId(w);
+        const dm = capacityMap.get(empId) || new Map();
+        return {
+          id: empId,
+          idField: getEmployeeIdField(w),
+          name: getEmployeeDisplayName(w),
+          dayHours: weekDays.map(d => Number(dm.get(toISODate(d)) || 0)),
+          isNew: false
+        };
+      });
 
     renderSettingsEmployees();
+  }
+
+  function buildSettingsEmployeeWeekDays(){
+    return Array.from({ length: 7 }, (_, i) => addDays(settingsEmployeeWeekStart, i));
   }
 
   function renderSettingsEmployees(){
     const box = el("settingsEmployees");
     if (!box) return;
+    const weekDays = buildSettingsEmployeeWeekDays();
 
     box.innerHTML = `
       <div class="settings-employee-head">
         <div>Naam</div>
-        <div>Uren/week</div>
+        ${weekDays.map(d => `<div>${dayNameNL(d.getDay())}<br>${d.getDate()}-${d.getMonth()+1}</div>`).join("")}
       </div>
       ${settingsEmployeesSnapshot.map((w, idx) => `
         <div class="settings-employee-row" data-index="${idx}">
           <input class="input settings-employee-name" type="text" value="${escapeAttr(w.name)}" placeholder="Naam medewerker" />
-          <input class="input settings-employee-hours" type="text" inputmode="decimal" value="${escapeAttr(w.weekHours ? fmtHours(w.weekHours) : "")}" placeholder="37,5" />
+          ${weekDays.map((d, dayIdx) => `
+            <input class="input settings-employee-hours"
+              type="text"
+              inputmode="decimal"
+              data-day-index="${dayIdx}"
+              value="${escapeAttr(Number(w.dayHours?.[dayIdx] || 0) ? fmtHours(Number(w.dayHours?.[dayIdx] || 0)) : "")}"
+              placeholder="${isWeekend(d) ? "0" : "7,5"}" />
+          `).join("")}
         </div>
       `).join("") || `<div class="muted">Nog geen vaste medewerkers.</div>`}
     `;
@@ -379,34 +428,33 @@ const defaultSettings = {
       const idx = Number(row.dataset.index || -1);
       const old = settingsEmployeesSnapshot[idx] || {};
       const name = String(row.querySelector(".settings-employee-name")?.value || "").trim();
-      const weekHours = parseHoursInput(row.querySelector(".settings-employee-hours")?.value || "");
-      return { ...old, name, weekHours };
+      const dayHours = Array.from(row.querySelectorAll(".settings-employee-hours"))
+        .map(inp => parseHoursInput(inp.value || ""));
+      return { ...old, name, dayHours };
     }).filter(w => w.name);
   }
 
-  function buildFixedCapacityRowsForVisibleRange(empId, weekHours){
+  function buildFixedCapacityRowsForWeek(empId, weekStart, dayHours){
     const rows = [];
-    const weekly = Number(weekHours || 0);
-    if (!(weekly > 0)) return rows;
-
-    const perWorkday = Math.round((weekly / 5) * 100) / 100;
-    const start = new Date(rangeStart);
-    for (let i = 0; i < RANGE_DAYS; i++) {
-      const d = addDays(start, i);
-      if (isWeekend(d)) continue;
+    for (let i = 0; i < 7; i++) {
+      const d = addDays(weekStart, i);
+      const h = Number(dayHours?.[i] || 0);
+      if (!(h > 0)) continue;
       rows.push({
         work_date: toISODate(d),
         werknemer_id: Number(empId),
-        hours: perWorkday,
+        hours: Math.round(h * 100) / 100,
         type: "werk"
       });
     }
     return rows;
   }
 
-  async function saveSettingsEmployees(){
+  async function saveSettingsEmployees(applyMode = "week"){
     const rows = readSettingsEmployees();
     const nextWeekly = {};
+    const currentWeekStart = new Date(settingsEmployeeWeekStart);
+    const visibleEnd = addDays(new Date(rangeStart), RANGE_DAYS - 1);
 
     for (const row of rows) {
       let empId = String(row.id || "").trim();
@@ -426,11 +474,27 @@ const defaultSettings = {
         if (upd.error) throw new Error("Medewerker bijwerken: " + upd.error.message);
       }
 
-      if (empId && row.weekHours > 0) nextWeekly[empId] = row.weekHours;
+      const weekTotal = (row.dayHours || []).reduce((sum, h) => sum + Number(h || 0), 0);
+      if (empId && weekTotal > 0) nextWeekly[empId] = weekTotal;
 
-      if (empId && row.weekHours > 0) {
-        const startISO = toISODate(new Date(rangeStart));
-        const endISO = toISODate(addDays(new Date(rangeStart), RANGE_DAYS - 1));
+      if (empId) {
+        const weekStarts = [currentWeekStart];
+        if (applyMode !== "week") {
+          let iter = addDays(currentWeekStart, 7);
+          while (iter <= visibleEnd) {
+            const wkNr = weekNumberISO(iter);
+            const ok =
+              applyMode === "all" ||
+              (applyMode === "even" && wkNr % 2 === 0) ||
+              (applyMode === "odd" && wkNr % 2 === 1);
+            if (ok) weekStarts.push(iter);
+            iter = addDays(iter, 7);
+          }
+        }
+
+        for (const wkStart of weekStarts) {
+          const startISO = toISODate(wkStart);
+          const endISO = toISODate(addDays(wkStart, 6));
         const del = await sb
           .from("capacity_entries")
           .delete()
@@ -440,10 +504,11 @@ const defaultSettings = {
           .lte("work_date", endISO);
         if (del.error) throw new Error("Capaciteit verwijderen: " + del.error.message);
 
-        const capRows = buildFixedCapacityRowsForVisibleRange(empId, row.weekHours);
+          const capRows = buildFixedCapacityRowsForWeek(empId, wkStart, row.dayHours);
         if (capRows.length) {
           const insCap = await sb.from("capacity_entries").insert(capRows);
           if (insCap.error) throw new Error("Capaciteit opslaan: " + insCap.error.message);
+        }
         }
       }
     }
@@ -456,6 +521,7 @@ const defaultSettings = {
     const back = el("settingsBackdrop");
     const slider = el("planFactor");
     const label = el("planFactorLabel");
+    settingsEmployeeWeekStart = startOfISOWeek(new Date(rangeStart));
 
     slider.value = Math.round((settings.planFactor ?? 0.8) * 100);
     label.textContent = `${slider.value}%`;
@@ -537,7 +603,7 @@ function buildPlannedSetsByDay(planningItems){
     el("btnSettingsCancel")?.addEventListener("click", closeSettingsModal);
     el("settingsBackdrop")?.addEventListener("click", closeSettingsModal);
     el("btnEmployeeAdd")?.addEventListener("click", () => {
-      settingsEmployeesSnapshot.push({ id: "", name: "", weekHours: 37.5, isNew: true });
+      settingsEmployeesSnapshot.push({ id: "", name: "", dayHours: [7.5, 7.5, 7.5, 7.5, 7.5, 0, 0], isNew: true });
       renderSettingsEmployees();
       setTimeout(() => {
         const rows = el("settingsEmployees")?.querySelectorAll(".settings-employee-row");
@@ -546,7 +612,17 @@ function buildPlannedSetsByDay(planningItems){
       }, 0);
     });
 
-    el("btnSettingsSave")?.addEventListener("click", async () => {
+    el("settingsEmpPrevWeek")?.addEventListener("click", async () => {
+      settingsEmployeeWeekStart = addDays(settingsEmployeeWeekStart, -7);
+      await loadSettingsEmployees();
+    });
+
+    el("settingsEmpNextWeek")?.addEventListener("click", async () => {
+      settingsEmployeeWeekStart = addDays(settingsEmployeeWeekStart, 7);
+      await loadSettingsEmployees();
+    });
+
+    const saveSettingsFromModal = async (applyMode = "week") => {
       const btn = el("btnSettingsSave");
       if (btn) {
         btn.disabled = true;
@@ -563,7 +639,7 @@ function buildPlannedSetsByDay(planningItems){
       settings.orderTypeFilter = picked;
 
       try {
-        await saveSettingsEmployees();
+        await saveSettingsEmployees(applyMode);
         saveSettings(settings);
         closeSettingsModal();
         refreshAfterSettingsChange();
@@ -575,7 +651,12 @@ function buildPlannedSetsByDay(planningItems){
           btn.textContent = "Opslaan";
         }
       }
-    });
+    };
+
+    el("btnSettingsSave")?.addEventListener("click", () => saveSettingsFromModal("week"));
+    el("settingsEmpApplyEven")?.addEventListener("click", () => saveSettingsFromModal("even"));
+    el("settingsEmpApplyOdd")?.addEventListener("click", () => saveSettingsFromModal("odd"));
+    el("settingsEmpApplyAll")?.addEventListener("click", () => saveSettingsFromModal("all"));
 
   }
 async function fillOrderTypeFilterUI(){
