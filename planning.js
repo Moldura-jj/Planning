@@ -302,7 +302,7 @@ const defaultSettings = {
 
   let settings = loadSettings();
   let settingsEmployeesSnapshot = [];
-  let settingsEmployeeWeekStart = startOfISOWeek(new Date(rangeStart));
+  let settingsEmployeeWeekStart = null;
 
   function getEmployeeDisplayName(row){
     return String(row?.naam ?? row?.name ?? row?.fullname ?? row?.display_name ?? "").trim();
@@ -386,6 +386,7 @@ const defaultSettings = {
   }
 
   function buildSettingsEmployeeWeekDays(){
+    if (!settingsEmployeeWeekStart) settingsEmployeeWeekStart = startOfISOWeek(new Date());
     return Array.from({ length: 7 }, (_, i) => addDays(settingsEmployeeWeekStart, i));
   }
 
