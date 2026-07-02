@@ -940,6 +940,7 @@ function asISODate(v){
   }
 
   let projectSectionsModal = null;
+  let latestNewProjectContext = null;
 
   function ensureProjectSectionsModal(){
     if (projectSectionsModal) return projectSectionsModal;
@@ -1093,6 +1094,236 @@ function asISODate(v){
     }
 
     modal.wrap.classList.add("show");
+  }
+
+  let newProjectModal = null;
+
+  function ensureNewProjectModal(){
+    if (newProjectModal) return newProjectModal;
+
+    const wrap = document.createElement("div");
+    wrap.className = "modal-backdrop";
+    wrap.innerHTML = `
+      <div class="modal new-project-modal" role="dialog" aria-modal="true">
+        <div class="hd">
+          <div>
+            <div class="assign-title">Nieuw project</div>
+            <div class="assign-sub">Projectgegevens en secties toevoegen</div>
+          </div>
+          <button class="btn small" id="npmClose" type="button">✕</button>
+        </div>
+        <div class="bd">
+          <div class="new-project-grid">
+            <label>
+              <span>Projectnummer</span>
+              <input class="input" id="npmNumber" type="text" />
+            </label>
+            <label>
+              <span>Projectnaam</span>
+              <input class="input" id="npmName" type="text" />
+            </label>
+            <label>
+              <span>Klant</span>
+              <input class="input" id="npmCustomer" type="text" />
+            </label>
+            <label>
+              <span>Afleveradres</span>
+              <input class="input" id="npmAddress" type="text" />
+            </label>
+            <label>
+              <span>Leverdatum</span>
+              <input class="input" id="npmDelivery" type="date" />
+            </label>
+            <label>
+              <span>Opleverdatum</span>
+              <input class="input" id="npmCompletion" type="date" />
+            </label>
+          </div>
+
+          <div class="new-project-section-head">
+            <div>
+              <div class="assign-title">Secties</div>
+              <div class="assign-sub">Voeg minimaal één sectie toe.</div>
+            </div>
+            <button class="btn small" id="npmAddSection" type="button">+ Sectie</button>
+          </div>
+
+          <div id="npmSections" class="new-project-sections"></div>
+        </div>
+        <div class="ft">
+          <button class="btn" id="npmCancel" type="button">Annuleren</button>
+          <button class="btn primary" id="npmSave" type="button">Opslaan</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(wrap);
+    const close = () => wrap.classList.remove("show");
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    wrap.querySelector("#npmClose").onclick = close;
+    wrap.querySelector("#npmCancel").onclick = close;
+    newProjectModal = { wrap, close };
+    return newProjectModal;
+  }
+
+  function renderNewProjectSections(modal, sections){
+    const box = modal.wrap.querySelector("#npmSections");
+    if (!box) return;
+
+    box.innerHTML = `
+      <div class="new-project-sections-head">
+        <div>Nr.</div>
+        <div>Sectienaam</div>
+        <div>WVB</div>
+        <div>Prod.</div>
+        <div>CNC</div>
+        <div>Mont.</div>
+        <div>Reis</div>
+        <div></div>
+      </div>
+      ${sections.map((s, idx) => `
+        <div class="new-project-section-row" data-index="${idx}">
+          <input class="input npm-section-paragraph" type="text" value="${escapeAttr(s.paragraph || String(idx + 1).padStart(2, "0"))}" />
+          <input class="input npm-section-name" type="text" value="${escapeAttr(s.name || "")}" placeholder="Sectienaam" />
+          <input class="input npm-section-hours" data-field="prep" type="text" inputmode="decimal" value="${escapeAttr(s.prep || "")}" />
+          <input class="input npm-section-hours" data-field="prod" type="text" inputmode="decimal" value="${escapeAttr(s.prod || "")}" />
+          <input class="input npm-section-hours" data-field="cnc" type="text" inputmode="decimal" value="${escapeAttr(s.cnc || "")}" />
+          <input class="input npm-section-hours" data-field="mont" type="text" inputmode="decimal" value="${escapeAttr(s.mont || "")}" />
+          <input class="input npm-section-hours" data-field="reis" type="text" inputmode="decimal" value="${escapeAttr(s.reis || "")}" />
+          <button class="btn small npm-section-remove" type="button" ${sections.length <= 1 ? "disabled" : ""}>✕</button>
+        </div>
+      `).join("")}
+    `;
+
+    box.querySelectorAll(".npm-section-hours").forEach(inp => {
+      inp.oninput = () => { inp.value = inp.value.replace(/[^0-9.,]/g, ""); };
+      inp.onblur = () => { inp.value = inp.value.replace(".", ","); };
+    });
+
+    box.querySelectorAll(".npm-section-remove").forEach(btn => {
+      btn.onclick = () => {
+        const idx = Number(btn.closest(".new-project-section-row")?.dataset.index || -1);
+        if (idx < 0 || sections.length <= 1) return;
+        sections.splice(idx, 1);
+        renderNewProjectSections(modal, sections);
+      };
+    });
+  }
+
+  function readNewProjectSections(modal){
+    return Array.from(modal.wrap.querySelectorAll(".new-project-section-row")).map(row => {
+      const get = (sel) => String(row.querySelector(sel)?.value || "").trim();
+      const hours = (field) => parseHoursInput(row.querySelector(`.npm-section-hours[data-field="${field}"]`)?.value || "");
+      return {
+        paragraph: get(".npm-section-paragraph"),
+        name: get(".npm-section-name"),
+        prep: hours("prep"),
+        prod: hours("prod"),
+        cnc: hours("cnc"),
+        mont: hours("mont"),
+        reis: hours("reis"),
+      };
+    }).filter(s => s.name || s.paragraph);
+  }
+
+  function hasColumn(sample, key){
+    return !!sample && !!key && Object.prototype.hasOwnProperty.call(sample, key);
+  }
+
+  function firstExistingKey(sample, keys){
+    if (!sample) return "";
+    return keys.find(k => Object.prototype.hasOwnProperty.call(sample, k)) || "";
+  }
+
+  function openNewProjectModal(){
+    const ctx = latestNewProjectContext;
+    if (!ctx) {
+      alert("Projectgegevens zijn nog niet geladen. Probeer het opnieuw na het laden van de planning.");
+      return;
+    }
+
+    const modal = ensureNewProjectModal();
+    const sections = [{ paragraph: "01", name: "" }];
+
+    ["npmNumber", "npmName", "npmCustomer", "npmAddress", "npmDelivery", "npmCompletion"].forEach(id => {
+      const input = modal.wrap.querySelector(`#${id}`);
+      if (input) input.value = "";
+    });
+    renderNewProjectSections(modal, sections);
+
+    modal.wrap.querySelector("#npmAddSection").onclick = () => {
+      sections.push({ paragraph: String(sections.length + 1).padStart(2, "0"), name: "" });
+      renderNewProjectSections(modal, sections);
+      setTimeout(() => modal.wrap.querySelector(".new-project-section-row:last-child .npm-section-name")?.focus(), 0);
+    };
+
+    modal.wrap.querySelector("#npmSave").onclick = async () => {
+      const btn = modal.wrap.querySelector("#npmSave");
+      const projectNumber = String(modal.wrap.querySelector("#npmNumber")?.value || "").trim();
+      const projectName = String(modal.wrap.querySelector("#npmName")?.value || "").trim();
+      const customer = String(modal.wrap.querySelector("#npmCustomer")?.value || "").trim();
+      const address = String(modal.wrap.querySelector("#npmAddress")?.value || "").trim();
+      const delivery = String(modal.wrap.querySelector("#npmDelivery")?.value || "").trim();
+      const completion = String(modal.wrap.querySelector("#npmCompletion")?.value || "").trim();
+      const sectionRows = readNewProjectSections(modal);
+
+      if (!projectNumber) { alert("Vul een projectnummer in."); return; }
+      if (!projectName) { alert("Vul een projectnaam in."); return; }
+      if (!customer) { alert("Vul een klant in."); return; }
+      if (!sectionRows.length) { alert("Voeg minimaal één sectie toe."); return; }
+
+      btn.disabled = true;
+      btn.textContent = "Opslaan...";
+
+      try {
+        const pPayload = {};
+        pPayload[ctx.projNrKey] = projectNumber;
+        pPayload[ctx.projNameKey] = projectName;
+        pPayload[ctx.klantKey] = customer;
+        if (hasColumn(ctx.projectSample, ctx.deliveryKey)) pPayload[ctx.deliveryKey] = delivery || null;
+        if (hasColumn(ctx.projectSample, ctx.completionKey)) pPayload[ctx.completionKey] = completion || null;
+        if (ctx.addressKey) pPayload[ctx.addressKey] = address || null;
+        if (hasColumn(ctx.projectSample, "salesstatus")) pPayload.salesstatus = 2;
+
+        const insProject = await sb
+          .from("projecten")
+          .insert(pPayload)
+          .select(ctx.projIdKey)
+          .single();
+        if (insProject.error) throw new Error("Project opslaan: " + insProject.error.message);
+
+        const newProjectId = insProject.data?.[ctx.projIdKey];
+        if (!newProjectId) throw new Error("Project is opgeslagen, maar het project-id kon niet worden gelezen.");
+
+        const sPayloads = sectionRows.map((s, idx) => {
+          const row = {};
+          row[ctx.sectProjKey] = newProjectId;
+          row[ctx.sectNameKey] = s.name || `Sectie ${idx + 1}`;
+          row[ctx.sectParaKey] = s.paragraph || String(idx + 1).padStart(2, "0");
+          row[ctx.sectionHoursKeys.prep] = s.prep;
+          row[ctx.sectionHoursKeys.prod] = s.prod;
+          row[ctx.sectionHoursKeys.cnc] = s.cnc;
+          row[ctx.sectionHoursKeys.mont] = s.mont;
+          row[ctx.sectionHoursKeys.reis] = s.reis;
+          if (ctx.includePlanningCol) row[ctx.includePlanningCol] = true;
+          return row;
+        });
+
+        const insSections = await sb.from("secties").insert(sPayloads);
+        if (insSections.error) throw new Error("Secties opslaan: " + insSections.error.message);
+
+        modal.close();
+        await loadAndRender();
+      } catch (e) {
+        alert(String(e?.message || e));
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Opslaan";
+      }
+    };
+
+    modal.wrap.classList.add("show");
+    setTimeout(() => modal.wrap.querySelector("#npmNumber")?.focus(), 0);
   }
 
   // -------- ASSIGNMENTS MODAL (productie/montage + collega's) --------
@@ -2641,6 +2872,7 @@ const projIdKey = pickKey(projecten[0], ["project_id","id"]);
 const projNrKey = pickKey(projecten[0], ["offerno","projectnr","project_nr","nummer","nr"]);
 const projNameKey = pickKey(projecten[0], ["projectname","naam","name","omschrijving","titel","title"]);
 const klantKey = pickKey(projecten[0], ["deliveryname", "klantnaam","klant_name","klant","customer","relatie"]);
+const addressKey = firstExistingKey(projecten[0], ["deliveryaddress","delivery_address","afleveradres","aflever_adres","address","adres"]);
 
     const completionKey = pickKey(projecten[0], ["completiondate_d","completiondate","completion_date","opleverdatum","end_date"]);
     const deliveryKey   = pickKey(projecten[0], ["deliverydate_d","deliverydate","delivery_date","leverdatum"]);
@@ -2651,6 +2883,30 @@ const klantKey = pickKey(projecten[0], ["deliveryname", "klantnaam","klant_name"
     const sectProjKey = pickKey(secties[0], ["project_id","projectid","project","project_ref"]);
     const sectNameKey = pickKey(secties[0], ["name","naam","section_name","sectionname","titel","title","omschrijving","description"]);
     const sectParaKey = pickKey(secties[0], ["paragraph","paragraaf","sectienr","sectie_nr"]);
+    const sectionHoursKeys = {
+      prep: pickKey(secties[0], ["uren_wvb", "uren_prep", "uren_werkvoorbereiding"]),
+      prod: pickKey(secties[0], ["uren_prod"]),
+      cnc: pickKey(secties[0], ["uren_cnc", "uren_cnc_prod", "cnc_uren"]),
+      mont: pickKey(secties[0], ["uren_montage", "uren_mont"]),
+      reis: pickKey(secties[0], ["uren_reis", "reis_uren"]),
+    };
+
+    latestNewProjectContext = {
+      projectSample: projecten?.[0] || {},
+      sectionSample: secties?.[0] || {},
+      projIdKey,
+      projNrKey,
+      projNameKey,
+      klantKey,
+      addressKey,
+      deliveryKey,
+      completionKey,
+      sectProjKey,
+      sectNameKey,
+      sectParaKey,
+      sectionHoursKeys,
+      includePlanningCol: getIncludePlanningColumn(secties || []),
+    };
 
 
     console.log("secties keys:", Object.keys(secties?.[0] || {}));
@@ -3526,7 +3782,10 @@ trMonth.appendChild(hdrCell("", `hdr-cell hourscol sticky-top sticky-left2 ${hou
     // Row: weeks
     const trWeek = document.createElement("tr");
     trWeek.className = "hdr hdr-week";
-    trWeek.appendChild(hdrCell("", "rowhdr sticky-left sticky-top2"));
+    trWeek.appendChild(hdrCell(
+      `<button type="button" class="btn small btn-new-project" id="btnNewProject" title="Nieuw project toevoegen">+ Project</button>`,
+      "rowhdr sticky-left sticky-top2"
+    ));
     trWeek.appendChild(hdrCell("", `hdr-cell hourscol sticky-top2 sticky-left2 ${hoursColOpen ? "" : "hourscol-collapsed"}`.trim()));
 
     let j=0;
@@ -4570,6 +4829,13 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
   }
     // click on section cell -> assignments modal
     gridEl.onclick = async (ev) => {
+
+    const newProjectBtn = ev.target.closest("#btnNewProject");
+    if (newProjectBtn) {
+      ev.stopPropagation();
+      openNewProjectModal();
+      return;
+    }
 
 
           // ✅ klik op dagheader => dagmodal

@@ -905,6 +905,79 @@ td.section-click{
   flex-direction:column;
 }
 
+.modal.new-project-modal{
+  width:min(980px, calc(100vw - 24px));
+  max-height:88vh;
+  display:flex;
+  flex-direction:column;
+}
+
+.new-project-modal .bd{
+  overflow:auto;
+}
+
+.btn-new-project{
+  min-height:22px;
+  padding:2px 9px;
+  border-radius:7px;
+  font-size:12px;
+  line-height:1.2;
+}
+
+.new-project-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+
+.new-project-grid label{
+  display:grid;
+  gap:5px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.new-project-grid input{
+  color:var(--text);
+  font-weight:500;
+}
+
+.new-project-section-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin:18px 0 10px;
+}
+
+.new-project-sections{
+  display:grid;
+  gap:6px;
+  overflow:auto;
+}
+
+.new-project-sections-head,
+.new-project-section-row{
+  display:grid;
+  grid-template-columns:70px minmax(200px, 1fr) repeat(5, minmax(72px, .4fr)) 42px;
+  gap:8px;
+  align-items:center;
+  min-width:820px;
+}
+
+.new-project-sections-head{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  padding:0 2px;
+}
+
+.new-project-section-row .npm-section-hours{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
 .project-sections-modal .bd{
   overflow:auto;
 }
