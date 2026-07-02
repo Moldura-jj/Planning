@@ -97,6 +97,14 @@ a{ color:inherit; text-decoration:none; }
   letter-spacing:.1px;
 }
 
+.app-logo-img{
+  display:block;
+  height:36px;
+  width:auto;
+  max-width:180px;
+  object-fit:contain;
+}
+
 .nav-projects{
   min-height:38px;
   display:inline-flex;
