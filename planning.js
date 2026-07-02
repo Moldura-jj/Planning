@@ -146,19 +146,23 @@ document.addEventListener("keydown", (e) => {
     projects: new Set(),
     sections: new Set(),
     orders: new Set(), // key: `${sid}||${bn}`
-    caps: new Set(),
+    caps: new Set(["cap"]),
   };
 
 function captureOpenState(){
+  const capButtons = gridEl
+    ? Array.from(gridEl.querySelectorAll('.cap-expander[data-cap]'))
+    : [];
+
   const st = {
     projects: new Set(),
     sections: new Set(),
     orders: new Set(),
-    caps: new Set(),        // ✅ deze miste
+    caps: capButtons.length ? new Set() : new Set(openState.caps || []),
   };
 
   // capaciteit (betrouwbaar: kijk naar het symbool)
-  gridEl?.querySelectorAll('.cap-expander[data-cap]').forEach(b=>{
+  capButtons.forEach(b=>{
     if (b.textContent === "▼") {
       const key = String(b.dataset.cap || "");
       if (key) st.caps.add(key);
