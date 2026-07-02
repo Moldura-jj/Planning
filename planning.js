@@ -516,6 +516,25 @@ const defaultSettings = {
     }
   }
 
+  async function syncGeneralAbsencesForEmployeeVisibleRange(empId){
+    const employeeId = Number(empId);
+    if (!Number.isFinite(employeeId)) return;
+
+    const startISO = toISODate(new Date(rangeStart));
+    const endISO = toISODate(addDays(new Date(rangeStart), RANGE_DAYS - 1));
+    const { data, error } = await sb
+      .from("capacity_entries")
+      .select("work_date, werknemer_id, hours, type")
+      .eq("werknemer_id", employeeId)
+      .eq("type", "werk")
+      .gte("work_date", startISO)
+      .lte("work_date", endISO)
+      .limit(5000);
+
+    if (error) throw new Error("Capaciteit laden voor verlof-sync: " + error.message);
+    await syncGeneralAbsencesForEmployee(employeeId, data || []);
+  }
+
   async function saveSettingsEmployees(applyMode = "week"){
     const rows = readSettingsEmployees();
     const nextWeekly = {};
@@ -574,9 +593,9 @@ const defaultSettings = {
         if (capRows.length) {
           const insCap = await sb.from("capacity_entries").insert(capRows);
           if (insCap.error) throw new Error("Capaciteit opslaan: " + insCap.error.message);
-          await syncGeneralAbsencesForEmployee(empId, capRows);
         }
         }
+        await syncGeneralAbsencesForEmployeeVisibleRange(empId);
       }
     }
 
