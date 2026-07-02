@@ -672,6 +672,30 @@ tr.project-row.is-open > td.sticky-left{
 
 .cap-emp-row .cap-name{ background:#fff; font-weight:600; }
 .cap-cell{ background:#fff; }
+.cap-cell.cap-absence{
+  background:rgba(245,158,11,.28) !important;
+}
+.cap-cell-stack{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:1px;
+  line-height:1;
+}
+.cap-absence-chip{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:12px;
+  padding:0 3px;
+  border-radius:999px;
+  background:#f59e0b;
+  color:#111827;
+  font-size:10px;
+  font-weight:700;
+}
 
 .sum-row .sum-label{ background:#fff; font-weight:400; }
 .sum-cell{ background:#fff7d6; }
@@ -2228,6 +2252,54 @@ td.project-two-line .bar.placeholder{
   background:#fed7aa !important;
 }
 
+.day-absence-box{
+  border-bottom:1px solid var(--line);
+  padding:0 0 14px;
+  margin:0 0 14px;
+}
+.day-absence-title{
+  font-weight:700;
+  margin:0 0 8px;
+}
+.day-absence-form{
+  display:grid;
+  grid-template-columns:1fr 90px auto auto;
+  gap:8px;
+  align-items:center;
+}
+.day-absence-check{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  white-space:nowrap;
+  color:var(--muted);
+  font-size:13px;
+}
+.day-absence-hint{
+  margin-top:6px;
+  font-size:12px;
+}
+.day-absence-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-top:10px;
+}
+.day-absence-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:6px 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#fff7ed;
+}
+.dm-card.absence{
+  background:#fed7aa !important;
+  border-color:#f59e0b !important;
+}
+
 .absence-modal{ width:min(620px, calc(100vw - 24px)); }
 .absence-existing{ display:flex; flex-direction:column; gap:8px; }
 .absence-existing-row{
@@ -2245,3 +2317,7 @@ td.project-two-line .bar.placeholder{
 /* Verlof bewerken in beschikbaarheidsmodal */
 .absence-existing-row{ cursor:pointer; }
 .cap-planseg.absence{ cursor:pointer; }
+
+.planner-table td.cap-cell.cap-absence{
+  background:rgba(245,158,11,.28) !important;
+}

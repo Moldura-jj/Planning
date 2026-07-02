@@ -1755,6 +1755,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       werknemers,
       inhuurById,
       inhuurPeopleVisible,   // ✅ toevoegen
+      absences = [],
       assignMap,
       projectAssignMap,
       sectById,
@@ -1879,6 +1880,34 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       }
     }
 
+    for (const a of (absences || [])) {
+      if (String(a.work_date || "").slice(0,10) !== String(dateISO)) continue;
+      const eid = String(a.werknemer_id ?? "").trim();
+      if (!eid) continue;
+      const title = String(a.title || "Verlof").trim();
+      const note = String(a.note || "").trim();
+      const h = Number(a.hours || 0);
+      addEmpItem(eid, "absence", `${title}${note ? ` - ${note}` : ""}\n${formatHoursCell(h)} uur`);
+    }
+
+    const fixedEmployeesForAbsence = (werknemers || [])
+      .map(w => ({
+        id: String(w?.id ?? w?.werknemer_id ?? "").trim(),
+        name: String(w?.name ?? w?.naam ?? "").trim()
+      }))
+      .filter(w => w.id && w.id !== String(DUMMY_EMP_ID));
+
+    const absencesOnDay = (absences || []).filter(a => String(a.work_date || "").slice(0,10) === String(dateISO));
+    const groupedAbsences = new Map();
+    for (const a of absencesOnDay) {
+      const title = String(a.title || "Verlof").trim();
+      const note = String(a.note || "").trim();
+      const hours = Number(a.hours || 0);
+      const key = `${title}||${note}||${hours}`;
+      if (!groupedAbsences.has(key)) groupedAbsences.set(key, { title, note, hours, allDay: !!a.all_day, ids: [] });
+      groupedAbsences.get(key).ids.push(a.id);
+    }
+
     // Render
     const rows = [];
 
@@ -1920,7 +1949,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
         <div class="dm-items">
           ${items.length
             ? items.map(it => `
-                <div class="dm-card ${it.type === "montage" ? "mont" : it.type === "productie" ? "prod" : ""}">
+                <div class="dm-card ${it.type === "montage" ? "mont" : it.type === "productie" ? "prod" : it.type === "absence" ? "absence" : ""}">
                   ${escapeHtml(it.text).replace(/\n/g,"<br>")}
                 </div>
               `).join("")
@@ -1931,9 +1960,134 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
     `);
   }
 
-    bodyEl.innerHTML = rows.length
-      ? `<div class="dm-list">${rows.join("")}</div>`
-      : `<div class="muted">Geen ingeplande medewerkers op deze dag.</div>`;
+    bodyEl.innerHTML = `
+      <div class="day-absence-box">
+        <div class="day-absence-title">Algemene vrije dag</div>
+        <div class="day-absence-form">
+          <input class="input" id="dmAbsTitle" type="text" placeholder="Specificatie" value="Verlof" />
+          <input class="input" id="dmAbsHours" type="text" inputmode="decimal" placeholder="Uren" />
+          <label class="day-absence-check">
+            <input id="dmAbsAllDay" type="checkbox" checked />
+            <span>Hele dag</span>
+          </label>
+          <button class="btn primary" id="dmAbsSave" type="button">Opslaan</button>
+        </div>
+        <div class="muted day-absence-hint">Wordt opgeslagen voor alle vaste medewerkers met beschikbaarheid op deze dag.</div>
+        <div class="day-absence-list">
+          ${Array.from(groupedAbsences.values()).map(g => `
+            <div class="day-absence-row">
+              <span>${escapeHtml(g.title)}${g.note ? ` - ${escapeHtml(g.note)}` : ""} (${escapeHtml(formatHoursCell(g.hours))}u × ${g.ids.length})</span>
+              <span style="display:flex; gap:6px;">
+                <button class="btn small dmAbsEdit" type="button"
+                  data-ids="${escapeAttr(g.ids.join(","))}"
+                  data-title="${escapeAttr(g.title)}"
+                  data-hours="${escapeAttr(String(g.hours))}"
+                  data-all-day="${g.allDay ? "1" : "0"}">Bewerken</button>
+                <button class="btn small dmAbsDelete" type="button" data-ids="${escapeAttr(g.ids.join(","))}">Verwijderen</button>
+              </span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+      ${rows.length
+        ? `<div class="dm-list">${rows.join("")}</div>`
+        : `<div class="muted">Geen ingeplande medewerkers op deze dag.</div>`
+      }
+    `;
+
+    const absAllDay = bodyEl.querySelector("#dmAbsAllDay");
+    const absHours = bodyEl.querySelector("#dmAbsHours");
+    const absTitle = bodyEl.querySelector("#dmAbsTitle");
+    const absSave = bodyEl.querySelector("#dmAbsSave");
+
+    if (absAllDay && absHours) {
+      const setHoursState = () => {
+        absHours.disabled = absAllDay.checked;
+        if (absAllDay.checked) absHours.value = "";
+      };
+      absAllDay.onchange = setHoursState;
+      setHoursState();
+    }
+
+    bodyEl.querySelectorAll(".dmAbsEdit").forEach(btn => {
+      btn.onclick = () => {
+        if (absTitle) absTitle.value = String(btn.dataset.title || "Verlof");
+        if (absAllDay) absAllDay.checked = String(btn.dataset.allDay || "") === "1";
+        if (absHours) absHours.value = String(btn.dataset.hours || "").replace(".", ",");
+        if (absSave) {
+          absSave.dataset.editIds = String(btn.dataset.ids || "");
+          absSave.textContent = "Bijwerken";
+        }
+        if (absAllDay && absHours) {
+          absHours.disabled = absAllDay.checked;
+          if (absAllDay.checked) absHours.value = "";
+        }
+      };
+    });
+
+    if (absSave) {
+      absSave.onclick = async () => {
+        const title = String(absTitle?.value || "Verlof").trim() || "Verlof";
+        const allDay = !!absAllDay?.checked;
+        const manualHours = Number(String(absHours?.value || "0").replace(",", "."));
+        const editIds = String(absSave.dataset.editIds || "").split(",").map(x => x.trim()).filter(Boolean);
+
+        if (editIds.length) {
+          const rowsToEdit = (absences || []).filter(a => editIds.includes(String(a.id)));
+          for (const a of rowsToEdit) {
+            const empId = String(a.werknemer_id ?? "").trim();
+            const available = Number(capByEmp.get(empId)?.get(dateISO) || 0);
+            const hours = allDay ? available : manualHours;
+            if (!(hours > 0)) continue;
+            const upd = await sb
+              .from("employee_absences")
+              .update({ hours: roundHours2(hours), all_day: allDay, title })
+              .eq("id", a.id);
+            if (upd.error) { alert("Fout bijwerken vrije dag: " + upd.error.message); return; }
+          }
+          modal.close();
+          await loadAndRender();
+          return;
+        }
+
+        const rowsToInsert = [];
+        for (const w of fixedEmployeesForAbsence) {
+          const available = Number(capByEmp.get(w.id)?.get(dateISO) || 0);
+          const hours = allDay ? available : manualHours;
+          if (!(hours > 0)) continue;
+          rowsToInsert.push({
+            werknemer_id: Number(w.id),
+            work_date: dateISO,
+            hours: roundHours2(hours),
+            all_day: allDay,
+            title,
+          });
+        }
+
+        if (!rowsToInsert.length) {
+          alert("Geen medewerkers met beschikbare uren gevonden voor deze dag.");
+          return;
+        }
+
+        const ins = await sb.from("employee_absences").insert(rowsToInsert);
+        if (ins.error) { alert("Fout opslaan vrije dag: " + ins.error.message); return; }
+
+        modal.close();
+        await loadAndRender();
+      };
+    }
+
+    bodyEl.querySelectorAll(".dmAbsDelete").forEach(btn => {
+      btn.onclick = async () => {
+        const ids = String(btn.dataset.ids || "").split(",").map(x => x.trim()).filter(Boolean);
+        if (!ids.length) return;
+        if (!confirm("Deze vrije dag verwijderen?")) return;
+        const del = await sb.from("employee_absences").delete().in("id", ids);
+        if (del.error) { alert("Fout verwijderen vrije dag: " + del.error.message); return; }
+        modal.close();
+        await loadAndRender();
+      };
+    });
 
     modal.wrap.classList.add("show");
   }
@@ -2749,6 +2903,7 @@ for (const p of (projecten || [])) {
 
         // ✅ nieuw: beschikbaarheid
         capByEmp,
+        absenceByEmp,
         inhuurByEmp,
       };
 
@@ -3633,12 +3788,22 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
 
         const inProd = !!empAssignByDay[dayISO]?.prod?.has(empIdStr);
         const inMont = !!empAssignByDay[dayISO]?.mont?.has(empIdStr);
+        const absRows = absenceByEmp.get(empIdStr)?.get(dayISO) || [];
+        const absH = absRows.reduce((sum, r) => sum + Number(r.hours || 0), 0);
 
         if (inProd && inMont) td.classList.add("cap-assigned-both");
         else if (inProd) td.classList.add("cap-assigned-prod");
         else if (inMont) td.classList.add("cap-assigned-mont");
+        if (absH > 0) {
+          td.classList.add("cap-absence");
+          td.dataset.tip = absRows
+            .map(r => `${String(r.title || "Verlof")} ${formatHoursCell(Number(r.hours || 0))}u`)
+            .join("\n");
+        }
 
-        td.textContent = fmt0(h);
+        td.innerHTML = absH > 0
+          ? `<div class="cap-cell-stack"><span>${escapeHtml(fmt0(h))}</span><span class="cap-absence-chip">${escapeHtml(formatHoursCell(absH))}</span></div>`
+          : escapeHtml(fmt0(h));
         tr.appendChild(td);
       }
 
@@ -3813,6 +3978,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
         werknemers,
         inhuurById,
         inhuurPeopleVisible,
+        absences,
         assignMap,
         projectAssignMap,
         sectById,
@@ -4011,6 +4177,24 @@ if (capCell) {
   const empName = String(capCell.dataset.empName || empId);
   const dateISO = String(capCell.dataset.workDate || "");
   if (!empId || !dateISO) return;
+
+  if (capCell.classList.contains("cap-absence")) {
+    openDayModal({
+      dateISO,
+      werknemers,
+      inhuurById,
+      inhuurPeopleVisible,
+      absences,
+      assignMap,
+      projectAssignMap,
+      sectById,
+      projMetaById,
+      sectProjKey,
+      sectParaKey,
+      sectNameKey
+    });
+    return;
+  }
 
   // hergebruik exact dezelfde flow als je cap-emp-click,
   // maar start week op basis van aangeklikte datum
@@ -5612,6 +5796,7 @@ loadAndRender();
 
       // ✅ beschikbaarheid
       capByEmp,
+      absenceByEmp,
       inhuurByEmp,
       inhuurById, // (handig, maar niet verplicht)
     };
