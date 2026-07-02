@@ -1012,8 +1012,8 @@ function asISODate(v){
     const nameKey = keys?.sectNameKey || "name";
     const projIdKeyForUpdate = keys?.projIdKey || "project_id";
     const projNameKeyForUpdate = keys?.projNameKey || "projectname";
-    const klantKeyForUpdate = keys?.klantKey || "deliveryname";
-    const addressKeyForUpdate = keys?.addressKey || "";
+    const klantKeyForUpdate = keys?.klantKey || "";
+    const deliveryFieldsForUpdate = keys?.deliveryFields || {};
     const deliveryKeyForUpdate = keys?.deliveryKey || "deliverydate_d";
     const completionKeyForUpdate = keys?.completionKey || "completiondate_d";
     const sectProjKeyForInsert = keys?.sectProjKey || "project_id";
@@ -1027,6 +1027,10 @@ function asISODate(v){
 
     const renderBody = () => {
       if (!bodyEl) return;
+      const deliveryValue = (field) => {
+        const key = deliveryFieldsForUpdate?.[field] || "";
+        return key ? String(projectRaw?.[key] ?? "") : "";
+      };
       bodyEl.innerHTML = `
         <div class="project-edit-grid">
           <label>
@@ -1035,11 +1039,31 @@ function asISODate(v){
           </label>
           <label>
             <span>Klant</span>
-            <input class="input" id="psmCustomer" type="text" value="${escapeAttr(String(projectRaw?.[klantKeyForUpdate] ?? project?.customer ?? ""))}" />
+            <input class="input" id="psmCustomer" type="text" value="${escapeAttr(klantKeyForUpdate ? String(projectRaw?.[klantKeyForUpdate] ?? project?.customer ?? "") : "")}" ${klantKeyForUpdate ? "" : "disabled"} />
           </label>
           <label>
-            <span>Afleveradres</span>
-            <input class="input" id="psmAddress" type="text" value="${escapeAttr(addressKeyForUpdate ? String(projectRaw?.[addressKeyForUpdate] ?? "") : "")}" ${addressKeyForUpdate ? "" : "disabled"} />
+            <span>Naam locatie</span>
+            <input class="input" id="psmDeliveryName" type="text" value="${escapeAttr(deliveryValue("name"))}" ${deliveryFieldsForUpdate.name ? "" : "disabled"} />
+          </label>
+          <label>
+            <span>Contactpersoon afleveradres</span>
+            <input class="input" id="psmDeliveryContact" type="text" value="${escapeAttr(deliveryValue("contact"))}" ${deliveryFieldsForUpdate.contact ? "" : "disabled"} />
+          </label>
+          <label>
+            <span>Adres afleveradres</span>
+            <input class="input" id="psmDeliveryAddress" type="text" value="${escapeAttr(deliveryValue("address"))}" ${deliveryFieldsForUpdate.address ? "" : "disabled"} />
+          </label>
+          <label>
+            <span>Postcode + plaats afleveradres</span>
+            <input class="input" id="psmDeliveryPostalCity" type="text" value="${escapeAttr(deliveryValue("postalCity"))}" ${deliveryFieldsForUpdate.postalCity ? "" : "disabled"} />
+          </label>
+          <label>
+            <span>Telefoon afleveradres</span>
+            <input class="input" id="psmDeliveryPhone" type="text" value="${escapeAttr(deliveryValue("phone"))}" ${deliveryFieldsForUpdate.phone ? "" : "disabled"} />
+          </label>
+          <label>
+            <span>Email afleveradres</span>
+            <input class="input" id="psmDeliveryEmail" type="email" value="${escapeAttr(deliveryValue("email"))}" ${deliveryFieldsForUpdate.email ? "" : "disabled"} />
           </label>
           <label>
             <span>Leverdatum</span>
@@ -1141,8 +1165,13 @@ function asISODate(v){
         try {
           const projectPayload = {};
           projectPayload[projNameKeyForUpdate] = String(bodyEl.querySelector("#psmProjectName")?.value || "").trim();
-          projectPayload[klantKeyForUpdate] = String(bodyEl.querySelector("#psmCustomer")?.value || "").trim();
-          if (addressKeyForUpdate) projectPayload[addressKeyForUpdate] = String(bodyEl.querySelector("#psmAddress")?.value || "").trim() || null;
+          if (klantKeyForUpdate) projectPayload[klantKeyForUpdate] = String(bodyEl.querySelector("#psmCustomer")?.value || "").trim();
+          if (deliveryFieldsForUpdate.name) projectPayload[deliveryFieldsForUpdate.name] = String(bodyEl.querySelector("#psmDeliveryName")?.value || "").trim() || null;
+          if (deliveryFieldsForUpdate.contact) projectPayload[deliveryFieldsForUpdate.contact] = String(bodyEl.querySelector("#psmDeliveryContact")?.value || "").trim() || null;
+          if (deliveryFieldsForUpdate.address) projectPayload[deliveryFieldsForUpdate.address] = String(bodyEl.querySelector("#psmDeliveryAddress")?.value || "").trim() || null;
+          if (deliveryFieldsForUpdate.postalCity) projectPayload[deliveryFieldsForUpdate.postalCity] = String(bodyEl.querySelector("#psmDeliveryPostalCity")?.value || "").trim() || null;
+          if (deliveryFieldsForUpdate.phone) projectPayload[deliveryFieldsForUpdate.phone] = String(bodyEl.querySelector("#psmDeliveryPhone")?.value || "").trim() || null;
+          if (deliveryFieldsForUpdate.email) projectPayload[deliveryFieldsForUpdate.email] = String(bodyEl.querySelector("#psmDeliveryEmail")?.value || "").trim() || null;
           if (deliveryKeyForUpdate) projectPayload[deliveryKeyForUpdate] = String(bodyEl.querySelector("#psmDelivery")?.value || "").trim() || null;
           if (completionKeyForUpdate) projectPayload[completionKeyForUpdate] = String(bodyEl.querySelector("#psmCompletion")?.value || "").trim() || null;
 
@@ -1213,8 +1242,28 @@ function asISODate(v){
               <input class="input" id="npmCustomer" type="text" />
             </label>
             <label>
-              <span>Afleveradres</span>
-              <input class="input" id="npmAddress" type="text" />
+              <span>Naam locatie</span>
+              <input class="input" id="npmDeliveryName" type="text" />
+            </label>
+            <label>
+              <span>Contactpersoon afleveradres</span>
+              <input class="input" id="npmDeliveryContact" type="text" />
+            </label>
+            <label>
+              <span>Adres afleveradres</span>
+              <input class="input" id="npmDeliveryAddress" type="text" />
+            </label>
+            <label>
+              <span>Postcode + plaats afleveradres</span>
+              <input class="input" id="npmDeliveryPostalCity" type="text" />
+            </label>
+            <label>
+              <span>Telefoon afleveradres</span>
+              <input class="input" id="npmDeliveryPhone" type="text" />
+            </label>
+            <label>
+              <span>Email afleveradres</span>
+              <input class="input" id="npmDeliveryEmail" type="email" />
             </label>
             <label>
               <span>Leverdatum</span>
@@ -1331,7 +1380,7 @@ function asISODate(v){
     const modal = ensureNewProjectModal();
     const sections = [{ paragraph: "01", name: "" }];
 
-    ["npmNumber", "npmName", "npmCustomer", "npmAddress", "npmDelivery", "npmCompletion"].forEach(id => {
+    ["npmNumber", "npmName", "npmCustomer", "npmDeliveryName", "npmDeliveryContact", "npmDeliveryAddress", "npmDeliveryPostalCity", "npmDeliveryPhone", "npmDeliveryEmail", "npmDelivery", "npmCompletion"].forEach(id => {
       const input = modal.wrap.querySelector(`#${id}`);
       if (input) input.value = "";
     });
@@ -1348,7 +1397,12 @@ function asISODate(v){
       const projectNumber = String(modal.wrap.querySelector("#npmNumber")?.value || "").trim();
       const projectName = String(modal.wrap.querySelector("#npmName")?.value || "").trim();
       const customer = String(modal.wrap.querySelector("#npmCustomer")?.value || "").trim();
-      const address = String(modal.wrap.querySelector("#npmAddress")?.value || "").trim();
+      const deliveryName = String(modal.wrap.querySelector("#npmDeliveryName")?.value || "").trim();
+      const deliveryContact = String(modal.wrap.querySelector("#npmDeliveryContact")?.value || "").trim();
+      const deliveryAddress = String(modal.wrap.querySelector("#npmDeliveryAddress")?.value || "").trim();
+      const deliveryPostalCity = String(modal.wrap.querySelector("#npmDeliveryPostalCity")?.value || "").trim();
+      const deliveryPhone = String(modal.wrap.querySelector("#npmDeliveryPhone")?.value || "").trim();
+      const deliveryEmail = String(modal.wrap.querySelector("#npmDeliveryEmail")?.value || "").trim();
       const delivery = String(modal.wrap.querySelector("#npmDelivery")?.value || "").trim();
       const completion = String(modal.wrap.querySelector("#npmCompletion")?.value || "").trim();
       const sectionRows = readNewProjectSections(modal);
@@ -1365,10 +1419,15 @@ function asISODate(v){
         const pPayload = {};
         pPayload[ctx.projNrKey] = projectNumber;
         pPayload[ctx.projNameKey] = projectName;
-        pPayload[ctx.klantKey] = customer;
+        if (ctx.klantKey) pPayload[ctx.klantKey] = customer;
         if (hasColumn(ctx.projectSample, ctx.deliveryKey)) pPayload[ctx.deliveryKey] = delivery || null;
         if (hasColumn(ctx.projectSample, ctx.completionKey)) pPayload[ctx.completionKey] = completion || null;
-        if (ctx.addressKey) pPayload[ctx.addressKey] = address || null;
+        if (ctx.deliveryFields?.name) pPayload[ctx.deliveryFields.name] = deliveryName || null;
+        if (ctx.deliveryFields?.contact) pPayload[ctx.deliveryFields.contact] = deliveryContact || null;
+        if (ctx.deliveryFields?.address) pPayload[ctx.deliveryFields.address] = deliveryAddress || null;
+        if (ctx.deliveryFields?.postalCity) pPayload[ctx.deliveryFields.postalCity] = deliveryPostalCity || null;
+        if (ctx.deliveryFields?.phone) pPayload[ctx.deliveryFields.phone] = deliveryPhone || null;
+        if (ctx.deliveryFields?.email) pPayload[ctx.deliveryFields.email] = deliveryEmail || null;
         if (hasColumn(ctx.projectSample, "salesstatus")) pPayload.salesstatus = 2;
 
         const insProject = await sb
@@ -2957,8 +3016,15 @@ const projIdKey = pickKey(projecten[0], ["project_id","id"]);
 
 const projNrKey = pickKey(projecten[0], ["offerno","projectnr","project_nr","nummer","nr"]);
 const projNameKey = pickKey(projecten[0], ["projectname","naam","name","omschrijving","titel","title"]);
-const klantKey = pickKey(projecten[0], ["deliveryname", "klantnaam","klant_name","klant","customer","relatie"]);
-const addressKey = firstExistingKey(projecten[0], ["deliveryaddress","delivery_address","afleveradres","aflever_adres","address","adres"]);
+const klantKey = firstExistingKey(projecten[0], ["klantnaam","klant_name","customername","customer_name","klant","customer","relatie"]);
+const deliveryFields = {
+  name: firstExistingKey(projecten[0], ["deliveryname","delivery_name","naam_locatie","naamlocatie","aflevernaam","aflever_naam"]),
+  contact: firstExistingKey(projecten[0], ["deliverycontact","deliverycontactname","delivery_contact","delivery_contactperson","aflever_contactpersoon","contactpersoon_aflever"]),
+  address: firstExistingKey(projecten[0], ["deliveryaddress","delivery_address","afleveradres","aflever_adres","deliveryadress","address","adres"]),
+  postalCity: firstExistingKey(projecten[0], ["deliverypostalcodecity","delivery_postcode_city","deliverypostcodecity","aflever_postcode_plaats","postcode_plaats_aflever","postcodeplaats_aflever"]),
+  phone: firstExistingKey(projecten[0], ["deliveryphone","delivery_phone","deliverytelephone","aflever_telefoon","telefoon_aflever"]),
+  email: firstExistingKey(projecten[0], ["deliveryemail","delivery_email","aflever_email","email_aflever"]),
+};
 
     const completionKey = pickKey(projecten[0], ["completiondate_d","completiondate","completion_date","opleverdatum","end_date"]);
     const deliveryKey   = pickKey(projecten[0], ["deliverydate_d","deliverydate","delivery_date","leverdatum"]);
@@ -2984,7 +3050,7 @@ const addressKey = firstExistingKey(projecten[0], ["deliveryaddress","delivery_a
       projNrKey,
       projNameKey,
       klantKey,
-      addressKey,
+      deliveryFields,
       deliveryKey,
       completionKey,
       sectProjKey,
@@ -3920,7 +3986,7 @@ for(const p of projecten || []){
 
 
       const nm  = p?.[projNameKey] ?? "";
-      const kl = String(p?.deliveryname || p?.[klantKey] || "").trim();
+      const kl = String((klantKey ? p?.[klantKey] : "") || p?.deliveryname || "").trim();
       const complRaw = p?.[completionKey] ?? "";
       const complTxt = formatDateNL(complRaw);
       const complISO0 = asISODate(complRaw);
@@ -5145,7 +5211,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
           projIdKey,
           projNameKey,
           klantKey,
-          addressKey,
+          deliveryFields,
           deliveryKey,
           completionKey,
           sectProjKey,
