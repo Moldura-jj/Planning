@@ -5152,7 +5152,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
           sectIdKey,
           sectNameKey,
           sectParaKey,
-          includePlanningCol,
+          includePlanningCol: getIncludePlanningColumn(secties || []),
         }
       });
       return;
