@@ -3016,7 +3016,12 @@ const projIdKey = pickKey(projecten[0], ["project_id","id"]);
 
 const projNrKey = pickKey(projecten[0], ["offerno","projectnr","project_nr","nummer","nr"]);
 const projNameKey = pickKey(projecten[0], ["projectname","naam","name","omschrijving","titel","title"]);
-const klantKey = firstExistingKey(projecten[0], ["klantnaam","klant_name","customername","customer_name","klant","customer","relatie"]);
+const klantKey = firstExistingKey(projecten[0], [
+  "klantnaam","klant_name","klant","customer","customername","customer_name",
+  "client","clientname","client_name","debtor","debtorname","debtor_name",
+  "relation","relationname","relation_name","accountname","account_name",
+  "companyname","company_name","relatie"
+]);
 const deliveryFields = {
   name: firstExistingKey(projecten[0], ["deliveryname","delivery_name","naam_locatie","naamlocatie","aflevernaam","aflever_naam"]),
   contact: firstExistingKey(projecten[0], ["deliverycontact","deliverycontactname","delivery_contact","delivery_contactperson","aflever_contactpersoon","contactpersoon_aflever"]),
@@ -3986,7 +3991,7 @@ for(const p of projecten || []){
 
 
       const nm  = p?.[projNameKey] ?? "";
-      const kl = String((klantKey ? p?.[klantKey] : "") || p?.deliveryname || "").trim();
+      const kl = String(klantKey ? (p?.[klantKey] ?? "") : "").trim();
       const complRaw = p?.[completionKey] ?? "";
       const complTxt = formatDateNL(complRaw);
       const complISO0 = asISODate(complRaw);
