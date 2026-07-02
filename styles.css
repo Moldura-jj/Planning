@@ -1021,11 +1021,51 @@ td.section-click{
   top:50% !important;
   transform:translate(-50%, -50%) !important;
   z-index:5001 !important;
-  width:min(520px, calc(100vw - 24px)) !important;
+  width:min(760px, calc(100vw - 24px)) !important;
   max-height:calc(100vh - 24px) !important;
   overflow:auto !important;
 }
 #settingsModal[hidden]{ display:none !important; }
+
+.settings-section{
+  margin-top:18px;
+  padding-top:16px;
+  border-top:1px solid var(--line);
+}
+
+.settings-section-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.settings-employees{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+
+.settings-employee-head,
+.settings-employee-row{
+  display:grid;
+  grid-template-columns:minmax(220px, 1fr) 120px;
+  gap:8px;
+  align-items:center;
+}
+
+.settings-employee-head{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  padding:0 2px;
+}
+
+.settings-employee-hours{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
 
 /* als prod+mont op dezelfde dag staan: kleur op de bar zelf (niet via td) */
 .plan-stack .bar.bar-prod{ background:#b7f0c2 !important; }

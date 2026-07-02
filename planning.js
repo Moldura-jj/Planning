@@ -282,6 +282,7 @@ function restoreOpenState(){
 const defaultSettings = {
   planFactor: 0.80, // 80%
   orderTypeFilter: [], // ✅ nieuw: lijst met geselecteerde 'soort'
+  employeeWeeklyHours: {},
 };
 
   function loadSettings(){
@@ -300,8 +301,157 @@ const defaultSettings = {
   }
 
   let settings = loadSettings();
+  let settingsEmployeesSnapshot = [];
 
-  function openSettingsModal(){
+  function getEmployeeDisplayName(row){
+    return String(row?.naam ?? row?.name ?? row?.fullname ?? row?.display_name ?? "").trim();
+  }
+
+  function getEmployeeId(row){
+    return String(row?.id ?? row?.werknemer_id ?? row?.employee_id ?? row?.user_id ?? "").trim();
+  }
+
+  function getEmployeeIdField(row){
+    if (row && row.id !== undefined && row.id !== null) return "id";
+    if (row && row.werknemer_id !== undefined && row.werknemer_id !== null) return "werknemer_id";
+    if (row && row.employee_id !== undefined && row.employee_id !== null) return "employee_id";
+    if (row && row.user_id !== undefined && row.user_id !== null) return "user_id";
+    return "id";
+  }
+
+  async function loadSettingsEmployees(){
+    const box = el("settingsEmployees");
+    if (!box) return;
+
+    box.innerHTML = `<div class="muted">Medewerkers laden...</div>`;
+    const { data, error } = await sb
+      .from("werknemers")
+      .select("*")
+      .order("naam", { ascending: true })
+      .limit(500);
+
+    if (error) {
+      box.innerHTML = `<div class="error">Medewerkers laden mislukt: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    settingsEmployeesSnapshot = (data || [])
+      .filter(w => String(w?.id) !== String(DUMMY_EMP_ID))
+      .map(w => ({
+        id: getEmployeeId(w),
+        idField: getEmployeeIdField(w),
+        name: getEmployeeDisplayName(w),
+        weekHours: Number(settings.employeeWeeklyHours?.[getEmployeeId(w)] || 0),
+        isNew: false
+      }));
+
+    renderSettingsEmployees();
+  }
+
+  function renderSettingsEmployees(){
+    const box = el("settingsEmployees");
+    if (!box) return;
+
+    box.innerHTML = `
+      <div class="settings-employee-head">
+        <div>Naam</div>
+        <div>Uren/week</div>
+      </div>
+      ${settingsEmployeesSnapshot.map((w, idx) => `
+        <div class="settings-employee-row" data-index="${idx}">
+          <input class="input settings-employee-name" type="text" value="${escapeAttr(w.name)}" placeholder="Naam medewerker" />
+          <input class="input settings-employee-hours" type="text" inputmode="decimal" value="${escapeAttr(w.weekHours ? fmtHours(w.weekHours) : "")}" placeholder="37,5" />
+        </div>
+      `).join("") || `<div class="muted">Nog geen vaste medewerkers.</div>`}
+    `;
+
+    box.querySelectorAll(".settings-employee-hours").forEach(inp => {
+      inp.oninput = () => { inp.value = inp.value.replace(/[^0-9.,]/g, ""); };
+      inp.onblur = () => { inp.value = inp.value.replace(".", ","); };
+    });
+  }
+
+  function readSettingsEmployees(){
+    const box = el("settingsEmployees");
+    if (!box) return [];
+
+    return Array.from(box.querySelectorAll(".settings-employee-row")).map(row => {
+      const idx = Number(row.dataset.index || -1);
+      const old = settingsEmployeesSnapshot[idx] || {};
+      const name = String(row.querySelector(".settings-employee-name")?.value || "").trim();
+      const weekHours = parseHoursInput(row.querySelector(".settings-employee-hours")?.value || "");
+      return { ...old, name, weekHours };
+    }).filter(w => w.name);
+  }
+
+  function buildFixedCapacityRowsForVisibleRange(empId, weekHours){
+    const rows = [];
+    const weekly = Number(weekHours || 0);
+    if (!(weekly > 0)) return rows;
+
+    const perWorkday = Math.round((weekly / 5) * 100) / 100;
+    const start = new Date(rangeStart);
+    for (let i = 0; i < RANGE_DAYS; i++) {
+      const d = addDays(start, i);
+      if (isWeekend(d)) continue;
+      rows.push({
+        work_date: toISODate(d),
+        werknemer_id: Number(empId),
+        hours: perWorkday,
+        type: "werk"
+      });
+    }
+    return rows;
+  }
+
+  async function saveSettingsEmployees(){
+    const rows = readSettingsEmployees();
+    const nextWeekly = {};
+
+    for (const row of rows) {
+      let empId = String(row.id || "").trim();
+      if (row.isNew || !empId) {
+        const ins = await sb
+          .from("werknemers")
+          .insert({ naam: row.name })
+          .select("*")
+          .single();
+        if (ins.error) throw new Error("Medewerker toevoegen: " + ins.error.message);
+        empId = getEmployeeId(ins.data);
+      } else {
+        const upd = await sb
+          .from("werknemers")
+          .update({ naam: row.name })
+          .eq(row.idField || "id", empId);
+        if (upd.error) throw new Error("Medewerker bijwerken: " + upd.error.message);
+      }
+
+      if (empId && row.weekHours > 0) nextWeekly[empId] = row.weekHours;
+
+      if (empId && row.weekHours > 0) {
+        const startISO = toISODate(new Date(rangeStart));
+        const endISO = toISODate(addDays(new Date(rangeStart), RANGE_DAYS - 1));
+        const del = await sb
+          .from("capacity_entries")
+          .delete()
+          .eq("werknemer_id", Number(empId))
+          .eq("type", "werk")
+          .gte("work_date", startISO)
+          .lte("work_date", endISO);
+        if (del.error) throw new Error("Capaciteit verwijderen: " + del.error.message);
+
+        const capRows = buildFixedCapacityRowsForVisibleRange(empId, row.weekHours);
+        if (capRows.length) {
+          const insCap = await sb.from("capacity_entries").insert(capRows);
+          if (insCap.error) throw new Error("Capaciteit opslaan: " + insCap.error.message);
+        }
+      }
+    }
+
+    settings.employeeWeeklyHours = nextWeekly;
+  }
+
+  async function openSettingsModal(){
     const modal = el("settingsModal");
     const back = el("settingsBackdrop");
     const slider = el("planFactor");
@@ -314,6 +464,7 @@ const defaultSettings = {
     
     // ✅ nieuw: soorten-filter UI vullen
     fillOrderTypeFilterUI();
+    await loadSettingsEmployees();
 
     back.hidden = false;
     modal.hidden = false;
@@ -385,8 +536,22 @@ function buildPlannedSetsByDay(planningItems){
     el("btnSettingsClose")?.addEventListener("click", closeSettingsModal);
     el("btnSettingsCancel")?.addEventListener("click", closeSettingsModal);
     el("settingsBackdrop")?.addEventListener("click", closeSettingsModal);
+    el("btnEmployeeAdd")?.addEventListener("click", () => {
+      settingsEmployeesSnapshot.push({ id: "", name: "", weekHours: 37.5, isNew: true });
+      renderSettingsEmployees();
+      setTimeout(() => {
+        const rows = el("settingsEmployees")?.querySelectorAll(".settings-employee-row");
+        const last = rows?.[rows.length - 1];
+        last?.querySelector(".settings-employee-name")?.focus();
+      }, 0);
+    });
 
-    el("btnSettingsSave")?.addEventListener("click", () => {
+    el("btnSettingsSave")?.addEventListener("click", async () => {
+      const btn = el("btnSettingsSave");
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = "Opslaan...";
+      }
       const pct = parseInt(el("planFactor").value, 10);
       settings.planFactor = Math.max(0.1, Math.min(2.0, pct / 100));
     
@@ -396,11 +561,20 @@ function buildPlannedSetsByDay(planningItems){
         ? [...box.querySelectorAll('input[type="checkbox"]:checked')].map(x => x.value)
         : [];
       settings.orderTypeFilter = picked;
-    
-      saveSettings(settings);
-      closeSettingsModal();
-    
-      refreshAfterSettingsChange();
+
+      try {
+        await saveSettingsEmployees();
+        saveSettings(settings);
+        closeSettingsModal();
+        refreshAfterSettingsChange();
+      } catch (e) {
+        alert(String(e?.message || e));
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = "Opslaan";
+        }
+      }
     });
 
   }
