@@ -671,9 +671,32 @@ tr.project-row.is-open > td.sticky-left{
 .block-title.compact .block-hdr{ font-weight:400; }
 
 .cap-emp-row .cap-name{ background:#fff; font-weight:600; }
-.cap-cell{ background:#fff; }
+.cap-cell{
+  position:relative;
+  overflow:hidden;
+  background:#fff;
+}
 .cap-cell.cap-absence{
-  background:rgba(245,158,11,.28) !important;
+  background:#fff !important;
+}
+.cap-cell-fillbar{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:stretch;
+  pointer-events:none;
+  z-index:0;
+}
+.cap-cell-fill{
+  display:block;
+  min-width:0;
+}
+.cap-cell-fill.prod{ background:rgba(34,197,94,.30); }
+.cap-cell-fill.mont{ background:#fde68a; }
+.cap-cell-fill.absence{ background:rgba(245,158,11,.32); }
+.cap-cell-value{
+  position:relative;
+  z-index:1;
 }
 .cap-cell-stack{
   display:flex;
@@ -1089,36 +1112,24 @@ td.section-click{
 
 /* Capaciteit: kleur aangeven als iemand ingepland is */
 .cap-cell.cap-assigned-prod{
-  background: rgba(34,197,94,.22);   /* groenig */
+  background:#fff;   /* vulling zit in .cap-cell-fill */
 }
 
 .cap-cell.cap-assigned-mont{
-  background: #fde68a;  /* geel */
+  background:#fff;  /* vulling zit in .cap-cell-fill */
 }
 
 /* Beide types op 1 dag (komt zelden voor, maar kan) */
 .cap-cell.cap-assigned-both{
-  background: linear-gradient(
-    90deg,
-    rgba(34,197,94,.22) 0%,
-    rgba(34,197,94,.22) 50%,
-    rgba(250,204,21,.28) 50%,
-    rgba(250,204,21,.28) 100%
-  );
+  background:#fff;
 }
 
 
 
-.planner-table td.cap-cell.cap-assigned-prod { background: rgba(34,197,94,.30) !important; }
-.planner-table td.cap-cell.cap-assigned-mont { background: #fde68a !important; }
+.planner-table td.cap-cell.cap-assigned-prod { background:#fff !important; }
+.planner-table td.cap-cell.cap-assigned-mont { background:#fff !important; }
 .planner-table td.cap-cell.cap-assigned-both {
-  background: linear-gradient(
-    90deg,
-    rgba(34,197,94,.30) 0%,
-    rgba(34,197,94,.30) 50%,
-    #fde68a 50%,
-    #fde68a 100%
-  ) !important;
+  background:#fff !important;
 }
 
 

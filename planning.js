@@ -2878,6 +2878,69 @@ for (const p of (projecten || [])) {
       }
     }
 
+    function getCapacityCellSegments(empId, dateISO, availableHours) {
+      const emp = String(empId || "").trim();
+      const iso = String(dateISO || "").trim();
+      const out = [];
+
+      const push = (type, hours) => {
+        const h = Number(hours || 0);
+        if (!type || !(h > 0)) return;
+        out.push({ type, hours: h });
+      };
+
+      for (const [, dm] of (assignMap || new Map())) {
+        const entry = dm?.get(iso);
+        if (!entry?.rows) continue;
+
+        for (const r of entry.rows || []) {
+          if (String(r.werknemer_id ?? "").trim() !== emp) continue;
+          const wt = String(r.work_type || "").toLowerCase().trim();
+          if (wt === "productie" || wt === "montage") push(wt, Number(r.hours || 0) || 7.5);
+        }
+      }
+
+      for (const [, dm] of (projectAssignMap || new Map())) {
+        const entry = dm?.get(iso);
+        if (!entry?.rows) continue;
+
+        for (const r of entry.rows || []) {
+          if (String(r.werknemer_id ?? "").trim() !== emp) continue;
+          const wt = String(r.work_type || "").toLowerCase().trim();
+          if (wt === "productie" || wt === "montage") push(wt, Number(r.hours || 0) || 7.5);
+        }
+      }
+
+      const absRows = absenceByEmp.get(emp)?.get(iso) || [];
+      for (const r of absRows) push("absence", Number(r.hours || 0));
+
+      const grouped = [];
+      for (const type of ["productie", "montage", "absence"]) {
+        const hours = out
+          .filter(x => x.type === type)
+          .reduce((sum, x) => sum + Number(x.hours || 0), 0);
+        if (hours > 0) grouped.push({ type, hours });
+      }
+
+      return grouped;
+    }
+
+    function renderCapacityCellContent(displayHours, segments, denominatorHours) {
+      const denom = Math.max(0.01, Number(denominatorHours || 0), 7.5);
+      let usedPct = 0;
+      const segHtml = (segments || []).map(seg => {
+        const pct = Math.max(0, Math.min(100 - usedPct, (Number(seg.hours || 0) / denom) * 100));
+        usedPct += pct;
+        const cls = seg.type === "montage" ? "mont" : seg.type === "absence" ? "absence" : "prod";
+        return `<span class="cap-cell-fill ${cls}" style="width:${pct.toFixed(4)}%;"></span>`;
+      }).join("");
+
+      return `
+        ${segHtml ? `<span class="cap-cell-fillbar" aria-hidden="true">${segHtml}</span>` : ""}
+        <span class="cap-cell-value">${escapeHtml(fmt0(displayHours))}</span>
+      `;
+    }
+
     // project-niveau (project_assignments)
     for (const [, dm] of projectAssignMap) {
       for (const [dateISO, entry] of dm) {
@@ -3831,9 +3894,11 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
             .join("\n");
         }
 
-        td.innerHTML = absH > 0
-          ? `<div class="cap-cell-stack"><span>${escapeHtml(fmt0(h))}</span><span class="cap-absence-chip">${escapeHtml(formatHoursCell(absH))}</span></div>`
-          : escapeHtml(fmt0(h));
+        td.innerHTML = renderCapacityCellContent(
+          h,
+          getCapacityCellSegments(empIdStr, dayISO, h),
+          h || 7.5
+        );
         tr.appendChild(td);
       }
 
@@ -3892,7 +3957,17 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
         td.dataset.inhuurId = String(iid);
         td.dataset.workDate = iso;
 
-        td.textContent = fmt0(h);
+        const inhuurSegments = [];
+        if (inProd && inMont) {
+          inhuurSegments.push({ type: "productie", hours: h / 2 });
+          inhuurSegments.push({ type: "montage", hours: h / 2 });
+        } else if (inProd) {
+          inhuurSegments.push({ type: "productie", hours: h || 7.5 });
+        } else if (inMont) {
+          inhuurSegments.push({ type: "montage", hours: h || 7.5 });
+        }
+
+        td.innerHTML = renderCapacityCellContent(h, inhuurSegments, h || 7.5);
         trI.appendChild(td);
 
       }
