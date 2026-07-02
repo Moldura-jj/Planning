@@ -1367,7 +1367,18 @@ function asISODate(v){
 
   function firstExistingKey(sample, keys){
     if (!sample) return "";
-    return keys.find(k => Object.prototype.hasOwnProperty.call(sample, k)) || "";
+    const sampleKeys = Object.keys(sample || {});
+    for (const wanted of keys) {
+      const exact = sampleKeys.find(k => k === wanted);
+      if (exact) return exact;
+    }
+    const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    for (const wanted of keys) {
+      const wantedNorm = norm(wanted);
+      const match = sampleKeys.find(k => norm(k) === wantedNorm);
+      if (match) return match;
+    }
+    return "";
   }
 
   function openNewProjectModal(){
@@ -3016,19 +3027,58 @@ const projIdKey = pickKey(projecten[0], ["project_id","id"]);
 
 const projNrKey = pickKey(projecten[0], ["offerno","projectnr","project_nr","nummer","nr"]);
 const projNameKey = pickKey(projecten[0], ["projectname","naam","name","omschrijving","titel","title"]);
-const klantKey = firstExistingKey(projecten[0], [
-  "klantnaam","klant_name","klant","customer","customername","customer_name",
-  "client","clientname","client_name","debtor","debtorname","debtor_name",
-  "relation","relationname","relation_name","accountname","account_name",
-  "companyname","company_name","relatie"
-]);
+const firstProjectKey = (keys, { preferFilled = true, fallbackExisting = true } = {}) => {
+  const rows = projecten || [];
+  const sample = rows[0] || {};
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const sampleKeys = Object.keys(sample);
+
+  const findExisting = (wanted) =>
+    sampleKeys.find(k => k === wanted) ||
+    sampleKeys.find(k => norm(k) === norm(wanted)) ||
+    "";
+
+  if (preferFilled) {
+    for (const wanted of keys) {
+      const key = findExisting(wanted);
+      if (!key) continue;
+      const hasValue = rows.some(r => String(r?.[key] ?? "").trim() !== "");
+      if (hasValue) return key;
+    }
+  }
+
+  return fallbackExisting ? firstExistingKey(sample, keys) : "";
+};
+
+const customerKeyCandidates = [
+  "klantnaam","klant_naam","naam_klant","klantname","klant_name","klant",
+  "customer","customername","customer_name","customerName",
+  "client","clientname","client_name","clientName",
+  "debiteur","debiteurnaam","debiteur_naam","debtor","debtorname","debtor_name",
+  "relation","relationname","relation_name","relatienaam","relatie_naam",
+  "accountname","account_name","companyname","company_name","bedrijf","bedrijfsnaam","relatie",
+  "name_customer","name_client","customer_naam","client_naam","bedrijf_klant","klant_bedrijf",
+  "klantbedrijf","naam_relatie","relatiebedrijf"
+];
+const findHeuristicCustomerKey = () => {
+  const rows = projecten || [];
+  const sampleKeys = Object.keys(rows[0] || {});
+  const norm = (s) => String(s || "").toLowerCase();
+  const wanted = /(klant|customer|client|debiteur|relatie|bedrijf|company)/i;
+  const banned = /(aflever|delivery|locatie|address|adres|postcode|postal|plaats|phone|telefoon|email|mail|contact)/i;
+  return sampleKeys.find(k => wanted.test(norm(k)) && !banned.test(norm(k)) && rows.some(r => String(r?.[k] ?? "").trim() !== "")) || "";
+};
+const klantKey =
+  firstProjectKey(customerKeyCandidates, { preferFilled: true, fallbackExisting: false }) ||
+  findHeuristicCustomerKey() ||
+  firstProjectKey(customerKeyCandidates, { preferFilled: false });
 const deliveryFields = {
-  name: firstExistingKey(projecten[0], ["deliveryname","delivery_name","naam_locatie","naamlocatie","aflevernaam","aflever_naam"]),
-  contact: firstExistingKey(projecten[0], ["deliverycontact","deliverycontactname","delivery_contact","delivery_contactperson","aflever_contactpersoon","contactpersoon_aflever"]),
-  address: firstExistingKey(projecten[0], ["deliveryaddress","delivery_address","afleveradres","aflever_adres","deliveryadress","address","adres"]),
-  postalCity: firstExistingKey(projecten[0], ["deliverypostalcodecity","delivery_postcode_city","deliverypostcodecity","aflever_postcode_plaats","postcode_plaats_aflever","postcodeplaats_aflever"]),
-  phone: firstExistingKey(projecten[0], ["deliveryphone","delivery_phone","deliverytelephone","aflever_telefoon","telefoon_aflever"]),
-  email: firstExistingKey(projecten[0], ["deliveryemail","delivery_email","aflever_email","email_aflever"]),
+  name: firstProjectKey(["deliveryname","delivery_name","deliveryName","naam_locatie","naamlocatie","aflevernaam","aflever_naam","naam_afleveradres","naam_afleverlocatie"]),
+  contact: firstProjectKey(["deliverycontact","deliverycontactname","delivery_contact","delivery_contactperson","deliveryContact","aflever_contactpersoon","contactpersoon_aflever"]),
+  address: firstProjectKey(["deliveryaddress","delivery_address","deliveryAddress","afleveradres","aflever_adres","deliveryadress","aflever_adress"]),
+  postalCity: firstProjectKey(["deliverypostalcodecity","delivery_postcode_city","deliverypostcodecity","deliveryPostalCity","aflever_postcode_plaats","postcode_plaats_aflever","postcodeplaats_aflever"]),
+  phone: firstProjectKey(["deliveryphone","delivery_phone","deliverytelephone","deliveryPhone","aflever_telefoon","telefoon_aflever"]),
+  email: firstProjectKey(["deliveryemail","delivery_email","deliveryEmail","aflever_email","email_aflever"]),
 };
 
     const completionKey = pickKey(projecten[0], ["completiondate_d","completiondate","completion_date","opleverdatum","end_date"]);
@@ -6159,73 +6209,120 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
           
       if (isDummy(eid)) {
-
-        // Productie concept row
-        const rowP = document.createElement("div");
-        rowP.className = "assign-item";
-        rowP.style.display = "flex";
-        rowP.style.justifyContent = "space-between";
-        rowP.style.alignItems = "center";
-        rowP.innerHTML = `
-          <span>${escapeHtml(name)}</span>
-          <span style="display:flex; gap:6px; align-items:center;">
-            <button type="button" class="btn small concept-minus">−</button>
-            <span class="concept-count" style="min-width:18px; text-align:center;">${Number(selected.dummyProd || 0)}</span>
-            <button type="button" class="btn small concept-plus">+</button>
-          </span>
-        `;
-
-        const minusP = rowP.querySelector(".concept-minus");
-        const plusP  = rowP.querySelector(".concept-plus");
-        const countP = rowP.querySelector(".concept-count");
-
-        plusP.onclick = () => {
-          selected.dummyProd = Number(selected.dummyProd || 0) + 1;
-          selected.dummyProdHours = roundHours2(Number(selected.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-          countP.textContent = String(selected.dummyProd);
-        };
-        minusP.onclick = () => {
-          selected.dummyProd = Math.max(0, Number(selected.dummyProd || 0) - 1);
-          selected.dummyProdHours = roundHours2(Number(selected.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-          countP.textContent = String(selected.dummyProd);
+        const parseHoursInput = (inp) => {
+          const n = Number(String(inp?.value || "0").replace(",", "."));
+          return Number.isFinite(n) ? roundHours2(n) : 0;
         };
 
-        listProd.appendChild(rowP);
-
-        // Montage concept row
-        const rowM = document.createElement("div");
-        rowM.className = "assign-item";
-        rowM.style.display = "flex";
-        rowM.style.justifyContent = "space-between";
-        rowM.style.alignItems = "center";
-        rowM.innerHTML = `
-          <span>${escapeHtml(name)}</span>
-          <span style="display:flex; gap:6px; align-items:center;">
-            <button type="button" class="btn small concept-minus">−</button>
-            <span class="concept-count" style="min-width:18px; text-align:center;">${Number(selected.dummyMont || 0)}</span>
-            <button type="button" class="btn small concept-plus">+</button>
-          </span>
-        `;
-
-        const minusM = rowM.querySelector(".concept-minus");
-        const plusM  = rowM.querySelector(".concept-plus");
-        const countM = rowM.querySelector(".concept-count");
-
-        plusM.onclick = () => {
-          selected.dummyMont = Number(selected.dummyMont || 0) + 1;
-          selected.dummyMontHours = roundHours2(Number(selected.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-          countM.textContent = String(selected.dummyMont);
-        };
-        minusM.onclick = () => {
-          selected.dummyMont = Math.max(0, Number(selected.dummyMont || 0) - 1);
-          selected.dummyMontHours = roundHours2(Number(selected.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
-          countM.textContent = String(selected.dummyMont);
+        const sumSelectedHours = (type) => {
+          const ids = type === "montage" ? selected.montage : selected.productie;
+          const hoursMap = type === "montage" ? selected.montHours : selected.prodHours;
+          return roundHours2(Array.from(ids || []).reduce((sum, id) => {
+            const werknemerId = Number(id);
+            if (Number.isFinite(werknemerId)) return sum + Number(hoursMap.get(id) || 0);
+            return sum + PROJECT_DUMMY_HOURS_PER_DAY;
+          }, 0));
         };
 
+        const conceptDefaultHours = (type) => {
+          const selectedHours = sumSelectedHours(type);
+          if (selectedHours > 0) return selectedHours;
+          const remaining = type === "montage"
+            ? Number(sectionRemainingHours.mont || 0) + Number(sectionDummyHours(cur, "Mont") || 0)
+            : Number(sectionRemainingHours.prod || 0) + Number(sectionDummyHours(cur, "Prod") || 0);
+          if (remaining > 0) return roundHours2(Math.min(remaining, PROJECT_DUMMY_HOURS_PER_DAY));
+          return PROJECT_DUMMY_HOURS_PER_DAY;
+        };
 
-        listMont.appendChild(rowM);
+        const clearSelectedEmployeesForType = (type) => {
+          const isMont = type === "montage";
+          const ids = Array.from(isMont ? selected.montage : selected.productie);
+          const targetList = isMont ? listMont : listProd;
+          for (const id of ids) {
+            if (isMont) {
+              selected.montage.delete(id);
+              selected.montHours.delete(id);
+            } else {
+              selected.productie.delete(id);
+              selected.prodHours.delete(id);
+            }
+            const chk = targetList?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="${type}"]`);
+            if (chk) chk.checked = false;
+          }
+        };
 
-        continue; // ✅ belangrijk: geen checkbox voor concept
+        const syncConcept = (type, checked, hours) => {
+          const h = checked ? Math.max(0, roundHours2(hours || 0)) : 0;
+          if (type === "montage") {
+            selected.dummyMontHours = h;
+            selected.dummyMont = h > 0 ? 1 : 0;
+          } else {
+            selected.dummyProdHours = h;
+            selected.dummyProd = h > 0 ? 1 : 0;
+          }
+        };
+
+        const buildConceptRow = (type) => {
+          const isMont = type === "montage";
+          const currentHours = isMont
+            ? Number(selected.dummyMontHours || 0)
+            : Number(selected.dummyProdHours || 0);
+          const checked = currentHours > 0 || Number(isMont ? selected.dummyMont : selected.dummyProd) > 0;
+          const value = currentHours > 0
+            ? currentHours
+            : (checked ? conceptDefaultHours(type) : 0);
+
+          const row = document.createElement("label");
+          row.className = "assign-item assign-item-concept";
+          row.innerHTML = `
+            <input type="checkbox" class="concept-pick" data-type="${type}" ${checked ? "checked" : ""} />
+            <span style="flex:1;">
+              ${escapeHtml(name)}
+              <small class="cap-left-info">Nog geen medewerker gekozen</small>
+            </span>
+            <input
+              class="input assign-hours-concept"
+              type="text"
+              inputmode="decimal"
+              data-type="${type}"
+              value="${String(value).replace(".", ",")}"
+              style="width:58px;"
+            />
+          `;
+
+          const chk = row.querySelector(".concept-pick");
+          const inp = row.querySelector(".assign-hours-concept");
+
+          chk.onchange = () => {
+            if (chk.checked) {
+              const transferHours = sumSelectedHours(type);
+              if (transferHours > 0) {
+                inp.value = String(transferHours).replace(".", ",");
+                clearSelectedEmployeesForType(type);
+              } else if (parseHoursInput(inp) <= 0) {
+                inp.value = String(conceptDefaultHours(type)).replace(".", ",");
+              }
+            }
+            syncConcept(type, chk.checked, parseHoursInput(inp));
+          };
+
+          inp.oninput = () => {
+            inp.value = inp.value.replace(/[^0-9.,]/g, "");
+            if (chk.checked) syncConcept(type, true, parseHoursInput(inp));
+          };
+
+          inp.onblur = () => {
+            inp.value = String(parseHoursInput(inp)).replace(".", ",");
+          };
+
+          syncConcept(type, checked, value);
+          return row;
+        };
+
+        listProd.appendChild(buildConceptRow("productie"));
+        listMont.appendChild(buildConceptRow("montage"));
+
+        continue; // ✅ belangrijk: geen normale medewerker-checkbox voor concept
       }
 
 

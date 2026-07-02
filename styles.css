@@ -1096,6 +1096,17 @@ td.section-click{
 }
 .assign-item input{ transform:scale(1.05); }
 
+.assign-item-concept{
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(34, 197, 94, .14),
+    rgba(34, 197, 94, .14) 5px,
+    rgba(34, 197, 94, .24) 5px,
+    rgba(34, 197, 94, .24) 10px
+  );
+  border-color: rgba(22, 163, 74, .28);
+}
+
 .assign-grid{
   display:grid;
   grid-template-columns:1fr 1fr;
