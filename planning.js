@@ -1887,7 +1887,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       const title = String(a.title || "Verlof").trim();
       const note = String(a.note || "").trim();
       const h = Number(a.hours || 0);
-      addEmpItem(eid, "absence", `${title}${note ? ` - ${note}` : ""}\n${formatHoursCell(h)} uur`);
+      addEmpItem(eid, "absence", `${title}${note ? ` - ${note}` : ""}\n${fmtHours(h)} uur`);
     }
 
     const fixedEmployeesForAbsence = (werknemers || [])
@@ -1976,7 +1976,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
         <div class="day-absence-list">
           ${Array.from(groupedAbsences.values()).map(g => `
             <div class="day-absence-row">
-              <span>${escapeHtml(g.title)}${g.note ? ` - ${escapeHtml(g.note)}` : ""} (${escapeHtml(formatHoursCell(g.hours))}u × ${g.ids.length})</span>
+              <span>${escapeHtml(g.title)}${g.note ? ` - ${escapeHtml(g.note)}` : ""} (${escapeHtml(fmtHours(g.hours))}u × ${g.ids.length})</span>
               <span style="display:flex; gap:6px;">
                 <button class="btn small dmAbsEdit" type="button"
                   data-ids="${escapeAttr(g.ids.join(","))}"
