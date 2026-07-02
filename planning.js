@@ -581,12 +581,12 @@ function asISODate(v){
           <div class="fieldgrid" style="grid-template-columns: 170px 1fr;">
             <div class="label">Opleverdatum</div><div class="value">${escapeHtml(complTxt || "-")}</div>
 
-            <div class="label">Werkvoorbereiding</div><div class="value">${escapeHtml(formatHoursCell(totals.prep))} uur</div>
-            <div class="label">Productie</div><div class="value">${escapeHtml(formatHoursCell(totals.prod))} uur</div>
-            <div class="label">CNC</div><div class="value">${escapeHtml(formatHoursCell(totals.cnc))} uur</div>
+            <div class="label">Werkvoorbereiding</div><div class="value">${escapeHtml(fmtHours(totals.prep))} uur</div>
+            <div class="label">Productie</div><div class="value">${escapeHtml(fmtHours(totals.prod))} uur</div>
+            <div class="label">CNC</div><div class="value">${escapeHtml(fmtHours(totals.cnc))} uur</div>
 
-            <div class="label">Montage</div><div class="value">${escapeHtml(formatHoursCell(totals.mont))} uur</div>
-            <div class="label">Reis</div><div class="value">${escapeHtml(formatHoursCell(totals.reis))} uur</div>
+            <div class="label">Montage</div><div class="value">${escapeHtml(fmtHours(totals.mont))} uur</div>
+            <div class="label">Reis</div><div class="value">${escapeHtml(fmtHours(totals.reis))} uur</div>
           </div>
         `;
     }
@@ -733,6 +733,185 @@ function asISODate(v){
     capModal = { wrap, close };
     return capModal;
   }
+
+
+// -------- VERLOF MODAL (per medewerker / dag) --------
+let absenceModal = null;
+
+function ensureAbsenceModal(){
+  if (absenceModal) return absenceModal;
+
+  const wrap = document.createElement("div");
+  wrap.className = "modal-backdrop";
+  wrap.id = "absenceModalBackdrop";
+  wrap.innerHTML = `
+    <div class="modal assign-modal absence-modal" role="dialog" aria-modal="true">
+      <div class="hd">
+        <div>
+          <div class="assign-title">Verlof invullen</div>
+          <div class="assign-sub" id="abSub"></div>
+        </div>
+        <button class="btn small" id="abClose" type="button">✕</button>
+      </div>
+      <div class="bd">
+        <div id="abExisting" class="absence-existing"></div>
+        <div class="hr"></div>
+        <div class="fieldgrid" style="grid-template-columns: 150px 1fr;">
+          <div class="label">Specificatie</div>
+          <input class="input" id="abTitle" type="text" value="Verlof" placeholder="Bijv. verlof, dokter, cursus" />
+
+          <div class="label">Hele dag</div>
+          <label class="row" style="gap:8px; align-items:center;">
+            <input id="abAllDay" type="checkbox" />
+            <span class="muted">Gebruik beschikbare uren van deze dag</span>
+          </label>
+
+          <div class="label">Aantal uur</div>
+          <input class="input" id="abHours" type="text" inputmode="decimal" placeholder="0" />
+
+          <div class="label">Notitie</div>
+          <textarea class="input" id="abNote" rows="3" placeholder="Optioneel"></textarea>
+        </div>
+      </div>
+      <div class="ft">
+        <button class="btn" id="abCancel" type="button">Annuleren</button>
+        <button class="btn primary" id="abSave" type="button">Opslaan</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(wrap);
+  const close = () => wrap.classList.remove("show");
+  wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+  wrap.querySelector("#abClose").onclick = close;
+  wrap.querySelector("#abCancel").onclick = close;
+  absenceModal = { wrap, close };
+  return absenceModal;
+}
+
+async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0, absenceId = "" }){
+  const modal = ensureAbsenceModal();
+  const wrap = modal.wrap;
+  const sub = wrap.querySelector("#abSub");
+  const existing = wrap.querySelector("#abExisting");
+  const title = wrap.querySelector("#abTitle");
+  const allDay = wrap.querySelector("#abAllDay");
+  const hours = wrap.querySelector("#abHours");
+  const note = wrap.querySelector("#abNote");
+  const save = wrap.querySelector("#abSave");
+  let editId = String(absenceId || "").trim();
+
+  const avail = Number(availableHours || 0);
+  sub.textContent = `${empName || empId} • ${dateISO}`;
+  title.value = "Verlof";
+  allDay.checked = false;
+  hours.value = "";
+  note.value = "";
+  save.textContent = editId ? "Bijwerken" : "Opslaan";
+
+  const syncHours = () => {
+    if (allDay.checked) {
+      hours.value = (avail > 0 ? String(avail) : "7,5").replace(".", ",");
+      hours.disabled = true;
+    } else {
+      hours.disabled = false;
+    }
+  };
+  allDay.onchange = syncHours;
+  hours.oninput = () => { hours.value = hours.value.replace(/[^0-9.,]/g, ""); };
+  hours.onblur = () => { hours.value = hours.value.replace(".", ","); };
+
+  async function refreshExisting(){
+    const { data, error } = await sb
+      .from("employee_absences")
+      .select("id, title, note, hours, all_day")
+      .eq("werknemer_id", Number(empId))
+      .eq("work_date", dateISO)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      existing.innerHTML = `<div class="error">Verlof laden mislukt: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    const rows = data || [];
+    const fillForEdit = (r) => {
+      editId = String(r?.id || "").trim();
+      title.value = String(r?.title || "Verlof");
+      allDay.checked = !!r?.all_day;
+      hours.value = Number(r?.hours || 0) ? fmtHours(Number(r.hours || 0)) : "";
+      note.value = String(r?.note || "");
+      save.textContent = editId ? "Bijwerken" : "Opslaan";
+      syncHours();
+    };
+    existing.innerHTML = rows.length
+      ? `<div class="assign-col-title">Bestaand verlof</div>${rows.map(r => `
+          <div class="absence-existing-row" data-id="${escapeAttr(r.id)}" title="Klik om te bewerken">
+            <div class="abEdit" data-id="${escapeAttr(r.id)}">
+              <b>${escapeHtml(r.title || "Verlof")}</b>
+              <span class="muted">${escapeHtml(fmtHours(Number(r.hours || 0)))}u${r.all_day ? " • hele dag" : ""}</span>
+              ${r.note ? `<div class="muted">${escapeHtml(r.note)}</div>` : ""}
+            </div>
+            <div class="row" style="gap:6px;"><button class="btn small abEdit" type="button" data-id="${escapeAttr(r.id)}">Bewerken</button><button class="btn small abDelete" type="button" data-id="${escapeAttr(r.id)}">Verwijderen</button></div>
+          </div>
+        `).join("")}`
+      : `<div class="muted">Nog geen verlof op deze dag.</div>`;
+
+    existing.querySelectorAll(".abEdit").forEach(btn => {
+      btn.onclick = (ev) => {
+        ev.stopPropagation();
+        const id = String(btn.dataset.id || "");
+        const row = rows.find(x => String(x.id) === id);
+        if (row) fillForEdit(row);
+      };
+    });
+
+    if (editId) {
+      const row = rows.find(x => String(x.id) === editId);
+      if (row) fillForEdit(row);
+    }
+
+    existing.querySelectorAll(".abDelete").forEach(btn => {
+      btn.onclick = async () => {
+        if (!confirm("Verlof verwijderen?")) return;
+        const id = String(btn.dataset.id || "");
+        const del = await sb.from("employee_absences").delete().eq("id", id);
+        if (del.error) { alert("Fout verwijderen: " + del.error.message); return; }
+        modal.close();
+        if (capModal) capModal.close();
+        await loadAndRender();
+      };
+    });
+  }
+
+  save.onclick = async () => {
+    const hRaw = String(hours.value || "").trim().replace(",", ".");
+    const h = allDay.checked ? (avail > 0 ? avail : 7.5) : Number(hRaw || 0);
+    if (!(h > 0)) { alert("Vul een aantal uur in of kies hele dag."); return; }
+
+    const row = {
+      werknemer_id: Number(empId),
+      work_date: dateISO,
+      hours: Math.round(h * 100) / 100,
+      all_day: !!allDay.checked,
+      title: String(title.value || "Verlof").trim() || "Verlof",
+      note: String(note.value || "").trim() || null
+    };
+
+    const res = editId
+      ? await sb.from("employee_absences").update(row).eq("id", editId)
+      : await sb.from("employee_absences").insert(row);
+    if (res.error) { alert("Fout opslaan verlof: " + res.error.message); return; }
+
+    modal.close();
+    if (capModal) capModal.close();
+    await loadAndRender();
+  };
+
+  await refreshExisting();
+  syncHours();
+  wrap.classList.add("show");
+}
 
 // -------- INHUUR MODAL (uren per inhuur per week) --------
 let inhuurModal = null;
@@ -914,7 +1093,7 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
   // dedupe
   const seen = new Set();
   return out.filter(it => {
-    const k = `${it.type}||${it.text}`;
+    const k = it.type === "absence" ? `${it.type}||${it.absenceId || it.text}` : `${it.type}||${it.text}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -1217,27 +1396,16 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
     const safePAssigns = paErr ? [] : (pAssigns || []);
     if (paErr) console.warn("project_assignments niet geladen:", paErr.message);
 
-    // 6c) employee_absences in range (verlof / algemene vrije dagen)
-    let absences = [];
-    try {
-      const { data: absData, error: absErr } = await sb
-        .from("employee_absences")
-        .select("id, werknemer_id, work_date, hours, all_day, title, note")
-        .gte("work_date", startISO)
-        .lte("work_date", endISO)
-        .limit(200000);
+    // 6c) verlof / afwezigheid in range
+    const { data: absences, error: absErr } = await sb
+      .from("employee_absences")
+      .select("id, werknemer_id, work_date, hours, all_day, title, note, created_at")
+      .gte("work_date", startISO)
+      .lte("work_date", endISO)
+      .limit(200000);
 
-      if (absErr) {
-        console.warn("employee_absences niet geladen:", absErr.message);
-        absences = [];
-      } else {
-        absences = absData || [];
-      }
-    } catch (e) {
-      console.warn("employee_absences load exception:", e);
-      absences = [];
-    }
-
+    const safeAbsences = absErr ? [] : (absences || []);
+    if (absErr) console.warn("employee_absences niet geladen:", absErr.message);
 
     statusEl.textContent = "";
 
@@ -1252,10 +1420,10 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
       werknemersCap,
       assigns: safeAssigns,
       pAssigns: safePAssigns,
-      absences,
       orders,
       inhuurEntries,
-      inhuurPeopleVisible
+      inhuurPeopleVisible,
+      absences: safeAbsences
     });
 
 
@@ -1434,6 +1602,43 @@ async function consumeProjectConceptHours(projectId, dateISO, workType, consumeH
   }
 }
 
+
+function isSectionConceptWorkday(date){
+  const day = date.getDay();
+  return day >= 1 && day <= 5;
+}
+
+function buildSectionConceptHoursSegments(startISO, totalHours, deliveryISO = ""){
+  const startDate = parseISODate(startISO);
+  let remaining = roundHours2(totalHours);
+  const out = [];
+  if (!startDate || remaining <= 0) return out;
+
+  const deliveryDate = parseISODate(deliveryISO);
+  const deadlineDate = deliveryDate ? addDays(deliveryDate, -1) : null;
+
+  let d = startDate;
+  let guard = 0;
+  while (remaining > 0.001 && guard < 1000) {
+    guard++;
+
+    if (deadlineDate && d > deadlineDate) break;
+
+    if (isSectionConceptWorkday(d)) {
+      const h = Math.min(PROJECT_DUMMY_HOURS_PER_DAY, remaining);
+      out.push({
+        work_date: toISODate(d),
+        hours: roundHours2(h)
+      });
+      remaining = roundHours2(remaining - h);
+    }
+
+    d = addDays(d, 1);
+  }
+
+  return out;
+}
+
 async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, hours){
   const sid = String(sectionId || "").trim();
   const pid = String(projectId || "").trim();
@@ -1444,9 +1649,9 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
   if (!sid || !date || !["productie", "montage"].includes(type) || conceptHours <= 0) return { ok: false, message: "Geen uren om automatisch te plannen." };
 
   const deliveryISO = window.__plannerCtx?.projMetaById?.get(pid)?.deliveryISO || "";
-  let segments = buildProjectDummyHoursSegments(date, conceptHours, deliveryISO);
+  let segments = buildSectionConceptHoursSegments(date, conceptHours, deliveryISO);
   if (!segments.length && deliveryISO) {
-    segments = buildProjectDummyHoursSegments(date, conceptHours);
+    segments = buildSectionConceptHoursSegments(date, conceptHours);
   }
   if (!segments.length) return { ok: false, message: "Geen werkdagen gevonden om te plannen." };
 
@@ -1550,7 +1755,6 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       werknemers,
       inhuurById,
       inhuurPeopleVisible,   // ✅ toevoegen
-      absences,
       assignMap,
       projectAssignMap,
       sectById,
@@ -1654,7 +1858,6 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
     const ctx = window.__plannerCtx || {};
     const capByEmp = ctx.capByEmp || new Map();
     const inhuurByEmp = ctx.inhuurByEmp || new Map();
-    const empAbsenceByDay = ctx.empAbsenceByDay || new Map();
 
     // vaste medewerkers met capaciteit > 0
     for (const w of (werknemers || [])) {
@@ -1674,36 +1877,6 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
         const key = `inhuur:${String(iid).trim()}`;
         if (!byEmp.has(key)) byEmp.set(key, []);
       }
-    }
-
-    for (const a of (absences || [])) {
-      if (String(a.work_date || "").slice(0,10) !== String(dateISO)) continue;
-      const eid = String(a.werknemer_id ?? "").trim();
-      if (!eid) continue;
-      const title = String(a.title || "Verlof").trim();
-      const note = String(a.note || "").trim();
-      const h = Number(a.hours || 0);
-      addEmpItem(eid, "absence", `${title}${note ? ` - ${note}` : ""}\n${formatHoursCell(h)} uur`);
-    }
-
-    const fixedEmployeesForAbsence = (werknemers || [])
-      .map(w => ({
-        id: String(w?.id ?? w?.werknemer_id ?? "").trim(),
-        name: String(w?.name ?? w?.naam ?? "").trim()
-      }))
-      .filter(w => w.id && w.id !== String(DUMMY_EMP_ID));
-
-    const absencesOnDay = (absences || []).filter(a => String(a.work_date || "").slice(0,10) === String(dateISO));
-
-    const groupedAbsences = new Map();
-    for (const a of absencesOnDay) {
-      const title = String(a.title || "Verlof").trim();
-      const note = String(a.note || "").trim();
-      const hours = Number(a.hours || 0);
-      const key = `${title}||${note}||${hours}`;
-      if (!groupedAbsences.has(key)) groupedAbsences.set(key, { title, note, hours, allDay: !!a.all_day, ids: [], rows: [] });
-      groupedAbsences.get(key).ids.push(a.id);
-      groupedAbsences.get(key).rows.push(a);
     }
 
     // Render
@@ -1747,7 +1920,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
         <div class="dm-items">
           ${items.length
             ? items.map(it => `
-                <div class="dm-card ${it.type === "montage" ? "mont" : it.type === "productie" ? "prod" : it.type === "absence" ? "absence" : ""}">
+                <div class="dm-card ${it.type === "montage" ? "mont" : it.type === "productie" ? "prod" : ""}">
                   ${escapeHtml(it.text).replace(/\n/g,"<br>")}
                 </div>
               `).join("")
@@ -1758,156 +1931,16 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
     `);
   }
 
-    bodyEl.innerHTML = `
-      <div class="day-absence-box">
-        <div class="day-absence-title">Algemene vrije dag</div>
-        <div class="day-absence-form">
-          <input class="input" id="dmAbsTitle" type="text" placeholder="Specificatie" value="Verlof" />
-          <input class="input" id="dmAbsHours" type="text" inputmode="decimal" placeholder="Uren" />
-          <label class="day-absence-check">
-            <input id="dmAbsAllDay" type="checkbox" checked />
-            <span>Hele dag</span>
-          </label>
-          <button class="btn primary" id="dmAbsSave" type="button">Opslaan</button>
-        </div>
-        <div class="muted day-absence-hint">Wordt opgeslagen voor alle vaste medewerkers met beschikbaarheid op deze dag.</div>
-        <div class="day-absence-list">
-          ${Array.from(groupedAbsences.values()).map(g => `
-            <div class="day-absence-row">
-              <span>${escapeHtml(g.title)}${g.note ? ` - ${escapeHtml(g.note)}` : ""} (${escapeHtml(formatHoursCell(g.hours))}u × ${g.ids.length})</span>
-              <span style="display:flex; gap:6px;">
-                <button class="btn small dmAbsEdit" type="button"
-                  data-ids="${escapeAttr(g.ids.join(","))}"
-                  data-title="${escapeAttr(g.title)}"
-                  data-hours="${escapeAttr(String(g.hours))}"
-                  data-all-day="${g.allDay ? "1" : "0"}">Bewerken</button>
-                <button class="btn small dmAbsDelete" type="button" data-ids="${escapeAttr(g.ids.join(","))}">Verwijderen</button>
-              </span>
-            </div>
-          `).join("")}
-        </div>
-      </div>
-      ${rows.length
-        ? `<div class="dm-list">${rows.join("")}</div>`
-        : `<div class="muted">Geen ingeplande medewerkers op deze dag.</div>`
-      }
-    `;
-
-    const absAllDay = bodyEl.querySelector("#dmAbsAllDay");
-    const absHours = bodyEl.querySelector("#dmAbsHours");
-    const absTitle = bodyEl.querySelector("#dmAbsTitle");
-    const absSave = bodyEl.querySelector("#dmAbsSave");
-
-    if (absAllDay && absHours) {
-      const setHoursState = () => {
-        absHours.disabled = absAllDay.checked;
-        if (absAllDay.checked) absHours.value = "";
-      };
-      absAllDay.onchange = setHoursState;
-      setHoursState();
-    }
-
-    bodyEl.querySelectorAll(".dmAbsEdit").forEach(btn => {
-      btn.onclick = () => {
-        if (absTitle) absTitle.value = String(btn.dataset.title || "Verlof");
-        if (absAllDay) absAllDay.checked = String(btn.dataset.allDay || "") === "1";
-        if (absHours) absHours.value = String(btn.dataset.hours || "").replace(".", ",");
-        if (absSave) {
-          absSave.dataset.editIds = String(btn.dataset.ids || "");
-          absSave.textContent = "Bijwerken";
-        }
-        if (absAllDay && absHours) {
-          absHours.disabled = absAllDay.checked;
-          if (absAllDay.checked) absHours.value = "";
-        }
-      };
-    });
-
-    if (absSave) {
-      absSave.onclick = async () => {
-        const title = String(absTitle?.value || "Verlof").trim() || "Verlof";
-        const allDay = !!absAllDay?.checked;
-        const manualHours = Number(String(absHours?.value || "0").replace(",", "."));
-        const editIds = String(absSave.dataset.editIds || "").split(",").map(x => x.trim()).filter(Boolean);
-
-        if (editIds.length) {
-          const rowsToEdit = (absences || []).filter(a => editIds.includes(String(a.id)));
-          for (const a of rowsToEdit) {
-            const empId = String(a.werknemer_id ?? "").trim();
-            const available = Number(capByEmp.get(empId)?.get(dateISO) || 0);
-            const hours = allDay ? available : manualHours;
-            if (!(hours > 0)) continue;
-            const upd = await sb
-              .from("employee_absences")
-              .update({
-                hours: roundHours2(hours),
-                all_day: allDay,
-                title,
-              })
-              .eq("id", a.id);
-
-            if (upd.error) {
-              alert("Fout bijwerken vrije dag: " + upd.error.message);
-              return;
-            }
-          }
-
-          modal.close();
-          await loadAndRender();
-          return;
-        }
-
-        const rowsToInsert = [];
-        for (const w of fixedEmployeesForAbsence) {
-          const available = Number(capByEmp.get(w.id)?.get(dateISO) || 0);
-          const hours = allDay ? available : manualHours;
-          if (!(hours > 0)) continue;
-          rowsToInsert.push({
-            werknemer_id: Number(w.id),
-            work_date: dateISO,
-            hours: roundHours2(hours),
-            all_day: allDay,
-            title,
-          });
-        }
-
-        if (!rowsToInsert.length) {
-          alert("Geen medewerkers met beschikbare uren gevonden voor deze dag.");
-          return;
-        }
-
-        const ins = await sb.from("employee_absences").insert(rowsToInsert);
-        if (ins.error) {
-          alert("Fout opslaan vrije dag: " + ins.error.message);
-          return;
-        }
-
-        modal.close();
-        await loadAndRender();
-      };
-    }
-
-    bodyEl.querySelectorAll(".dmAbsDelete").forEach(btn => {
-      btn.onclick = async () => {
-        const ids = String(btn.dataset.ids || "").split(",").map(x => x.trim()).filter(Boolean);
-        if (!ids.length) return;
-        if (!confirm("Deze vrije dag verwijderen?")) return;
-        const del = await sb.from("employee_absences").delete().in("id", ids);
-        if (del.error) {
-          alert("Fout verwijderen vrije dag: " + del.error.message);
-          return;
-        }
-        modal.close();
-        await loadAndRender();
-      };
-    });
+    bodyEl.innerHTML = rows.length
+      ? `<div class="dm-list">${rows.join("")}</div>`
+      : `<div class="muted">Geen ingeplande medewerkers op deze dag.</div>`;
 
     modal.wrap.classList.add("show");
   }
 
 
     // -------- RENDER --------
-    function renderPlanner({ start, days, projecten, secties, work, cap, werknemers, werknemersCap, assigns, pAssigns, absences, orders, inhuurEntries, inhuurPeopleVisible }) {
+    function renderPlanner({ start, days, projecten, secties, work, cap, werknemers, werknemersCap, assigns, pAssigns, orders, inhuurEntries, inhuurPeopleVisible, absences = [] }) {
     const DEBUG_OFFNR = "2600013";   // <-- zet hier jouw projectnr uit de screenshot
     const DEBUG_ISO   = null;        // bv "2026-02-12" of null = alle dagen in range
 
@@ -2512,26 +2545,20 @@ for (const p of (projecten || [])) {
       }
     }
 
-    const empAbsenceByDay = new Map(); // empIdStr -> dateISO -> hours
-    const empAbsenceItemsByDay = new Map(); // empIdStr -> dateISO -> rows[]
-    const absenceByDay = {};
-
-    for (const a of (absences || [])) {
-      const empStr = String(a.werknemer_id ?? "").trim();
-      const d = String(a.work_date || "").slice(0,10);
-      const h = Number(a.hours || 0);
+    // ===== Verlof aggregatie (per werknemer per dag + totaal per dag) =====
+    const absenceByEmp = new Map(); // empId -> Map(dateISO -> rows[])
+    const absenceTotalByDay = {};
+    for (const r of (absences || [])) {
+      const empStr = String(r.werknemer_id ?? "").trim();
+      const d = String(r.work_date || "").trim();
+      const h = Number(r.hours || 0);
       if (!empStr || !d || !(h > 0)) continue;
 
-      if (!empAbsenceByDay.has(empStr)) empAbsenceByDay.set(empStr, new Map());
-      const dm = empAbsenceByDay.get(empStr);
-      dm.set(d, Number(dm.get(d) || 0) + h);
-
-      if (!empAbsenceItemsByDay.has(empStr)) empAbsenceItemsByDay.set(empStr, new Map());
-      const itemsDm = empAbsenceItemsByDay.get(empStr);
-      if (!itemsDm.has(d)) itemsDm.set(d, []);
-      itemsDm.get(d).push(a);
-
-      absenceByDay[d] = Number(absenceByDay[d] || 0) + h;
+      if (!absenceByEmp.has(empStr)) absenceByEmp.set(empStr, new Map());
+      const dm = absenceByEmp.get(empStr);
+      if (!dm.has(d)) dm.set(d, []);
+      dm.get(d).push(r);
+      absenceTotalByDay[d] = (absenceTotalByDay[d] || 0) + h;
     }
 
     // ===== Inhuur aggregatie (per inhuur_id per dag + totaal per dag) =====
@@ -2569,6 +2596,7 @@ for (const p of (projecten || [])) {
     const plannedCncByDay = {};
     const plannedMontByDay = {};
     const plannedReisByDay = {};
+    const plannedAbsenceByDay = {};
 
     // ✅ ook projectniveau mee nemen (↳ Montage / ↳ Productie)
     const plannedSetsByDay = buildPlannedSetsByDay([...(assigns || []), ...(pAssigns || [])]);
@@ -2599,6 +2627,7 @@ for (const p of (projecten || [])) {
       plannedCncByDay[iso] = 0;
       plannedMontByDay[iso] = 0;
       plannedReisByDay[iso] = 0;
+      plannedAbsenceByDay[iso] = Number(absenceTotalByDay[iso] || 0);
     }
 
     for (const [sid, dm] of assignMap) {
@@ -2720,8 +2749,6 @@ for (const p of (projecten || [])) {
 
         // ✅ nieuw: beschikbaarheid
         capByEmp,
-        empAbsenceByDay,
-        empAbsenceItemsByDay,
         inhuurByEmp,
       };
 
@@ -2731,12 +2758,7 @@ for (const p of (projecten || [])) {
     const trMonth = document.createElement("tr");
     trMonth.className = "hdr hdr-month";
     trMonth.appendChild(hdrCell(
-      `<div class="rowhdr-flex">
-        <span>Planning</span>
-        <button class="hourscol-toggle" id="btnHoursCol" type="button" title="Urenkolom tonen/verbergen">
-          ${hoursColOpen ? "◀" : "▶"}
-        </button>
-      </div>`,
+      `<div class="rowhdr-flex"><span>Planning</span></div>`,
       "hdr-cell rowhdr sticky-left sticky-top"
     ));
 
@@ -2852,8 +2874,9 @@ projRow.appendChild(hoursTd);
 // ===== required (bron) uren uit secties optellen =====
 const secsForProj = (sectiesByProject.get(pid) || []);
 
-const req = { prod: 0, cnc: 0, mont: 0, reis: 0 };
+const req = { prep: 0, prod: 0, cnc: 0, mont: 0, reis: 0 };
 for (const s of secsForProj) {
+  req.prep += Number(s?.uren_wvb ?? s?.uren_prep ?? s?.uren_werkvoorbereiding ?? 0);
   req.prod += Number(s?.uren_prod ?? 0);
   req.cnc  += Number(s?.uren_cnc ?? s?.uren_cnc_prod ?? 0);
   req.mont += Number(s?.uren_montage ?? s?.uren_mont ?? 0);
@@ -2862,7 +2885,7 @@ for (const s of secsForProj) {
  
  // ===== planned (gepland) uren voor project (uit assignments) =====
 const pfP = (settings.planFactor ?? 1);
-const plP = { prod: 0, cnc: 0, mont: 0, reis: 0 };
+const plP = { prep: 0, prod: 0, cnc: 0, mont: 0, reis: 0 };
 
 const secsP = (sectiesByProject.get(pid) || []);
 
@@ -2969,7 +2992,40 @@ for (const dd of dates) {
       if ((pe.dummyMont || 0) > 0) dummyMont = true;
     }
 
-  projAssignByDay[iso] = { prod, mont, dummyProd, dummyMont };
+  // splits voor compacte projectregel: medewerkers/inhuur apart van concept
+  let prodReal = 0, prodDummyHours = 0, montReal = 0, montDummyHours = 0;
+
+  for (const s of secs) {
+    const sidRaw = s?.[sectIdKey]
+      ? String(s[sectIdKey])
+      : (s?.section_id ? String(s.section_id) : null);
+    if (!sidRaw) continue;
+
+    const sidC = sectLookup.get(String(sidRaw)) || String(sidRaw);
+    const entry = assignMap.get(sidC)?.get(iso);
+    if (!entry) continue;
+
+    prodReal += Number(entry.prodHours || 0) + Number(entry.inhuurProdIds?.size || 0);
+    prodDummyHours += sectionDummyHours(entry, "Prod");
+
+    montReal += Number(entry.montHours || 0) + Number(entry.inhuurMontIds?.size || 0);
+    montDummyHours += sectionDummyHours(entry, "Mont");
+  }
+
+  const peSplit = projectAssignMap.get(String(pid))?.get(iso);
+  if (peSplit) {
+    prodReal += Number(peSplit.prodHours || 0) + (Number(peSplit.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+    prodDummyHours += Number(peSplit.dummyProdHours || (Number(peSplit.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
+
+    montReal += Number(peSplit.montHours || 0) + (Number(peSplit.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
+    montDummyHours += Number(peSplit.dummyMontHours || (Number(peSplit.dummyMont || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
+  }
+
+  projAssignByDay[iso] = {
+    prod, mont, dummyProd, dummyMont,
+    prodReal, prodDummy: prodDummyHours,
+    montReal, montDummy: montDummyHours
+  };
 }
 
 
@@ -3048,8 +3104,8 @@ for (const dd of dates) {
         const sn0  = s?.[sectNameKey] || "sectie";
         const paraHtml = para ? `<span class="secNo">${escapeHtml(para)}</span>` : "";
         leftS.innerHTML = `
-          <button class="expander expander-sec" data-sect="${escapeAttr(sid)}" aria-label="toggle sectie">▶</button>
-          <span class="sectext sectname" data-sect="${escapeAttr(sid)}">↳ ${paraHtml}${escapeHtml(sn0)}</span>
+          <span class="sect-indent" aria-hidden="true"></span>
+          <span class="sectext sectname no-expander" data-sect="${escapeAttr(sid)}">${paraHtml}${escapeHtml(sn0)}</span>
         `;
 
 
@@ -3063,6 +3119,7 @@ for (const dd of dates) {
 
       // ===== Sectie uren: required (bron) vs gepland (section_assignments) =====
       const reqS = {
+        prep: Number(s?.uren_wvb ?? s?.uren_prep ?? s?.uren_werkvoorbereiding ?? 0),
         prod: Number(s?.uren_prod ?? 0),
         cnc:  Number(s?.uren_cnc ?? s?.uren_cnc_prod ?? 0),
         mont: Number(s?.uren_montage ?? s?.uren_mont ?? 0),
@@ -3070,7 +3127,7 @@ for (const dd of dates) {
       };
 
       const pfS = (settings.planFactor ?? 1);
-      const plS = { prod: 0, cnc: 0, mont: 0, reis: 0 };
+      const plS = { prep: 0, prod: 0, cnc: 0, mont: 0, reis: 0 };
 
       const sidC = sectLookup.get(String(sid)) || String(sid);
       const dmSec = assignMap.get(sidC);
@@ -3113,13 +3170,18 @@ for (const dd of dates) {
         for (const dd of dates) {
           const iso = toISODate(dd);
           const entry = dmA?.get(iso);
+        const prodReal = entry ? Number(entry.prodHours || 0) : 0;
+        const montReal = entry ? Number(entry.montHours || 0) : 0;
+        const prodDummy = entry ? sectionDummyHours(entry, "Prod") : 0;
+        const montDummy = entry ? sectionDummyHours(entry, "Mont") : 0;
+
         assignByDay[iso] = {
-          prod: entry ? Number(entry.prodHours || 0) : 0,
-          mont: entry ? Number(entry.montHours || 0) : 0,
-          prodReal: entry ? Number(entry.prodHours || 0) : 0,
-          prodDummy: 0,
-          montReal: entry ? Number(entry.montHours || 0) : 0,
-          montDummy: 0,
+          prod: prodReal + prodDummy,
+          mont: montReal + montDummy,
+          prodReal,
+          prodDummy,
+          montReal,
+          montDummy,
           subc: entry ? Number(entry.subcNames?.length || 0) : 0,
         };
 
@@ -3134,48 +3196,6 @@ for (const dd of dates) {
         tbody.appendChild(secRow);
         lastRowOfProject = secRow;
 
-        const conceptByDay = {};
-        let hasSectionConcept = false;
-        for (const dd of dates) {
-          const iso = toISODate(dd);
-          const entry = dmA?.get(iso);
-          const prodDummy = entry ? sectionDummyHours(entry, "Prod") : 0;
-          const montDummy = entry ? sectionDummyHours(entry, "Mont") : 0;
-          if (prodDummy > 0 || montDummy > 0) hasSectionConcept = true;
-          conceptByDay[iso] = {
-            prod: prodDummy,
-            mont: montDummy,
-            prodReal: 0,
-            prodDummy,
-            montReal: 0,
-            montDummy,
-            subc: 0,
-          };
-        }
-
-        if (hasSectionConcept) {
-          const conceptRow = document.createElement("tr");
-          conceptRow.className = "section-row hidden section-concept-row";
-          markZebra(conceptRow);
-          conceptRow.dataset.parent = String(pid);
-
-          const leftConcept = document.createElement("td");
-          leftConcept.className = "rowhdr sticky-left section-cell";
-          leftConcept.innerHTML = `<span class="sectext"> ↳ Concept</span>`;
-          conceptRow.appendChild(leftConcept);
-
-          const hoursTdConcept = document.createElement("td");
-          hoursTdConcept.className = "cell hourscol sticky-left2";
-          hoursTdConcept.style.left = "380px";
-          if (!hoursColOpen) hoursTdConcept.style.display = "none";
-          hoursTdConcept.innerHTML = "";
-          conceptRow.appendChild(hoursTdConcept);
-
-          appendSectionDayCells(conceptRow, dates, dates.map(() => ""), sid, String(pid), conceptByDay, assignMap, werknemers, inhuurById);
-          applyProjectDateColumnClasses(conceptRow, dates, deliveryISO, complISO);
-          tbody.appendChild(conceptRow);
-          lastRowOfProject = conceptRow;
-        }
 
 
     // ======================
@@ -3374,7 +3394,7 @@ for (const dd of dates) {
 
       const leftP = document.createElement("td");
       leftP.className = "rowhdr sticky-left section-cell";
-      leftP.innerHTML = `<span class="sectext">↳ Productie</span>`;
+      leftP.innerHTML = `<span class="sect-indent" aria-hidden="true"></span><span class="sectext no-expander">Productie</span>`;
       prodRow.appendChild(leftP);
 
       const hoursTdP = document.createElement("td");
@@ -3472,7 +3492,7 @@ for (const dd of dates) {
 
       const leftM = document.createElement("td");
       leftM.className = "rowhdr sticky-left section-cell";
-      leftM.innerHTML = `<span class="sectext">↳ Montage</span>`;
+      leftM.innerHTML = `<span class="sect-indent" aria-hidden="true"></span><span class="sectext no-expander">Montage</span>`;
       montRow.appendChild(leftM);
 
       // ===== lege uren-kolom cel (montage samenvatting) =====
@@ -3613,21 +3633,12 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
 
         const inProd = !!empAssignByDay[dayISO]?.prod?.has(empIdStr);
         const inMont = !!empAssignByDay[dayISO]?.mont?.has(empIdStr);
-        const absH = Number(empAbsenceByDay.get(empIdStr)?.get(dayISO) || 0);
 
         if (inProd && inMont) td.classList.add("cap-assigned-both");
         else if (inProd) td.classList.add("cap-assigned-prod");
         else if (inMont) td.classList.add("cap-assigned-mont");
-        if (absH > 0) {
-          td.classList.add("cap-absence");
-          const items = empAbsenceItemsByDay.get(empIdStr)?.get(dayISO) || [];
-          const labels = items.map(a => `${String(a.title || "Verlof")} ${formatHoursCell(Number(a.hours || 0))}u`);
-          td.dataset.tip = labels.join("\n");
-        }
 
-        td.innerHTML = absH > 0
-          ? `<div class="cap-cell-stack"><span>${escapeHtml(fmt0(h))}</span><span class="cap-absence-chip">${escapeHtml(formatHoursCell(absH))}</span></div>`
-          : escapeHtml(fmt0(h));
+        td.textContent = fmt0(h);
         tr.appendChild(td);
       }
 
@@ -3702,17 +3713,15 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
     // Gepland montage
     tbody.appendChild(labelRow("Gepland montage", dates, plannedMontByDay, "planned-mont"));
 
-    // Verlof / algemene vrije dagen
-    tbody.appendChild(labelRow("Verlof", dates, absenceByDay, "planned-absence"));
+    // Verlof
+    tbody.appendChild(labelRow("Verlof", dates, plannedAbsenceByDay, "planned-absence"));
 
     // Saldo (capaciteit - gepland)
     const saldoByDay = {};
     for (const d of dates) {
       const iso = toISODate(d);
       const capTot = Number(capTotalByDay?.[iso] || 0);
-      const planned = Number(plannedProdByDay?.[iso] || 0)
-        + Number(plannedMontByDay?.[iso] || 0)
-        + Number(absenceByDay?.[iso] || 0);
+      const planned = Number(plannedProdByDay?.[iso] || 0) + Number(plannedMontByDay?.[iso] || 0) + Number(plannedAbsenceByDay?.[iso] || 0);
       // afronden op 2 decimalen om “-0” en float-ruis te vermijden
       saldoByDay[iso] = Math.round((capTot - planned) * 100) / 100;
     }
@@ -3804,7 +3813,6 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
         werknemers,
         inhuurById,
         inhuurPeopleVisible,
-        absences,
         assignMap,
         projectAssignMap,
         sectById,
@@ -4004,24 +4012,6 @@ if (capCell) {
   const dateISO = String(capCell.dataset.workDate || "");
   if (!empId || !dateISO) return;
 
-  if (capCell.classList.contains("cap-absence")) {
-    openDayModal({
-      dateISO,
-      werknemers,
-      inhuurById,
-      inhuurPeopleVisible,
-      absences,
-      assignMap,
-      projectAssignMap,
-      sectById,
-      projMetaById,
-      sectProjKey,
-      sectParaKey,
-      sectNameKey
-    });
-    return;
-  }
-
   // hergebruik exact dezelfde flow als je cap-emp-click,
   // maar start week op basis van aangeklikte datum
   const modal = ensureCapModal();
@@ -4065,50 +4055,83 @@ function buildPlanLabel({ pid, sid, type }) {
 
 // --- helper: geplande items voor medewerker op datum ---
 function getPlannedForEmpDate(empIdStr, dateISO) {
-  const out = []; // { type:'productie'|'montage', text:string }
+  const emp = String(empIdStr).trim();
+  const out = []; // { type:'productie'|'montage', text:string, hours:number }
 
-  // 1) sectie assignments (assignMap: sid -> dateISO -> entry)
+  const pushItem = ({ type, text, hours }) => {
+    const h = Number(hours || 0);
+    if (!type || !text || !(h > 0)) return;
+    out.push({ type, text, hours: h });
+  };
+
+  // 1) sectie assignments (section_assignments heeft echte uren per row)
   for (const [sid, dm] of (assignMap || new Map())) {
     const entry = dm?.get(dateISO);
-    if (!entry) continue;
+    if (!entry?.rows) continue;
 
-const emp = String(empIdStr).trim();
+    const sObj = sectById.get(String(sid));
+    const pid = String(sObj?.[sectProjKey] || "").trim();
+    if (!pid) continue;
 
-if (entry.productie?.has(emp)) {
-  const sObj = sectById.get(String(sid));
-  const pid = String(sObj?.[sectProjKey] || "").trim();
-  if (pid) out.push({ type: "productie", text: buildPlanLabel({ pid, sid, type: "productie" }) });
-}
+    for (const r of entry.rows || []) {
+      const rEmp = String(r.werknemer_id ?? "").trim();
+      if (rEmp !== emp) continue;
 
-if (entry.montage?.has(emp)) {
-  const sObj = sectById.get(String(sid));
-  const pid = String(sObj?.[sectProjKey] || "").trim();
-  if (pid) out.push({ type: "montage", text: buildPlanLabel({ pid, sid, type: "montage" }) });
-}
+      const wt = String(r.work_type || "").toLowerCase().trim();
+      if (wt !== "productie" && wt !== "montage") continue;
+
+      pushItem({
+        type: wt,
+        text: buildPlanLabel({ pid, sid, type: wt }),
+        hours: Number(r.hours || 0) || 7.5
+      });
+    }
   }
 
-  // 2) project assignments (projectAssignMap: pid -> dateISO -> entry)
+  // 2) project assignments (geen hours-kolom vereist: standaard hele dag)
   for (const [pid, dm] of (projectAssignMap || new Map())) {
     const entry = dm?.get(dateISO);
-    if (!entry) continue;
+    if (!entry?.rows) continue;
 
-    if (entry.productie?.has(empIdStr)) {
-      out.push({ type: "productie", text: buildPlanLabel({ pid, sid: null, type: "productie" }) });
-    }
-    if (entry.montage?.has(empIdStr)) {
-      out.push({ type: "montage", text: buildPlanLabel({ pid, sid: null, type: "montage" }) });
+    for (const r of entry.rows || []) {
+      const rEmp = String(r.werknemer_id ?? "").trim();
+      if (rEmp !== emp) continue;
+
+      const wt = String(r.work_type || "").toLowerCase().trim();
+      if (wt !== "productie" && wt !== "montage") continue;
+
+      pushItem({
+        type: wt,
+        text: buildPlanLabel({ pid, sid: null, type: wt }),
+        hours: Number(r.hours || 0) || 7.5
+      });
     }
   }
 
-  // kleine dedupe (zelfde tekst/type)
-  const seen = new Set();
-  return out.filter(it => {
+  // 3) verlof / afwezigheid
+  const absRows = absenceByEmp.get(emp)?.get(dateISO) || [];
+  for (const r of absRows) {
+    pushItem({
+      type: "absence",
+      text: String(r.title || "Verlof"),
+      hours: Number(r.hours || 0),
+      absenceId: String(r.id || ""),
+      allDay: !!r.all_day,
+      note: String(r.note || "")
+    });
+  }
+
+  // gelijke taak/type op dezelfde dag samenvoegen
+  const grouped = new Map();
+  for (const it of out) {
     const k = `${it.type}||${it.text}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+    if (!grouped.has(k)) grouped.set(k, { ...it });
+    else grouped.get(k).hours += Number(it.hours || 0);
+  }
+
+  return Array.from(grouped.values());
 }
+
 
 
   const renderWeek = () => {
@@ -4129,11 +4152,17 @@ formEl.innerHTML = `
 
       const planned = getPlannedForEmpDate(String(empId).trim(), iso);
       const plannedHtml = planned.length
-        ? planned.map(p => `
-            <div class="cap-planchip ${p.type === "montage" ? "mont" : "prod"}">
-              ${String(p.text).replace(/\n/g, "<br>")}
-            </div>
-          `).join("")
+        ? `<div class="cap-planbar">${planned.map(p => {
+            const h = Number(p.hours || 0);
+            const pct = Math.max(0, Math.min(100, (h / 7.5) * 100));
+            const cls = p.type === "absence" ? "absence" : (p.type === "montage" ? "mont" : "prod");
+            return `
+              <div class="cap-planchip cap-planseg ${cls}" style="flex-basis:${pct}%;" title="${escapeAttr(fmtHours(h))} uur">
+                <div class="cap-planseg-title">${escapeHtml(String(p.text)).replace(/\n/g, "<br>")}</div>
+                <div class="cap-planseg-hours">${escapeHtml(fmtHours(h))}u</div>
+              </div>
+            `;
+          }).join("")}</div>`
         : `<div class="cap-planempty">—</div>`;
 
       return `
@@ -4152,7 +4181,7 @@ formEl.innerHTML = `
               />
             </div>
           </div>
-          <div class="cap-right">${plannedHtml}</div>
+          <div class="cap-right cap-absence-target" data-iso="${iso}" data-available="${val || 0}">${plannedHtml}</div>
         </div>
       `;
     }).join("")}
@@ -4165,6 +4194,18 @@ formEl.innerHTML = `
       });
       inp.addEventListener("blur", () => {
         inp.value = inp.value.replace(".", ",");
+      });
+    });
+
+    formEl.querySelectorAll(".cap-absence-target[data-iso]").forEach(box => {
+      box.addEventListener("click", async (ev) => {
+        ev.stopPropagation();
+        const iso = String(box.dataset.iso || "");
+        const available = Number(box.dataset.available || 0);
+        const absChip = ev.target.closest("[data-absence-id]");
+        const absenceId = absChip ? String(absChip.dataset.absenceId || "") : "";
+        if (!iso) return;
+        await openAbsenceModal({ empId, empName, dateISO: iso, availableHours: available, absenceId });
       });
     });
   };
@@ -4346,7 +4387,7 @@ if (autoPlanTd) {
     const deleteHours = getRunHoursBetweenFromDom(autoPlanTd, deleteStart, deleteEnd);
     const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
     const msg =
-      `${formatHoursCell(deleteHours || plannedHours)} uur ${typeLabel} verwijderen van ${dateTxt}?`;
+      `${fmtHours(deleteHours || plannedHours)} uur ${typeLabel} verwijderen van ${dateTxt}?`;
     if (!confirm(msg)) return;
 
     const ok = await removeProjectDummyRange(projectId, deleteStart, deleteEnd, workType);
@@ -4363,7 +4404,7 @@ if (autoPlanTd) {
   const deliveryTxt = deliveryDate ? `\nEr wordt gepland vóór leverdatum ${deliveryDate}.` : "";
   const msg =
     `Sectie plannen?\n\n` +
-    `${typeLabel}: ${formatHoursCell(totalHours)} uur / ${String(PROJECT_DUMMY_HOURS_PER_DAY).replace(".", ",")} uur per dag = ${dayCount} dag(en).\n` +
+    `${typeLabel}: ${fmtHours(totalHours)} uur / ${String(PROJECT_DUMMY_HOURS_PER_DAY).replace(".", ",")} uur per dag = ${dayCount} dag(en).\n` +
     `Vanaf ${dateISO} worden werkdagen automatisch gevuld met conceptplanning.${deliveryTxt}`;
 
   if (!confirm(msg)) return;
@@ -4594,27 +4635,40 @@ const countM = rowM.querySelector(".concept-count");
 const sectionConceptTd = ev.target.closest("td.section-concept-click");
 if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) {
   if (__wasDragging) return;
+
+  // In de gewone sectieregel staan concepturen nu in dezelfde cel.
+  // Alleen klikken op het gearceerde conceptdeel verwijdert; klikken op de rest opent gewoon de inplanmodal.
+  const conceptHit = ev.target.closest(".bar-part-concept, .bar.dummy-hatch, .bar-resize-handle");
+  if (!sectionConceptTd.closest("tr")?.classList.contains("section-concept-row") && !conceptHit) {
+    // val door naar normale section-click handler
+  } else {
   ev.stopPropagation();
 
-  const plannedHours = Number(sectionConceptTd.dataset.plannedHours || 0);
+  const clickedType = String(conceptHit?.dataset?.workType || "").toLowerCase().trim();
+  const plannedHours = clickedType === "montage"
+    ? Number(sectionConceptTd.dataset.conceptMontHours || sectionConceptTd.dataset.plannedHours || 0)
+    : clickedType === "productie"
+      ? Number(sectionConceptTd.dataset.conceptProdHours || sectionConceptTd.dataset.plannedHours || 0)
+      : Number(sectionConceptTd.dataset.plannedHours || 0);
   const sectionId = String(sectionConceptTd.dataset.sectionId || "").trim();
-  const workType = String(sectionConceptTd.dataset.workType || "").toLowerCase().trim();
+  const workType = (clickedType || String(sectionConceptTd.dataset.workType || "")).toLowerCase().trim();
   const dateISO = String(sectionConceptTd.dataset.workDate || "").trim();
   if (!sectionId || !dateISO || !["productie", "montage"].includes(workType)) return;
 
-  const run = getContiguousRunFromCell(sectionConceptTd);
+  const run = getContiguousRunFromCell(sectionConceptTd, workType);
   const limitedRun = limitRunToMaxWorkdays(run.startISO || dateISO, run.endISO || dateISO, 5);
   const deleteStart = limitedRun.startISO || dateISO;
   const deleteEnd = limitedRun.endISO || dateISO;
-  const deleteHours = getRunHoursBetweenFromDom(sectionConceptTd, deleteStart, deleteEnd);
+  const deleteHours = getRunHoursBetweenFromDom(sectionConceptTd, deleteStart, deleteEnd, workType);
   const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
   const typeLabel = workType === "montage" ? "montage" : "productie";
 
-  if (!confirm(`${formatHoursCell(deleteHours || plannedHours)} uur concept ${typeLabel} verwijderen van ${dateTxt}?`)) return;
+  if (!confirm(`${fmtHours(deleteHours || plannedHours)} uur concept ${typeLabel} verwijderen van ${dateTxt}?`)) return;
 
   const ok = await removeSectionConceptRange(sectionId, workType, deleteStart, deleteEnd);
   if (ok) await loadAndRender();
   return;
+  }
 }
       if (__wasDragging) return;
 
@@ -4744,8 +4798,8 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
         btn.hidden = false;
         btn.disabled = !(hours > 0);
         btn.textContent = type === "productie"
-          ? `Auto productie (${formatHoursCell(hours)}u)`
-          : `Auto montage (${formatHoursCell(hours)}u)`;
+          ? `Auto productie (${fmtHours(hours)}u)`
+          : `Auto montage (${fmtHours(hours)}u)`;
         btn.onclick = async () => {
           if (!(hours > 0)) {
             alert("Geen resterende uren om automatisch te plannen.");
@@ -5558,8 +5612,6 @@ loadAndRender();
 
       // ✅ beschikbaarheid
       capByEmp,
-      empAbsenceByDay,
-      empAbsenceItemsByDay,
       inhuurByEmp,
       inhuurById, // (handig, maar niet verplicht)
     };
@@ -5572,12 +5624,7 @@ loadAndRender();
 
     const btnHoursCol = gridEl.querySelector("#btnHoursCol");
     if (btnHoursCol) {
-      btnHoursCol.onclick = (ev) => {
-        ev.preventDefault();
-        ev.stopPropagation();
-        hoursColOpen = !hoursColOpen;
-        loadAndRender();
-      };
+      btnHoursCol.onclick = null;
     }
 
 
@@ -6094,13 +6141,17 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
 
 function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = "", assignByDay = {}) {
 
-  // bepaal per dag: welke "bar-status" is dit?
-  const keys = dates.map((d, i) => {
+  const projectKeys = {
+    prodReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.prodReal || 0) > 0 ? "prod-real" : ""),
+    prodConcept: dates.map(d => Number(assignByDay?.[toISODate(d)]?.prodDummy || 0) > 0 ? "prod-concept" : ""),
+    montReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.montReal || 0) > 0 ? "mont-real" : ""),
+    montConcept: dates.map(d => Number(assignByDay?.[toISODate(d)]?.montDummy || 0) > 0 ? "mont-concept" : ""),
+  };
+
+  const legacyKeys = dates.map((d, i) => {
     const iso = toISODate(d);
     const prod = Number(assignByDay?.[iso]?.prod || 0);
     const mont = Number(assignByDay?.[iso]?.mont || 0);
-
-
     const label = labels[i] || "";
 
     if (prod > 0 && mont > 0) return "both";
@@ -6110,24 +6161,42 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     return "";
   });
 
+  const rowStartEnd = (arr, i, key) => {
+    if (!key) return { startCls:"", endCls:"" };
+    const prev = i > 0 ? arr[i - 1] : "";
+    const next = i < arr.length - 1 ? arr[i + 1] : "";
+    return {
+      startCls: key !== prev ? " bar-start" : "",
+      endCls:   key !== next ? " bar-end"   : ""
+    };
+  };
+
+  const barHtml = ({ arr, i, key, hours, colorCls, extraCls = "", resize = false }) => {
+    if (!(Number(hours || 0) > 0)) {
+      return `<div class="bar ${colorCls} placeholder">\u00A0</div>`;
+    }
+    const se = rowStartEnd(arr, i, key);
+    const handle = resize && se.endCls ? `<span class="bar-resize-handle" draggable="true" title="Uren groter/kleiner trekken"></span>` : "";
+    return `<div class="bar ${colorCls}${extraCls}${se.startCls}${se.endCls}">${escapeHtml(formatHoursCell(hours))}${handle}</div>`;
+  };
+
   for (let i = 0; i < dates.length; i++) {
     const d = dates[i];
     const iso = toISODate(d);
 
     const prod = Number(assignByDay?.[iso]?.prod || 0);
     const mont = Number(assignByDay?.[iso]?.mont || 0);
+    const prodReal = Number(assignByDay?.[iso]?.prodReal || 0);
+    const prodConcept = Number(assignByDay?.[iso]?.prodDummy || 0);
+    const montReal = Number(assignByDay?.[iso]?.montReal || 0);
+    const montConcept = Number(assignByDay?.[iso]?.montDummy || 0);
     const label = labels[i] || "";
 
-    const key = keys[i];
-    const prevKey = (i > 0) ? keys[i - 1] : "";
-    const nextKey = (i < keys.length - 1) ? keys[i + 1] : "";
-
+    const legacyKey = legacyKeys[i];
     const isMarker = markerISO && iso === markerISO;
     const isDelivery = deliveryISO && iso === deliveryISO;
 
-
     const td = document.createElement("td");
-    // ✅ project scheidingslijnen op TD (altijd zichtbaar)
     if (tr.classList.contains("project-topline")) td.classList.add("project-topline-cell");
     if (tr.classList.contains("project-bottomline")) td.classList.add("project-bottomline-cell");
 
@@ -6135,18 +6204,16 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     td.dataset.projectId = td.dataset.proj || "";
     td.dataset.workDate = iso;
 
-    // cel-kleur
-    let cls = `cell plan-cell ${isWeekend(d) ? "wknd" : ""}`.trim();
-    if (key === "both") cls += " bar-both";
-    else if (key === "prod") cls += " bar-prod";
-    else if (key === "mont") cls += " bar-mont";
-    else if (key.startsWith("lbl:")) cls += ` ${barClass(label)}`;
+    let cls = `cell plan-cell project-two-line ${isWeekend(d) ? "wknd" : ""}`.trim();
+    if (legacyKey === "both") cls += " bar-both";
+    else if (legacyKey === "prod") cls += " bar-prod";
+    else if (legacyKey === "mont") cls += " bar-mont";
+    else if (legacyKey.startsWith("lbl:")) cls += ` ${barClass(label)}`;
     td.className = cls;
     td.classList.add("project-date-dropzone");
 
-    let html = `<div class="plan-stack">`;
+    let html = `<div class="plan-stack plan-stack-project">`;
 
-    // markers samen op 1 regel
     html += `<div class="marker-row">`;
     html += isDelivery
       ? `<div class="marker delivery project-date-marker" draggable="true" data-marker-type="delivery" title="Leverdatum verslepen"></div>`
@@ -6154,39 +6221,27 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     html += isMarker
       ? `<div class="marker deadline project-date-marker" draggable="true" data-marker-type="completion" title="Opleverdatum verslepen"></div>`
       : `<div class="marker deadline placeholder">oplever</div>`;
-
     html += `</div>`;
 
+    const hasSplit = (prodReal > 0) || (prodConcept > 0) || (montReal > 0) || (montConcept > 0);
 
-
-    // bars: toon prod en/of mont als eigen blok (stacked)
-    if (key) {
-      const isStart = key !== prevKey;
-      const isEnd = key !== nextKey;
-
-      const startCls = isStart ? " bar-start" : "";
-      const endCls = isEnd ? " bar-end" : "";
-
-      const dummyProd = !!assignByDay?.[iso]?.dummyProd;
-      const dummyMont = !!assignByDay?.[iso]?.dummyMont;
-
-    if (key === "both") {
-      const prodTxt = prod > 0 ? String(prod) : "&nbsp;";
-      const montTxt = mont > 0 ? String(mont) : "&nbsp;";
-
-      html += `<div class="bar bar-prod${startCls}${endCls}${dummyProd ? " dummy-hatch" : ""}">${prodTxt}</div>`;
-      html += `<div class="bar bar-mont${startCls}${endCls}${dummyMont ? " dummy-hatch" : ""}">${montTxt}</div>`;
-    } else if (key === "prod") {
-      const prodTxt = prod > 0 ? String(prod) : "&nbsp;";
-      const dummyCls = dummyProd ? " dummy-hatch" : "";
-      html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}">${prodTxt}</div>`;
-    } else if (key === "mont") {
-      const montTxt = mont > 0 ? String(mont) : "&nbsp;";
-      const dummyCls = dummyMont ? " dummy-hatch" : "";
-      html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}">${montTxt}</div>`;
-    } else if (key.startsWith("lbl:")) {
-      // als je labels hebt (bijv. andere soorten), laat je dit staan of maak je ook een getal
-      html += `<div class="bar${startCls}${endCls}">${escapeHtml(label)}</div>`;
+    if (hasSplit) {
+      html += barHtml({ arr: projectKeys.prodReal, i, key: projectKeys.prodReal[i], hours: prodReal, colorCls: "bar-prod bar-real" });
+      html += barHtml({ arr: projectKeys.prodConcept, i, key: projectKeys.prodConcept[i], hours: prodConcept, colorCls: "bar-prod bar-concept dummy-hatch" });
+      html += barHtml({ arr: projectKeys.montReal, i, key: projectKeys.montReal[i], hours: montReal, colorCls: "bar-mont bar-real" });
+      html += barHtml({ arr: projectKeys.montConcept, i, key: projectKeys.montConcept[i], hours: montConcept, colorCls: "bar-mont bar-concept dummy-hatch" });
+    } else if (legacyKey) {
+      const prevKey = (i > 0) ? legacyKeys[i - 1] : "";
+      const nextKey = (i < legacyKeys.length - 1) ? legacyKeys[i + 1] : "";
+      const startCls = legacyKey !== prevKey ? " bar-start" : "";
+      const endCls = legacyKey !== nextKey ? " bar-end" : "";
+      if (legacyKey === "prod") html += `<div class="bar bar-prod bar-real${startCls}${endCls}">${escapeHtml(formatHoursCell(prod))}</div>`;
+      else if (legacyKey === "mont") html += `<div class="bar bar-mont bar-real${startCls}${endCls}">${escapeHtml(formatHoursCell(mont))}</div>`;
+      else if (legacyKey === "both") {
+        html += `<div class="bar bar-prod bar-real${startCls}${endCls}">${escapeHtml(formatHoursCell(prod))}</div>`;
+        html += `<div class="bar bar-mont bar-real${startCls}${endCls}">${escapeHtml(formatHoursCell(mont))}</div>`;
+      } else if (legacyKey.startsWith("lbl:")) {
+        html += `<div class="bar${startCls}${endCls}">${escapeHtml(label)}</div>`;
       }
     }
 
@@ -6288,7 +6343,10 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     td.dataset.sectionId = String(sectionId || "");
     td.dataset.projectId = String(projectId || "");
     td.dataset.workDate  = iso;
-    const isConceptRow = tr.classList.contains("section-concept-row");
+    const isConceptRow = tr.classList.contains("section-concept-row"); // legacy losse conceptregel
+    const hasSectionConceptProd = prodDummyHours > 0;
+    const hasSectionConceptMont = montDummyHours > 0;
+    const hasSectionConcept = hasSectionConceptProd || hasSectionConceptMont;
 
     // tooltip met namen (prod/mont)
     const entry = assignMap?.get(String(sectionId))?.get(iso);
@@ -6323,7 +6381,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       td.removeAttribute("title");
     }
 
-    let cls = `cell plan-cell section-click ${isWeekend(d) ? "wknd" : ""}`.trim();
+    let cls = `cell plan-cell section-click section-two-line ${isWeekend(d) ? "wknd" : ""}`.trim();
     // géén bar-prod/mont/both op de TD, alleen de bars zelf kleuren
     td.className = cls;
 
@@ -6331,10 +6389,13 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     td.classList.add("dd-dropzone");
     td.dataset.ddKind = isConceptRow ? "section-concept" : "section";
     td.dataset.ddKey  = key || "";
-    if (isConceptRow) {
-      const conceptType = prod > 0 ? "productie" : (mont > 0 ? "montage" : "");
+    if (isConceptRow || hasSectionConcept) {
+      const conceptType = hasSectionConceptProd ? "productie" : (hasSectionConceptMont ? "montage" : "");
+      const conceptHours = hasSectionConceptProd ? prodDummyHours : montDummyHours;
       td.dataset.workType = conceptType;
-      td.dataset.plannedHours = String(prod > 0 ? prod : mont);
+      td.dataset.plannedHours = String(conceptHours);
+      td.dataset.conceptProdHours = String(prodDummyHours || 0);
+      td.dataset.conceptMontHours = String(montDummyHours || 0);
       td.classList.add("section-concept-click");
     }
 
@@ -6348,53 +6409,74 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     }
 
     // ===== HTML: vaste layout met placeholders =====
-    let html = `<div class="plan-stack">`;
+    let html = `<div class="plan-stack plan-stack-section">`;
 
-    // markers (vaste hoogte)
-    html += `
-      <div class="marker-row">
-        <div class="marker delivery placeholder">lever</div>
-        <div class="marker deadline placeholder">oplever</div>
-      </div>
-    `;
+    // SECTION SLOT HELPERS
+    const cellAt = (idx) => {
+      if (idx < 0 || idx >= dates.length) return null;
+      const xIso = toISODate(dates[idx]);
+      return assignCountByDay?.[xIso] || {};
+    };
 
-    // PROD slot
+    const slotState = (idx, slot) => {
+      const c = cellAt(idx);
+      if (!c) return false;
+      if (slot === "prodReal") return Number(c.prodReal || 0) > 0;
+      if (slot === "prodConcept") return Number(c.prodDummy || 0) > 0;
+      if (slot === "montReal") return Number(c.montReal || 0) > 0;
+      if (slot === "montConcept") return Number(c.montDummy || 0) > 0;
+      return false;
+    };
+
+    const slotClasses = (slot, baseCls) => {
+      const active = slotState(i, slot);
+      if (!active) return `${baseCls} placeholder`;
+      const isStart = !slotState(i - 1, slot);
+      const isEnd   = !slotState(i + 1, slot);
+      return `${baseCls}${isStart ? " bar-start" : ""}${isEnd ? " bar-end" : ""}`;
+    };
+
+    // 1) Productie - echte medewerkers
     {
-      const isProd = (key === "prod" || key === "both");
-      const isStart = isProd && key !== prevKey;
-      const isEnd   = isProd && key !== nextKey;
-      const startCls = isStart ? " bar-start" : "";
-      const endCls   = isEnd   ? " bar-end"   : "";
-      const hasMixedProd = prodReal > 0 && prodDummyHours > 0;
-      const dummyCls = dummyProd && !hasMixedProd ? " dummy-hatch" : "";
-      const mixedCls = hasMixedProd ? " bar-mixed" : "";
-
-      if (isProd) {
-        const prodTxt = mixedBarContent(prodReal, prodDummyHours, prod);
-        const resizeHandle = isConceptRow && isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="productie" title="Concepturen groter/kleiner trekken"></span>` : "";
-        html += `<div class="bar bar-prod${startCls}${endCls}${dummyCls}${mixedCls}">${prodTxt}${resizeHandle}</div>`;
+      const clsP = slotClasses("prodReal", "bar bar-prod bar-real bar-prod-real");
+      if (prodReal > 0) {
+        html += `<div class="${clsP}">${escapeHtml(formatHoursCell(prodReal))}</div>`;
       } else {
-        html += `<div class="bar bar-prod placeholder">\u00A0</div>`;
+        html += `<div class="${clsP}">&nbsp;</div>`;
       }
     }
 
-    // MONT slot
+    // 2) Productie - concept
     {
-      const isMont = (key === "mont" || key === "both");
-      const isStart = isMont && key !== prevKey;
-      const isEnd   = isMont && key !== nextKey;
-      const startCls = isStart ? " bar-start" : "";
-      const endCls   = isEnd   ? " bar-end"   : "";
-      const hasMixedMont = montReal > 0 && montDummyHours > 0;
-      const dummyCls = dummyMont && !hasMixedMont ? " dummy-hatch" : "";
-      const mixedCls = hasMixedMont ? " bar-mixed" : "";
-
-      if (isMont) {
-        const montTxt = mixedBarContent(montReal, montDummyHours, mont);
-        const resizeHandle = isConceptRow && isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="montage" title="Concepturen groter/kleiner trekken"></span>` : "";
-        html += `<div class="bar bar-mont${startCls}${endCls}${dummyCls}${mixedCls}">${montTxt}${resizeHandle}</div>`;
+      const clsP = slotClasses("prodConcept", "bar bar-prod bar-concept bar-prod-concept dummy-hatch");
+      if (prodDummyHours > 0) {
+        const isEnd = !slotState(i + 1, "prodConcept");
+        const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="productie" title="Concepturen groter/kleiner trekken"></span>` : "";
+        html += `<div class="${clsP}" data-work-type="productie">${escapeHtml(formatHoursCell(prodDummyHours))}${resizeHandle}</div>`;
       } else {
-        html += `<div class="bar bar-mont placeholder">\u00A0</div>`;
+        html += `<div class="${clsP}">&nbsp;</div>`;
+      }
+    }
+
+    // 3) Montage - echte medewerkers
+    {
+      const clsM = slotClasses("montReal", "bar bar-mont bar-real bar-mont-real");
+      if (montReal > 0) {
+        html += `<div class="${clsM}">${escapeHtml(formatHoursCell(montReal))}</div>`;
+      } else {
+        html += `<div class="${clsM}">&nbsp;</div>`;
+      }
+    }
+
+    // 4) Montage - concept
+    {
+      const clsM = slotClasses("montConcept", "bar bar-mont bar-concept bar-mont-concept dummy-hatch");
+      if (montDummyHours > 0) {
+        const isEnd = !slotState(i + 1, "montConcept");
+        const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="montage" title="Concepturen groter/kleiner trekken"></span>` : "";
+        html += `<div class="${clsM}" data-work-type="montage">${escapeHtml(formatHoursCell(montDummyHours))}${resizeHandle}</div>`;
+      } else {
+        html += `<div class="${clsM}">&nbsp;</div>`;
       }
     }
 
@@ -6938,20 +7020,29 @@ function limitRunToMaxWorkdays(startISO, endISO, maxDays = 5){
   };
 }
 
-function getRunHoursBetweenFromDom(td, startISO, endISO){
+function getRunHoursBetweenFromDom(td, startISO, endISO, workType = ""){
   const tr = td.closest("tr");
   if (!tr || !startISO || !endISO) return Number(td.dataset.plannedHours || 0);
 
   let total = 0;
+  const wantedType = String(workType || td.dataset.workType || "").toLowerCase().trim();
+  const isSectionConcept = td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click") && ["productie","montage"].includes(wantedType);
   const selector = td.classList.contains("project-auto-plan-click")
     ? "td.project-auto-plan-click"
-    : "td.dd-draggable";
+    : "td.dd-dropzone[data-work-date]";
   const wantedKind = String(td.dataset.ddKind || "");
-  const wantedType = String(td.dataset.workType || "");
 
   for (const cell of Array.from(tr.querySelectorAll(selector))) {
     const iso = String(cell.dataset.workDate || "");
     if (!iso || iso < startISO || iso > endISO) continue;
+
+    if (isSectionConcept) {
+      total += wantedType === "montage"
+        ? Number(cell.dataset.conceptMontHours || 0)
+        : Number(cell.dataset.conceptProdHours || 0);
+      continue;
+    }
+
     if (wantedKind && String(cell.dataset.ddKind || "") !== wantedKind) continue;
     if (wantedType && String(cell.dataset.workType || "") !== wantedType) continue;
     total += Number(cell.dataset.plannedHours || 0);
@@ -7002,26 +7093,12 @@ function countPlannerWorkdaysInclusive(startISO, endISO){
   return count;
 }
 
-function getRunHoursFromDom(td){
-  const run = getContiguousRunFromCell(td);
+function getRunHoursFromDom(td, workType = ""){
+  const run = getContiguousRunFromCell(td, workType);
   const tr = td.closest("tr");
   if (!tr || !run.startISO || !run.endISO) return Number(td.dataset.plannedHours || 0);
 
-  let total = 0;
-  const selector = td.classList.contains("project-auto-plan-click")
-    ? "td.project-auto-plan-click"
-    : "td.dd-draggable";
-  const wantedKind = String(td.dataset.ddKind || "");
-  const wantedType = String(td.dataset.workType || "");
-
-  for (const cell of Array.from(tr.querySelectorAll(selector))) {
-    const iso = String(cell.dataset.workDate || "");
-    if (!iso || iso < run.startISO || iso > run.endISO) continue;
-    if (wantedKind && String(cell.dataset.ddKind || "") !== wantedKind) continue;
-    if (wantedType && String(cell.dataset.workType || "") !== wantedType) continue;
-    total += Number(cell.dataset.plannedHours || 0);
-  }
-  return Math.round((total + Number.EPSILON) * 100) / 100;
+  return getRunHoursBetweenFromDom(td, run.startISO, run.endISO, workType);
 }
 
 function isSectionConceptRow(row, workType = ""){
@@ -7198,31 +7275,51 @@ async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEn
   const targetDays = countPlannerWorkdaysInclusive(startISO, targetISO);
   if (targetDays <= 0) return;
 
-  const currentDays = countPlannerWorkdaysInclusive(startISO, endISO);
-  const current = Math.max(0, Number(currentHours || 0));
-  const dayDelta = targetDays - currentDays;
-  const newHours = dayDelta >= 0
-    ? roundHours2(current + (dayDelta * PROJECT_DUMMY_HOURS_PER_DAY))
-    : roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
+  // Nieuwe lengte = aantal werkdagen vanaf startdatum, nooit meer dan het sectiemaximum minus wat al elders gepland is.
+  const requestedHours = roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
+
+  const sObj = sectById?.get(String(sid)) || {};
+  const maxHours = type === "montage"
+    ? roundHours2(Number(sObj?.uren_montage ?? sObj?.uren_mont ?? 0) + Number(sObj?.uren_reis ?? 0))
+    : roundHours2(Number(sObj?.uren_prod ?? 0) + Number(sObj?.uren_cnc ?? sObj?.uren_cnc_prod ?? 0));
+
   const { data: rows, error: selErr } = await sb
     .from("section_assignments")
-    .select("id, note")
+    .select("id, work_date, werknemer_id, work_type, note, hours")
     .eq("section_id", sid)
     .eq("work_type", type)
-    .eq("werknemer_id", DUMMY_SEC_ID)
-    .gte("work_date", startISO)
-    .lte("work_date", endISO)
     .limit(200000);
 
   if (selErr) { alert("Concept resize select fout: " + selErr.message); return; }
 
-  const conceptRows = (rows || []).filter(r => isSectionConceptRow(r, type));
-  if (conceptRows.length) {
-    const del = await sb.from("section_assignments").delete().in("id", conceptRows.map(r => r.id));
+  const allRows = rows || [];
+  const currentConceptRows = allRows.filter(r =>
+    isSectionConceptRow(r, type) &&
+    String(r.work_date || "") >= startISO &&
+    String(r.work_date || "") <= endISO
+  );
+
+  let alreadyPlannedOutsideRun = 0;
+  for (const r of allRows) {
+    const isCurrentConcept = currentConceptRows.some(x => String(x.id) === String(r.id));
+    if (isCurrentConcept) continue;
+
+    if (isSectionConceptRow(r, type)) alreadyPlannedOutsideRun += parseProjectDummyHours(r.note, PROJECT_DUMMY_HOURS_PER_DAY);
+    else if (String(r.note || "").startsWith("inhuur:")) alreadyPlannedOutsideRun += Number(r.hours || PROJECT_DUMMY_HOURS_PER_DAY);
+    else alreadyPlannedOutsideRun += Number(r.hours || 0);
+  }
+
+  const remainingForThisRun = Math.max(0, roundHours2(maxHours - alreadyPlannedOutsideRun));
+  const newHours = Math.min(requestedHours, remainingForThisRun);
+
+  if (currentConceptRows.length) {
+    const del = await sb.from("section_assignments").delete().in("id", currentConceptRows.map(r => r.id));
     if (del.error) { alert("Concept resize delete fout: " + del.error.message); return; }
   }
 
-  const segments = buildProjectDummyHoursSegments(startISO, newHours);
+  if (newHours <= 0) return;
+
+  const segments = buildSectionConceptHoursSegments(startISO, newHours);
   const newRows = segments.map(seg => ({
     section_id: sid,
     work_date: seg.work_date,
@@ -7277,33 +7374,31 @@ function fmt0(n){
 }
 
 function miniHoursHtml(req, pl){
-  // req/pl zijn getallen
+  // Linker waarde = bronuren uit sectie/project.
+  // Rechter waarde = gepland. Productie+CNC en Montage+Reis worden hier samengevoegd.
   const f = (n) => escapeHtml(formatHoursCell(Number(n || 0)));
 
-  const limits = {
-    // Productie gebruikt productie + cnc uit bronuren
-    prod: Number(req.prod || 0) + Number(req.cnc || 0),
-    cnc: Number(req.cnc || 0),
-    // Montage gebruikt montage + reis uit bronuren
-    mont: Number(req.mont || 0) + Number(req.reis || 0),
-    reis: Number(req.reis || 0),
-  };
+  const reqWvb  = Number(req.prep ?? req.wvb ?? 0);
+  const reqProd = Number(req.prod || 0) + Number(req.cnc || 0);
+  const reqMont = Number(req.mont || 0) + Number(req.reis || 0);
+
+  const plWvb  = Number(pl.prep ?? pl.wvb ?? 0);
+  const plProd = Number(pl.prod || 0) + Number(pl.cnc || 0);
+  const plMont = Number(pl.mont || 0) + Number(pl.reis || 0);
 
   const over = {
-    prod: Number(pl.prod || 0) > limits.prod,
-    cnc: Number(pl.cnc || 0) > limits.cnc,
-    mont: Number(pl.mont || 0) > limits.mont,
-    reis: Number(pl.reis || 0) > limits.reis,
+    wvb:  plWvb  > reqWvb,
+    prod: plProd > reqProd,
+    mont: plMont > reqMont,
   };
 
   const clsPl = (isOver) => isOver ? "mh-v2 mh-over" : "mh-v2";
 
   return `
-    <div class="mini-hours">
-      <div class="mh-row"><span class="mh-l">Prod.</span><span class="mh-v">${f(req.prod)}</span><span class="mh-sep">|</span><span class="${clsPl(over.prod)}">${f(pl.prod)}</span></div>
-      <div class="mh-row"><span class="mh-l">CNC</span><span class="mh-v">${f(req.cnc)}</span><span class="mh-sep">|</span><span class="${clsPl(over.cnc)}">${f(pl.cnc)}</span></div>
-      <div class="mh-row"><span class="mh-l">Mont.</span><span class="mh-v">${f(req.mont)}</span><span class="mh-sep">|</span><span class="${clsPl(over.mont)}">${f(pl.mont)}</span></div>
-      <div class="mh-row"><span class="mh-l">Reis</span><span class="mh-v">${f(req.reis)}</span><span class="mh-sep">|</span><span class="${clsPl(over.reis)}">${f(pl.reis)}</span></div>
+    <div class="mini-hours mini-hours-combined">
+      <div class="mh-row"><span class="mh-l">Wvb</span><span class="mh-v">${f(reqWvb)}</span><span class="mh-sep">|</span><span class="${clsPl(over.wvb)}">${f(plWvb)}</span></div>
+      <div class="mh-row"><span class="mh-l">Prod.+CNC</span><span class="mh-v">${f(reqProd)}</span><span class="mh-sep">|</span><span class="${clsPl(over.prod)}">${f(plProd)}</span></div>
+      <div class="mh-row"><span class="mh-l">Mont.+Reis</span><span class="mh-v">${f(reqMont)}</span><span class="mh-sep">|</span><span class="${clsPl(over.mont)}">${f(plMont)}</span></div>
     </div>
   `;
 }
@@ -7445,17 +7540,17 @@ function wireDragDrop(root){
       const td = handle.closest("td.project-auto-plan-click, td.section-concept-click");
       if (!td) return;
 
-      const run = getContiguousRunFromCell(td);
-      const isSectionConcept = String(td.dataset.ddKind || "") === "section-concept";
+      const run = getContiguousRunFromCell(td, String(handle.dataset.workType || td.dataset.workType || ""));
+      const isSectionConcept = td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click");
       const payload = {
         kind: isSectionConcept ? "section-concept-resize" : "project-resize",
-        resizeKind: String(td.dataset.ddKind || ""),
+        resizeKind: isSectionConcept ? "section-concept" : String(td.dataset.ddKind || ""),
         sectionId: String(td.dataset.sectionId || ""),
         projectId: String(td.dataset.projectId || ""),
         workType: String(handle.dataset.workType || td.dataset.workType || ""),
         runStart: run.startISO,
         runEnd: run.endISO,
-        currentHours: getRunHoursFromDom(td),
+        currentHours: getRunHoursFromDom(td, String(handle.dataset.workType || td.dataset.workType || "")),
         remainingHours: Number(td.dataset.totalHours || 0)
       };
 
@@ -7573,7 +7668,8 @@ function wireDragDrop(root){
         const fromSid = String(payload.sectionId || "");
         const toSid = String(cell.dataset.sectionId || "");
 
-        if (resizeKind !== "section-concept" || targetKind !== "section-concept") return;
+        const targetAcceptsSectionConcept = targetKind === "section-concept" || targetKind === "section";
+        if (resizeKind !== "section-concept" || !targetAcceptsSectionConcept) return;
         if (!fromSid || !toSid || fromSid !== toSid) return;
 
         await resizeSectionConceptRun({
@@ -7591,7 +7687,8 @@ function wireDragDrop(root){
 
       // ✅ alleen droppen op dezelfde soort cel
       const targetKind = String(cell.dataset.ddKind || "");
-      if (!targetKind || targetKind !== kind) {
+      const kindMatches = targetKind === kind || (kind === "section-concept" && targetKind === "section");
+      if (!targetKind || !kindMatches) {
         console.log("DROP ignored: kind mismatch", { kind, targetKind });
         return;
       }
@@ -7952,37 +8049,63 @@ function daysBetweenISO(fromISO, toISO){
 }
 
 // zoekt in dezelfde rij links/rechts cellen met dezelfde ddKey (dus hetzelfde “blok”)
-function getContiguousRunFromCell(td){
-  const key = String(td.dataset.ddKey || "");
+function getContiguousRunFromCell(td, workType = ""){
   const tr = td.closest("tr");
-  if (!tr || !key) return { startISO: td.dataset.workDate, endISO: td.dataset.workDate };
-
-  const cells = Array.from(tr.querySelectorAll("td.dd-draggable[draggable='true']"));
-  // map ISO -> cell
-  const byISO = new Map(cells.map(c => [String(c.dataset.workDate||""), c]));
   const curISO = String(td.dataset.workDate || "");
+  const type = String(workType || "").toLowerCase().trim();
+  if (!tr || !curISO) return { startISO: curISO, endISO: curISO };
+
+  const isSectionConcept = td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click") && ["productie","montage"].includes(type);
+  const cells = Array.from(tr.querySelectorAll("td.dd-dropzone[data-work-date]"));
+  const byISO = new Map(cells.map(c => [String(c.dataset.workDate||""), c]));
+
+  const conceptHoursFor = (cell) => {
+    if (!cell) return 0;
+    return type === "montage"
+      ? Number(cell.dataset.conceptMontHours || 0)
+      : Number(cell.dataset.conceptProdHours || 0);
+  };
+
+  if (isSectionConcept) {
+    let startISO = curISO;
+    let endISO = curISO;
+    while (true) {
+      const prev = toISODate(addDays(parseISODate(startISO), -1));
+      const c = byISO.get(prev);
+      if (!c || conceptHoursFor(c) <= 0) break;
+      startISO = prev;
+    }
+    while (true) {
+      const next = toISODate(addDays(parseISODate(endISO), +1));
+      const c = byISO.get(next);
+      if (!c || conceptHoursFor(c) <= 0) break;
+      endISO = next;
+    }
+    return { startISO, endISO };
+  }
+
+  const key = String(td.dataset.ddKey || "");
+  if (!key) return { startISO: curISO, endISO: curISO };
+
+  const dragCells = Array.from(tr.querySelectorAll("td.dd-draggable[draggable='true']"));
+  const dragByISO = new Map(dragCells.map(c => [String(c.dataset.workDate||""), c]));
 
   let startISO = curISO;
-  let endISO   = curISO;
-
-  // links uitbreiden
+  let endISO = curISO;
   while(true){
     const prev = toISODate(addDays(parseISODate(startISO), -1));
-    const c = byISO.get(prev);
+    const c = dragByISO.get(prev);
     if (!c) break;
     if (String(c.dataset.ddKey||"") !== key) break;
     startISO = prev;
   }
-
-  // rechts uitbreiden
   while(true){
     const next = toISODate(addDays(parseISODate(endISO), +1));
-    const c = byISO.get(next);
+    const c = dragByISO.get(next);
     if (!c) break;
     if (String(c.dataset.ddKey||"") !== key) break;
     endISO = next;
   }
 
   return { startISO, endISO };
-}
-    }
+}    }
