@@ -271,6 +271,53 @@ a{ color:inherit; text-decoration:none; }
   justify-content:flex-end;
   gap:10px;
 }
+.modal .ft #amAutoProd:not([hidden]){
+  margin-right:auto;
+}
+
+.day-absence-box{
+  border-bottom:1px solid var(--line);
+  padding:0 0 14px;
+  margin:0 0 14px;
+}
+.day-absence-title{
+  font-weight:700;
+  margin:0 0 8px;
+}
+.day-absence-form{
+  display:grid;
+  grid-template-columns:1fr 90px auto auto;
+  gap:8px;
+  align-items:center;
+}
+.day-absence-check{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  white-space:nowrap;
+  color:var(--muted);
+  font-size:13px;
+}
+.day-absence-hint{
+  margin-top:6px;
+  font-size:12px;
+}
+.day-absence-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-top:10px;
+}
+.day-absence-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:6px 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#fff7ed;
+}
 
 .split2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
 @media (max-width:720px){ .split2{ grid-template-columns:1fr; } }
@@ -583,6 +630,42 @@ td.details-fill{ text-align:left !important; vertical-align:top; padding:0 !impo
   border:1px solid rgba(0,0,0,.15);
 }
 .plan-stack .marker.placeholder{ visibility:hidden; }
+.project-date-marker{
+  cursor:grab;
+}
+.project-date-marker:active,
+.project-date-marker.is-dragging{
+  cursor:grabbing;
+}
+
+.planner-table td.project-delivery-col{
+  background:#fff3bf !important;
+  position:relative;
+}
+.planner-table td.project-completion-col{
+  background:#ffd8a8 !important;
+  position:relative;
+}
+.planner-table td.project-delivery-col.project-completion-col{
+  background:linear-gradient(90deg, #fff3bf 0 50%, #ffd8a8 50% 100%) !important;
+}
+.planner-table td.project-delivery-col .marker-row,
+.planner-table td.project-completion-col .marker-row{
+  position:absolute;
+  inset:0;
+  min-height:100%;
+}
+.planner-table td.project-delivery-col .project-date-marker,
+.planner-table td.project-completion-col .project-date-marker{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  padding:0;
+  border:0;
+  border-radius:0;
+  background:transparent !important;
+}
 
 /* stack bars */
 .plan-stack .bar{
@@ -635,6 +718,26 @@ td.plan-cell.bar-generic .bar{ background:#e5e7eb !important; }
   overflow:hidden;
 }
 
+.bar-resize-handle{
+  position:absolute;
+  top:0;
+  right:0;
+  width:8px;
+  height:100%;
+  cursor:ew-resize;
+  z-index:3;
+}
+.bar-resize-handle::after{
+  content:"";
+  position:absolute;
+  top:3px;
+  bottom:3px;
+  right:2px;
+  width:2px;
+  border-radius:2px;
+  background:rgba(17,24,39,.45);
+}
+
 .plan-stack .bar.dummy-hatch::after{
   content:"";
   position:absolute;
@@ -650,6 +753,39 @@ background:repeating-linear-gradient(
   );
 }
 
+.plan-stack .bar.bar-mixed{
+  padding:0 !important;
+  gap:0;
+}
+.plan-stack .bar .bar-part{
+  align-self:stretch;
+  min-width:0;
+  padding:0 2px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  position:relative;
+}
+.plan-stack .bar .bar-part-concept{
+  outline:1px dashed rgba(0,0,0,.35);
+  outline-offset:-1px;
+}
+.plan-stack .bar .bar-part-concept::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0.00) 0px,
+    rgba(0,0,0,0.00) 2px,
+    rgba(0,0,0,0.18) 2px,
+    rgba(0,0,0,0.18) 3px
+  );
+}
 
 /* =========================
    PROJECT ROW OPEN HIGHLIGHT
@@ -672,12 +808,39 @@ tr.project-row.is-open > td.sticky-left{
 
 .cap-emp-row .cap-name{ background:#fff; font-weight:600; }
 .cap-cell{ background:#fff; }
+.cap-cell.cap-absence{
+  background:rgba(245,158,11,.22) !important;
+}
+.cap-cell-stack{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:1px;
+  line-height:1;
+}
+.cap-absence-chip{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:12px;
+  padding:0 3px;
+  border-radius:999px;
+  background:#f59e0b;
+  color:#111827;
+  font-size:10px;
+  font-weight:700;
+}
 
 .sum-row .sum-label{ background:#fff; font-weight:400; }
 .sum-cell{ background:#fff7d6; }
 .sum-cell.ok{ background:#c7f7cf; }
 .sum-cell.warn{ background:#ffe7b5; }
 .sum-cell.bad{ background:#ffc6c6; }
+.planned-absence .sum-cell.has-val{
+  background:#fed7aa !important;
+}
 
 .planner-table td.cap-cell,
 .planner-table td.sum-cell,
@@ -865,11 +1028,14 @@ td.section-click{
 .plan-stack .marker-row{
   display:flex;
   gap:6px;
+  min-height:var(--stack-h);
+  justify-content:flex-start;
 }
 
 .plan-stack .marker-row .marker{
-  flex:1;               /* beide nemen evenveel ruimte */
-  width:auto;           /* override oude 100% */
+  flex:0 0 auto;
+  width:auto;
+  max-width:100%;
   height:var(--stack-h);
   line-height:var(--stack-h);
   padding:0 8px;
@@ -877,6 +1043,9 @@ td.section-click{
   font-size:12px;
   text-align:left;
   box-sizing:border-box;
+}
+.plan-stack .marker-row .marker.placeholder{
+  display:none !important;
 }
 
 
@@ -1877,371 +2046,8 @@ td.hourscol{
   color: #fff;
   border-color: #2563eb;
 }
-/* Gemengde sectiebalk: echte geplande uren + concepturen in één sectieregel */
-.planner-table .bar.bar-mixed{
-  display:flex;
-  align-items:stretch;
-  justify-content:stretch;
-  gap:0;
-  padding:0 !important;
-  overflow:hidden;
-}
-.planner-table .bar.bar-mixed .bar-part{
-  min-width:0;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  height:100%;
-  line-height:1;
-  font-size:11px;
-}
-.planner-table .bar.bar-mixed .bar-part-concept{
-  position:relative;
-  outline:2px dashed rgba(0,0,0,.35);
-  outline-offset:-2px;
-}
-.planner-table .bar.bar-mixed .bar-part-concept::after{
-  content:"";
-  position:absolute;
-  inset:0;
-  pointer-events:none;
-  background:repeating-linear-gradient(
-    45deg,
-    rgba(0,0,0,0.00) 0px,
-    rgba(0,0,0,0.00) 2px,
-    rgba(0,0,0,0.18) 2px,
-    rgba(0,0,0,0.18) 3px
-  );
-}
-.bar-resize-handle{
-  position:absolute;
-  right:0;
-  top:0;
-  width:6px;
-  height:100%;
-  cursor:ew-resize;
-  z-index:5;
-}
 
-
-/* =========================
-   SECTION ROWS – compact 2-line layout
-========================= */
-td.section-click.section-two-line .plan-stack.plan-stack-section{
-  gap:2px;
-}
-
-td.section-click.section-two-line .bar{
-  height:14px !important;
-  min-height:14px;
-  font-size:10px !important;
-  border-radius:5px !important;
-}
-
-td.section-click.section-two-line .bar.placeholder{
-  opacity:0;
-  visibility:hidden;
-}
-
-td.section-click.section-two-line .bar.bar-subc,
-td.section-click.section-two-line .bar-subc.subc-ph{
-  height:12px !important;
-  min-height:12px;
-  font-size:9px !important;
-}
-
-td.section-click.section-two-line .bar.bar-mixed{
-  background: transparent !important;
-  justify-content:stretch !important;
-  gap:2px;
-  padding:0 !important;
-}
-
-td.section-click.section-two-line .bar.bar-mixed .bar-part{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  min-width:0;
-  height:100%;
-  border-radius:5px;
-  overflow:hidden;
-  font-size:10px !important;
-  line-height:1;
-}
-
-td.section-click.section-two-line .bar.bar-prod.bar-mixed .bar-part-real{
-  background:#b7f0c2;
-  color:#0f172a;
-}
-
-td.section-click.section-two-line .bar.bar-prod.bar-mixed .bar-part-concept{
-  background:
-    repeating-linear-gradient(
-      45deg,
-      rgba(0,0,0,0.00) 0px,
-      rgba(0,0,0,0.00) 2px,
-      rgba(0,0,0,0.18) 2px,
-      rgba(0,0,0,0.18) 3px
-    ),
-    #b7f0c2;
-  color:#0f172a;
-}
-
-td.section-click.section-two-line .bar.bar-mont.bar-mixed .bar-part-real{
-  background:#fde68a;
-  color:#111827;
-}
-
-td.section-click.section-two-line .bar.bar-mont.bar-mixed .bar-part-concept{
-  background:
-    repeating-linear-gradient(
-      45deg,
-      rgba(0,0,0,0.00) 0px,
-      rgba(0,0,0,0.00) 2px,
-      rgba(0,0,0,0.18) 2px,
-      rgba(0,0,0,0.18) 3px
-    ),
-    #fde68a;
-  color:#111827;
-}
-
-/* =========================
-   SECTION ROWS – real planning and concept separated
-========================= */
-td.section-click.section-two-line .plan-stack.plan-stack-section{
-  gap:1px !important;
-}
-
-td.section-click.section-two-line .bar.bar-real,
-td.section-click.section-two-line .bar.bar-concept{
-  height:11px !important;
-  min-height:11px !important;
-  font-size:9px !important;
-  line-height:1 !important;
-  border-radius:4px !important;
-}
-
-td.section-click.section-two-line .bar.bar-concept{
-  outline:1px dashed rgba(0,0,0,.38) !important;
-  outline-offset:-1px !important;
-}
-
-td.section-click.section-two-line .bar.bar-concept::after{
-  background:repeating-linear-gradient(
-    45deg,
-    rgba(0,0,0,0.00) 0px,
-    rgba(0,0,0,0.00) 2px,
-    rgba(0,0,0,0.16) 2px,
-    rgba(0,0,0,0.16) 3px
-  ) !important;
-}
-
-td.section-click.section-two-line .bar.placeholder{
-  opacity:0 !important;
-  visibility:hidden !important;
-  pointer-events:none !important;
-}
-
-td.section-click.section-two-line .bar-resize-handle{
-  width:5px;
-  right:0;
-}
-
-/* =========================
-   SECTION ROWS – connected compact bars, 1.5x height
-========================= */
-td.section-click.section-two-line .plan-stack.plan-stack-section{
-  gap:2px !important;
-}
-
-td.section-click.section-two-line .bar.bar-real,
-td.section-click.section-two-line .bar.bar-concept{
-  height:17px !important;
-  min-height:17px !important;
-  font-size:10px !important;
-  line-height:1 !important;
-  border-radius:0 !important;       /* naast elkaar weer strak aansluiten */
-}
-
-td.section-click.section-two-line .bar.bar-real.bar-start,
-td.section-click.section-two-line .bar.bar-concept.bar-start{
-  border-top-left-radius:5px !important;
-  border-bottom-left-radius:5px !important;
-}
-
-td.section-click.section-two-line .bar.bar-real.bar-end,
-td.section-click.section-two-line .bar.bar-concept.bar-end{
-  border-top-right-radius:5px !important;
-  border-bottom-right-radius:5px !important;
-}
-
-td.section-click.section-two-line .bar.bar-concept{
-  outline:1px dashed rgba(0,0,0,.38) !important;
-  outline-offset:-1px !important;
-}
-
-td.section-click.section-two-line .bar.bar-subc,
-td.section-click.section-two-line .bar-subc.subc-ph{
-  height:15px !important;
-  min-height:15px !important;
-  font-size:10px !important;
-  border-radius:0 !important;
-}
-
-td.section-click.section-two-line .bar.bar-subc.bar-start{
-  border-top-left-radius:5px !important;
-  border-bottom-left-radius:5px !important;
-}
-
-td.section-click.section-two-line .bar.bar-subc.bar-end{
-  border-top-right-radius:5px !important;
-  border-bottom-right-radius:5px !important;
-}
-
-/* =========================
-   PROJECT ROW – compact separated planning lines
-========================= */
-td.project-two-line .plan-stack.plan-stack-project{
-  gap:2px !important;
-}
-
-td.project-two-line .marker-row{
-  height:14px;
-}
-
-td.project-two-line .marker-row .marker{
-  height:14px !important;
-  line-height:14px !important;
-  font-size:9px !important;
-  border-radius:7px !important;
-}
-
-td.project-two-line .bar.bar-real,
-td.project-two-line .bar.bar-concept{
-  height:17px !important;
-  min-height:17px !important;
-  font-size:10px !important;
-  line-height:1 !important;
-  border-radius:0 !important;
-}
-
-td.project-two-line .bar.bar-real.bar-start,
-td.project-two-line .bar.bar-concept.bar-start{
-  border-top-left-radius:5px !important;
-  border-bottom-left-radius:5px !important;
-}
-
-td.project-two-line .bar.bar-real.bar-end,
-td.project-two-line .bar.bar-concept.bar-end{
-  border-top-right-radius:5px !important;
-  border-bottom-right-radius:5px !important;
-}
-
-td.project-two-line .bar.bar-concept{
-  outline:1px dashed rgba(0,0,0,.38) !important;
-  outline-offset:-1px !important;
-}
-
-td.project-two-line .bar.placeholder{
-  opacity:0 !important;
-  visibility:hidden !important;
-  pointer-events:none !important;
-}
-
-/* Urenkolom: gecombineerde regels WVB / Prod+CNC / Mont+Reis */
-.mini-hours.mini-hours-combined .mh-row{
-  grid-template-columns: 58px 1fr 8px 1fr;
-}
-.mini-hours.mini-hours-combined .mh-l{
-  font-size:10.5px;
-}
-
-
-/* Opruimen: geen functieloze pijlen meer bij secties / productie / montage */
-.sect-indent{
-  display:inline-block;
-  width:18px;
-}
-
-.sectext.no-expander{
-  display:inline-block;
-}
-
-.expander-sec{
-  display:none !important;
-}
-
-#btnHoursCol,
-.hourscol-toggle{
-  display:none !important;
-}
-
-/* Beschikbaarheidsmodal: taken als proportionele dagbalk */
-.cap-right .cap-planbar{
-  width:100%;
-  min-height:44px;
-  display:flex;
-  align-items:stretch;
-  gap:4px;
-  overflow:hidden;
-}
-
-.cap-right .cap-planseg{
-  flex:0 0 auto;
-  min-width:42px;
-  max-width:100%;
-  min-height:44px;
-  padding:8px 10px;
-  border-radius:14px;
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  overflow:hidden;
-  white-space:normal;
-}
-
-.cap-right .cap-planseg-title{
-  font-size:12px;
-  line-height:1.2;
-  overflow:hidden;
-  display:-webkit-box;
-  -webkit-line-clamp:2;
-  -webkit-box-orient:vertical;
-}
-
-.cap-right .cap-planseg-hours{
-  margin-top:3px;
-  font-size:11px;
-  font-weight:700;
-  opacity:.75;
-}
-
-.cap-right .cap-planseg.prod{ background: var(--chip-green); }
-.cap-right .cap-planseg.mont{ background: #fde68a; }
-
-
-.cap-right.cap-absence-target{ cursor:pointer; }
-.cap-right.cap-absence-target:hover{ outline:1px solid rgba(0,0,0,.12); }
-.cap-right .cap-planseg.absence{ background:#fed7aa; }
-
-.planner-table tr.planned-absence td.sum-cell.has-val:not(.wknd){
+.dm-card.absence{
   background:#fed7aa !important;
+  border-color:#f59e0b !important;
 }
-
-.absence-modal{ width:min(620px, calc(100vw - 24px)); }
-.absence-existing{ display:flex; flex-direction:column; gap:8px; }
-.absence-existing-row{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  padding:10px 12px;
-  border:1px solid var(--line);
-  border-radius:12px;
-  background:#fff7ed;
-}
-
-
-/* Verlof bewerken in beschikbaarheidsmodal */
-.absence-existing-row{ cursor:pointer; }
-.cap-planseg.absence{ cursor:pointer; }
