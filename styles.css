@@ -2047,6 +2047,10 @@ td.hourscol{
   border-color: #2563eb;
 }
 
+.planner-table td.cap-cell.cap-absence{
+  background:rgba(245,158,11,.28) !important;
+}
+
 .dm-card.absence{
   background:#fed7aa !important;
   border-color:#f59e0b !important;

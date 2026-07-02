@@ -1701,8 +1701,9 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       const note = String(a.note || "").trim();
       const hours = Number(a.hours || 0);
       const key = `${title}||${note}||${hours}`;
-      if (!groupedAbsences.has(key)) groupedAbsences.set(key, { title, note, hours, ids: [] });
+      if (!groupedAbsences.has(key)) groupedAbsences.set(key, { title, note, hours, allDay: !!a.all_day, ids: [], rows: [] });
       groupedAbsences.get(key).ids.push(a.id);
+      groupedAbsences.get(key).rows.push(a);
     }
 
     // Render
@@ -1774,7 +1775,14 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
           ${Array.from(groupedAbsences.values()).map(g => `
             <div class="day-absence-row">
               <span>${escapeHtml(g.title)}${g.note ? ` - ${escapeHtml(g.note)}` : ""} (${escapeHtml(formatHoursCell(g.hours))}u × ${g.ids.length})</span>
-              <button class="btn small dmAbsDelete" type="button" data-ids="${escapeAttr(g.ids.join(","))}">Verwijderen</button>
+              <span style="display:flex; gap:6px;">
+                <button class="btn small dmAbsEdit" type="button"
+                  data-ids="${escapeAttr(g.ids.join(","))}"
+                  data-title="${escapeAttr(g.title)}"
+                  data-hours="${escapeAttr(String(g.hours))}"
+                  data-all-day="${g.allDay ? "1" : "0"}">Bewerken</button>
+                <button class="btn small dmAbsDelete" type="button" data-ids="${escapeAttr(g.ids.join(","))}">Verwijderen</button>
+              </span>
             </div>
           `).join("")}
         </div>
@@ -1799,11 +1807,55 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       setHoursState();
     }
 
+    bodyEl.querySelectorAll(".dmAbsEdit").forEach(btn => {
+      btn.onclick = () => {
+        if (absTitle) absTitle.value = String(btn.dataset.title || "Verlof");
+        if (absAllDay) absAllDay.checked = String(btn.dataset.allDay || "") === "1";
+        if (absHours) absHours.value = String(btn.dataset.hours || "").replace(".", ",");
+        if (absSave) {
+          absSave.dataset.editIds = String(btn.dataset.ids || "");
+          absSave.textContent = "Bijwerken";
+        }
+        if (absAllDay && absHours) {
+          absHours.disabled = absAllDay.checked;
+          if (absAllDay.checked) absHours.value = "";
+        }
+      };
+    });
+
     if (absSave) {
       absSave.onclick = async () => {
         const title = String(absTitle?.value || "Verlof").trim() || "Verlof";
         const allDay = !!absAllDay?.checked;
         const manualHours = Number(String(absHours?.value || "0").replace(",", "."));
+        const editIds = String(absSave.dataset.editIds || "").split(",").map(x => x.trim()).filter(Boolean);
+
+        if (editIds.length) {
+          const rowsToEdit = (absences || []).filter(a => editIds.includes(String(a.id)));
+          for (const a of rowsToEdit) {
+            const empId = String(a.werknemer_id ?? "").trim();
+            const available = Number(capByEmp.get(empId)?.get(dateISO) || 0);
+            const hours = allDay ? available : manualHours;
+            if (!(hours > 0)) continue;
+            const upd = await sb
+              .from("employee_absences")
+              .update({
+                hours: roundHours2(hours),
+                all_day: allDay,
+                title,
+              })
+              .eq("id", a.id);
+
+            if (upd.error) {
+              alert("Fout bijwerken vrije dag: " + upd.error.message);
+              return;
+            }
+          }
+
+          modal.close();
+          await loadAndRender();
+          return;
+        }
 
         const rowsToInsert = [];
         for (const w of fixedEmployeesForAbsence) {
@@ -3951,6 +4003,24 @@ if (capCell) {
   const empName = String(capCell.dataset.empName || empId);
   const dateISO = String(capCell.dataset.workDate || "");
   if (!empId || !dateISO) return;
+
+  if (capCell.classList.contains("cap-absence")) {
+    openDayModal({
+      dateISO,
+      werknemers,
+      inhuurById,
+      inhuurPeopleVisible,
+      absences,
+      assignMap,
+      projectAssignMap,
+      sectById,
+      projMetaById,
+      sectProjKey,
+      sectParaKey,
+      sectNameKey
+    });
+    return;
+  }
 
   // hergebruik exact dezelfde flow als je cap-emp-click,
   // maar start week op basis van aangeklikte datum
