@@ -484,23 +484,20 @@ const defaultSettings = {
 
       if (rowEmp === employeeId) existingForEmployee.add(keyBase);
       else {
-        const key = `${keyBase}||${Number(r.hours || 0)}`;
-        if (!groups.has(key)) groups.set(key, { dateISO, title, note, allDay, hours: Number(r.hours || 0), count: 0 });
-        groups.get(key).count += 1;
+        if (!groups.has(keyBase)) groups.set(keyBase, { dateISO, title, note, allDay, hours: Number(r.hours || 0), count: 0 });
+        const g = groups.get(keyBase);
+        g.count += 1;
+        g.hours = Math.max(Number(g.hours || 0), Number(r.hours || 0));
       }
     }
 
     const inserts = [];
     for (const g of groups.values()) {
-      const titleLower = g.title.toLowerCase();
-      const looksGeneral = g.count >= 2 || g.allDay || titleLower.includes("verlof") || titleLower.includes("vrij");
-      if (!looksGeneral) continue;
-
       const keyBase = `${g.dateISO}||${g.title}||${g.note}||${g.allDay ? "1" : "0"}`;
       if (existingForEmployee.has(keyBase)) continue;
 
       const availableHours = Number(hoursByDate.get(g.dateISO) || 0);
-      const hours = g.allDay ? availableHours : Number(g.hours || 0);
+      const hours = g.allDay ? availableHours : Math.min(availableHours || Number(g.hours || 0), Number(g.hours || 0));
       if (!(hours > 0)) continue;
 
       inserts.push({
