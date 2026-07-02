@@ -3990,6 +3990,30 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
       return;
     }
 
+      // ✅ klik op verlof-samenvatting => dagmodal met algemene vrije dag openen
+    const absenceSummaryCell = ev.target.closest("td.day-absence-summary-click[data-work-date]");
+    if (absenceSummaryCell) {
+      ev.stopPropagation();
+      const dateISO = String(absenceSummaryCell.dataset.workDate || "");
+      if (!dateISO) return;
+
+      openDayModal({
+        dateISO,
+        werknemers,
+        inhuurById,
+        inhuurPeopleVisible,
+        absences,
+        assignMap,
+        projectAssignMap,
+        sectById,
+        projMetaById,
+        sectProjKey,
+        sectParaKey,
+        sectNameKey
+      });
+      return;
+    }
+
       // ✅ Inhuur "+" knop (naast Uren beschikbaar)
       const inBtn = ev.target.closest("#btnInhuurPlus");
       if (inBtn) {
@@ -6069,6 +6093,11 @@ function sectionHeaderRow(title, cols, compact=false){
 
         // ✅ kleur alleen als er waarde is
         if (h > 0 && kind) td.classList.add("has-val");
+        if (kind === "planned-absence" && h > 0) {
+          td.classList.add("day-absence-summary-click");
+          td.dataset.workDate = iso;
+          td.title = "Vrije dag bewerken";
+        }
 
         td.textContent = fmt0(h);
         tr.appendChild(td);

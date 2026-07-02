@@ -2251,6 +2251,13 @@ td.project-two-line .bar.placeholder{
 .planner-table tr.planned-absence td.sum-cell.has-val:not(.wknd){
   background:#fed7aa !important;
 }
+.planner-table td.day-absence-summary-click{
+  cursor:pointer;
+}
+.planner-table td.day-absence-summary-click:hover{
+  outline:1px solid rgba(0,0,0,.18);
+  outline-offset:-1px;
+}
 
 .day-absence-box{
   border-bottom:1px solid var(--line);
