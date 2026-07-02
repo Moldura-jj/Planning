@@ -451,6 +451,74 @@ const defaultSettings = {
     return rows;
   }
 
+  async function syncGeneralAbsencesForEmployee(empId, capRows){
+    const employeeId = Number(empId);
+    if (!Number.isFinite(employeeId) || !capRows?.length) return;
+
+    const hoursByDate = new Map();
+    for (const r of capRows || []) {
+      const iso = String(r.work_date || "").slice(0,10);
+      const h = Number(r.hours || 0);
+      if (iso && h > 0) hoursByDate.set(iso, h);
+    }
+    const dates = Array.from(hoursByDate.keys());
+    if (!dates.length) return;
+
+    const { data, error } = await sb
+      .from("employee_absences")
+      .select("id, werknemer_id, work_date, hours, all_day, title, note")
+      .in("work_date", dates);
+
+    if (error) throw new Error("Algemeen verlof laden: " + error.message);
+
+    const existingForEmployee = new Set();
+    const groups = new Map();
+
+    for (const r of data || []) {
+      const dateISO = String(r.work_date || "").slice(0,10);
+      const title = String(r.title || "Verlof").trim() || "Verlof";
+      const note = String(r.note || "").trim();
+      const allDay = !!r.all_day;
+      const keyBase = `${dateISO}||${title}||${note}||${allDay ? "1" : "0"}`;
+      const rowEmp = Number(r.werknemer_id);
+
+      if (rowEmp === employeeId) existingForEmployee.add(keyBase);
+      else {
+        const key = `${keyBase}||${Number(r.hours || 0)}`;
+        if (!groups.has(key)) groups.set(key, { dateISO, title, note, allDay, hours: Number(r.hours || 0), count: 0 });
+        groups.get(key).count += 1;
+      }
+    }
+
+    const inserts = [];
+    for (const g of groups.values()) {
+      const titleLower = g.title.toLowerCase();
+      const looksGeneral = g.count >= 2 || g.allDay || titleLower.includes("verlof") || titleLower.includes("vrij");
+      if (!looksGeneral) continue;
+
+      const keyBase = `${g.dateISO}||${g.title}||${g.note}||${g.allDay ? "1" : "0"}`;
+      if (existingForEmployee.has(keyBase)) continue;
+
+      const availableHours = Number(hoursByDate.get(g.dateISO) || 0);
+      const hours = g.allDay ? availableHours : Number(g.hours || 0);
+      if (!(hours > 0)) continue;
+
+      inserts.push({
+        werknemer_id: employeeId,
+        work_date: g.dateISO,
+        hours: Math.round(hours * 100) / 100,
+        all_day: g.allDay,
+        title: g.title,
+        note: g.note || null
+      });
+    }
+
+    if (inserts.length) {
+      const ins = await sb.from("employee_absences").insert(inserts);
+      if (ins.error) throw new Error("Algemeen verlof toevoegen: " + ins.error.message);
+    }
+  }
+
   async function saveSettingsEmployees(applyMode = "week"){
     const rows = readSettingsEmployees();
     const nextWeekly = {};
@@ -509,6 +577,7 @@ const defaultSettings = {
         if (capRows.length) {
           const insCap = await sb.from("capacity_entries").insert(capRows);
           if (insCap.error) throw new Error("Capaciteit opslaan: " + insCap.error.message);
+          await syncGeneralAbsencesForEmployee(empId, capRows);
         }
         }
       }
