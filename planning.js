@@ -1757,32 +1757,33 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
     `);
   }
 
-    bodyEl.innerHTML = rows.length
-      ? `
-          <div class="day-absence-box">
-            <div class="day-absence-title">Algemene vrije dag</div>
-            <div class="day-absence-form">
-              <input class="input" id="dmAbsTitle" type="text" placeholder="Specificatie" value="Verlof" />
-              <input class="input" id="dmAbsHours" type="text" inputmode="decimal" placeholder="Uren" />
-              <label class="day-absence-check">
-                <input id="dmAbsAllDay" type="checkbox" checked />
-                <span>Hele dag</span>
-              </label>
-              <button class="btn primary" id="dmAbsSave" type="button">Opslaan</button>
+    bodyEl.innerHTML = `
+      <div class="day-absence-box">
+        <div class="day-absence-title">Algemene vrije dag</div>
+        <div class="day-absence-form">
+          <input class="input" id="dmAbsTitle" type="text" placeholder="Specificatie" value="Verlof" />
+          <input class="input" id="dmAbsHours" type="text" inputmode="decimal" placeholder="Uren" />
+          <label class="day-absence-check">
+            <input id="dmAbsAllDay" type="checkbox" checked />
+            <span>Hele dag</span>
+          </label>
+          <button class="btn primary" id="dmAbsSave" type="button">Opslaan</button>
+        </div>
+        <div class="muted day-absence-hint">Wordt opgeslagen voor alle vaste medewerkers met beschikbaarheid op deze dag.</div>
+        <div class="day-absence-list">
+          ${Array.from(groupedAbsences.values()).map(g => `
+            <div class="day-absence-row">
+              <span>${escapeHtml(g.title)}${g.note ? ` - ${escapeHtml(g.note)}` : ""} (${escapeHtml(formatHoursCell(g.hours))}u × ${g.ids.length})</span>
+              <button class="btn small dmAbsDelete" type="button" data-ids="${escapeAttr(g.ids.join(","))}">Verwijderen</button>
             </div>
-            <div class="muted day-absence-hint">Wordt opgeslagen voor alle vaste medewerkers met beschikbaarheid op deze dag.</div>
-            <div class="day-absence-list">
-              ${Array.from(groupedAbsences.values()).map(g => `
-                <div class="day-absence-row">
-                  <span>${escapeHtml(g.title)}${g.note ? ` - ${escapeHtml(g.note)}` : ""} (${escapeHtml(formatHoursCell(g.hours))}u × ${g.ids.length})</span>
-                  <button class="btn small dmAbsDelete" type="button" data-ids="${escapeAttr(g.ids.join(","))}">Verwijderen</button>
-                </div>
-              `).join("")}
-            </div>
-          </div>
-          <div class="dm-list">${rows.join("")}</div>
-        `
-      : `<div class="muted">Geen ingeplande medewerkers op deze dag.</div>`;
+          `).join("")}
+        </div>
+      </div>
+      ${rows.length
+        ? `<div class="dm-list">${rows.join("")}</div>`
+        : `<div class="muted">Geen ingeplande medewerkers op deze dag.</div>`
+      }
+    `;
 
     const absAllDay = bodyEl.querySelector("#dmAbsAllDay");
     const absHours = bodyEl.querySelector("#dmAbsHours");
