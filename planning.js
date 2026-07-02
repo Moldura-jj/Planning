@@ -2959,12 +2959,14 @@ trMonth.appendChild(hdrCell("", `hdr-cell hourscol sticky-top sticky-left2 ${hou
     for(const d of dates){
       const iso = toISODate(d);
       const cls = ["sticky-top3", "dayhead", isWeekend(d) ? "wknd" : ""].filter(Boolean).join(" ");
-      trDay.appendChild(hdrCell(
+      const dayTh = hdrCell(
         `<button type="button" class="dayhead-btn" data-iso="${escapeAttr(iso)}">
           ${dayNameNL(d.getDay())}<br>${d.getDate()}-${d.getMonth()+1}
         </button>`,
         cls
-      ));
+      );
+      dayTh.dataset.iso = iso;
+      trDay.appendChild(dayTh);
     }
     thead.appendChild(trDay);
     table.appendChild(thead);
@@ -3967,7 +3969,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
 
 
           // ✅ klik op dagheader => dagmodal
-    const dayBtn = ev.target.closest(".dayhead-btn[data-iso]");
+    const dayBtn = ev.target.closest(".dayhead-btn[data-iso], .dayhead[data-iso]");
     if (dayBtn) {
       ev.stopPropagation();
       const dateISO = String(dayBtn.dataset.iso || "");
@@ -5827,6 +5829,7 @@ loadAndRender();
 
 
     // mount
+    applyGeneralAbsenceColumnClasses(table, dates, plannedAbsenceByDay);
     gridEl.innerHTML = "";
     gridEl.appendChild(table);
     applyMiniHoursOverrunColors(gridEl);
@@ -6129,6 +6132,26 @@ function infoRow(text, cols){
 
   return tr;
 }
+
+  function applyGeneralAbsenceColumnClasses(table, dates, absenceByDay = {}){
+    if (!table || !Array.isArray(dates)) return;
+
+    const activeIndexes = dates
+      .map((d, idx) => Number(absenceByDay?.[toISODate(d)] || 0) > 0 ? idx : -1)
+      .filter(idx => idx >= 0);
+
+    if (!activeIndexes.length) return;
+
+    table.querySelectorAll("tr").forEach(tr => {
+      const cells = Array.from(tr.children || []);
+      if (cells.length < dates.length + 2) return;
+
+      for (const idx of activeIndexes) {
+        const cell = cells[idx + 2]; // links + urenkolom
+        if (cell) cell.classList.add("general-absence-col");
+      }
+    });
+  }
 
   function balanceRow(label, dates, byDay){
     const tr = document.createElement("tr");

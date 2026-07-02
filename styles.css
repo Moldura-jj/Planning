@@ -2328,3 +2328,14 @@ td.project-two-line .bar.placeholder{
 .planner-table td.cap-cell.cap-absence{
   background:rgba(245,158,11,.28) !important;
 }
+
+.planner-table th.general-absence-col,
+.planner-table td.general-absence-col{
+  background:rgba(245,158,11,.18) !important;
+}
+
+.planner-table td.general-absence-col.cap-cell,
+.planner-table td.general-absence-col.sum-cell,
+.planner-table td.general-absence-col.balance-cell{
+  background:rgba(245,158,11,.24) !important;
+}
