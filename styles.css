@@ -514,6 +514,9 @@ td.rowhdr.sticky-left{ z-index:50; }
    ROW LABELS / EXPANDERS / DETAILS
 ========================= */
 .project-cell{ background:#fff; font-weight:400; }
+.projtext{ cursor:pointer; }
+.projtext:hover .projline1,
+.projtext:hover .projline2{ text-decoration:underline; }
 .section-cell{ background:#fff; color:#344054; }
 .sectext{ opacity:.95; }
 
@@ -894,6 +897,70 @@ td.section-click{
   width:760px;
   max-width:calc(100vw - 24px);
 }
+
+.modal.project-sections-modal{
+  width:min(980px, calc(100vw - 24px));
+  max-height:88vh;
+  display:flex;
+  flex-direction:column;
+}
+
+.project-sections-modal .bd{
+  overflow:auto;
+}
+
+.project-sections-table{
+  display:grid;
+  gap:0;
+  min-width:760px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+}
+
+.project-sections-head,
+.project-sections-row{
+  display:grid;
+  grid-template-columns:minmax(240px, 1.5fr) repeat(5, minmax(82px, .45fr));
+  align-items:center;
+}
+
+.project-sections-head{
+  background:#f8fafc;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.project-sections-head > div,
+.project-sections-row > div{
+  padding:8px;
+  border-right:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+}
+
+.project-sections-head > div:last-child,
+.project-sections-row > div:last-child{
+  border-right:0;
+}
+
+.project-sections-row:last-child > div{
+  border-bottom:0;
+}
+
+.project-section-name{
+  font-weight:650;
+  color:#1f2937;
+}
+
+.project-section-hours{
+  width:100%;
+  min-height:34px;
+  padding:7px 8px;
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
 .assign-modal .hd{
   display:flex;
   justify-content:space-between;

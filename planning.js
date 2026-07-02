@@ -598,6 +598,162 @@ function asISODate(v){
     modal.wrap.classList.add("show");
   }
 
+  let projectSectionsModal = null;
+
+  function ensureProjectSectionsModal(){
+    if (projectSectionsModal) return projectSectionsModal;
+
+    const wrap = document.createElement("div");
+    wrap.className = "modal-backdrop";
+    wrap.innerHTML = `
+      <div class="modal project-sections-modal" role="dialog" aria-modal="true">
+        <div class="hd">
+          <div>
+            <div class="assign-title" id="psmTitle">Project secties</div>
+            <div class="assign-sub" id="psmSub"></div>
+          </div>
+          <button class="btn small" id="psmClose" type="button">✕</button>
+        </div>
+        <div class="bd" id="psmBody"></div>
+        <div class="ft">
+          <button class="btn" id="psmCancel" type="button">Annuleren</button>
+          <button class="btn primary" id="psmSave" type="button">Opslaan</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(wrap);
+    const close = () => wrap.classList.remove("show");
+    wrap.addEventListener("click", (e) => { if (e.target === wrap) close(); });
+    wrap.querySelector("#psmClose").onclick = close;
+    wrap.querySelector("#psmCancel").onclick = close;
+    projectSectionsModal = { wrap, close };
+    return projectSectionsModal;
+  }
+
+  function pickExistingKey(row, keys, fallback){
+    const allKeys = Object.keys(row || {});
+    return keys.find(k => allKeys.includes(k)) || fallback;
+  }
+
+  function parseHoursInput(v){
+    const n = Number(String(v || "0").trim().replace(",", "."));
+    return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
+  }
+
+  function openProjectSectionsModal({ project, sections, keys }){
+    const modal = ensureProjectSectionsModal();
+    if (!modal) return;
+
+    const titleEl = modal.wrap.querySelector("#psmTitle");
+    const subEl = modal.wrap.querySelector("#psmSub");
+    const bodyEl = modal.wrap.querySelector("#psmBody");
+    const saveBtn = modal.wrap.querySelector("#psmSave");
+
+    const projectNr = String(project?.nr || "").trim();
+    const projectName = String(project?.name || "").trim();
+    if (titleEl) titleEl.textContent = "Project secties";
+    if (subEl) subEl.textContent = [projectNr, projectName].filter(Boolean).join(" - ");
+
+    const firstSection = sections?.[0] || {};
+    const col = {
+      prep: pickExistingKey(firstSection, ["uren_wvb", "uren_prep", "uren_werkvoorbereiding"], "uren_wvb"),
+      prod: pickExistingKey(firstSection, ["uren_prod"], "uren_prod"),
+      cnc: pickExistingKey(firstSection, ["uren_cnc", "uren_cnc_prod", "cnc_uren"], "uren_cnc"),
+      mont: pickExistingKey(firstSection, ["uren_montage", "uren_mont"], "uren_montage"),
+      reis: pickExistingKey(firstSection, ["uren_reis", "reis_uren"], "uren_reis"),
+    };
+
+    const sectionIdKeyForUpdate = keys?.sectIdKey || "id";
+    const paraKey = keys?.sectParaKey || "paragraph";
+    const nameKey = keys?.sectNameKey || "name";
+
+    const sortedSections = [...(sections || [])].sort((a,b) => {
+      const ap = String(a?.[paraKey] ?? a?.paragraph ?? "");
+      const bp = String(b?.[paraKey] ?? b?.paragraph ?? "");
+      return ap.localeCompare(bp, "nl", { numeric:true, sensitivity:"base" });
+    });
+
+    if (bodyEl) {
+      bodyEl.innerHTML = sortedSections.length ? `
+        <div class="project-sections-table">
+          <div class="project-sections-head">
+            <div>Sectie</div>
+            <div>WVB</div>
+            <div>Prod.</div>
+            <div>CNC</div>
+            <div>Mont.</div>
+            <div>Reis</div>
+          </div>
+          ${sortedSections.map(s => {
+            const sid = String(s?.[sectionIdKeyForUpdate] ?? "").trim();
+            const para = String(s?.[paraKey] ?? s?.paragraph ?? "").trim();
+            const name = String(s?.[nameKey] ?? s?.name ?? s?.naam ?? "").trim();
+            const label = [para, name].filter(Boolean).join(" ");
+            const input = (field, value) => `
+              <input class="input project-section-hours"
+                type="text"
+                inputmode="decimal"
+                data-section-id="${escapeAttr(sid)}"
+                data-field="${field}"
+                data-col="${escapeAttr(col[field])}"
+                value="${escapeAttr(fmtHours(Number(value || 0)))}" />
+            `;
+            return `
+              <div class="project-sections-row" data-section-id="${escapeAttr(sid)}">
+                <div class="project-section-name">${escapeHtml(label || sid || "Sectie")}</div>
+                <div>${input("prep", s?.[col.prep])}</div>
+                <div>${input("prod", s?.[col.prod])}</div>
+                <div>${input("cnc", s?.[col.cnc])}</div>
+                <div>${input("mont", s?.[col.mont])}</div>
+                <div>${input("reis", s?.[col.reis])}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      ` : `<div class="muted">Geen secties gevonden bij dit project.</div>`;
+    }
+
+    bodyEl?.querySelectorAll(".project-section-hours").forEach(inp => {
+      inp.oninput = () => { inp.value = inp.value.replace(/[^0-9.,]/g, ""); };
+      inp.onblur = () => { inp.value = inp.value.replace(".", ","); };
+    });
+
+    if (saveBtn) {
+      saveBtn.onclick = async () => {
+        const bySection = new Map();
+        bodyEl?.querySelectorAll(".project-section-hours[data-section-id]").forEach(inp => {
+          const sid = String(inp.dataset.sectionId || "").trim();
+          const column = String(inp.dataset.col || "").trim();
+          if (!sid || !column) return;
+          if (!bySection.has(sid)) bySection.set(sid, {});
+          bySection.get(sid)[column] = parseHoursInput(inp.value);
+        });
+
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Opslaan...";
+        try {
+          for (const [sid, payload] of bySection.entries()) {
+            const res = await sb
+              .from("secties")
+              .update(payload)
+              .eq(sectionIdKeyForUpdate, sid);
+            if (res.error) throw res.error;
+          }
+          modal.close();
+          await loadAndRender();
+        } catch (e) {
+          alert("Fout opslaan sectie-uren: " + (e?.message || e));
+        } finally {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "Opslaan";
+        }
+      };
+    }
+
+    modal.wrap.classList.add("show");
+  }
+
   // -------- ASSIGNMENTS MODAL (productie/montage + collega's) --------
   let assignModal = null;
 
@@ -4272,13 +4428,29 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
       return;
     }
 
-    const projHit = ev.target.closest("[data-proj]");
+    const projHit = ev.target.closest(".projtext[data-proj]");
     if (projHit) {
       const pid = String(projHit.dataset.proj || "");
       if (!pid) return;
 
-      // ✅ togglen (open ↔ dicht) bij klik op regel/naam
-      toggleProject(pid);
+      ev.stopPropagation();
+      const projectMeta = projById.get(pid) || projMetaById.get(pid) || {};
+      const projectSections = (secties || [])
+        .filter(s => String(s?.[sectProjKey] ?? "").trim() === pid);
+
+      openProjectSectionsModal({
+        project: {
+          id: pid,
+          nr: projectMeta.nr || "",
+          name: projectMeta.nm || projectMeta.name || "",
+        },
+        sections: projectSections,
+        keys: {
+          sectIdKey,
+          sectNameKey,
+          sectParaKey,
+        }
+      });
       return;
     }
 
