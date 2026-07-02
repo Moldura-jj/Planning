@@ -1762,7 +1762,8 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       projMetaById,
       sectProjKey,
       sectParaKey,
-      sectNameKey
+      sectNameKey,
+      showAbsenceForm = false
     }){
 
       
@@ -1960,7 +1961,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
     `);
   }
 
-    bodyEl.innerHTML = `
+    const absenceBoxHtml = showAbsenceForm ? `
       <div class="day-absence-box">
         <div class="day-absence-title">Algemene vrije dag</div>
         <div class="day-absence-form">
@@ -1989,6 +1990,10 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
           `).join("")}
         </div>
       </div>
+    ` : "";
+
+    bodyEl.innerHTML = `
+      ${absenceBoxHtml}
       ${rows.length
         ? `<div class="dm-list">${rows.join("")}</div>`
         : `<div class="muted">Geen ingeplande medewerkers op deze dag.</div>`
@@ -3719,6 +3724,9 @@ for (const dd of dates) {
     const iso = toISODate(d);
     const td = document.createElement("td");
     td.className = `cell sum-cell ${isWeekend(d) ? "wknd" : ""}`;
+    td.classList.add("cap-total-day-click");
+    td.dataset.workDate = iso;
+    td.title = "Algemene vrije dag invullen/bewerken";
     td.textContent = fmt0(capTotalByDay[iso] || 0);
     trTotal.appendChild(td);
   }
@@ -3992,6 +4000,31 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
       return;
     }
 
+    // ✅ klik op bovenste dagcel in beschikbaarheid => algemene vrije dag invullen/bewerken
+    const capTotalDayCell = ev.target.closest("td.cap-total-day-click[data-work-date]");
+    if (capTotalDayCell) {
+      ev.stopPropagation();
+      const dateISO = String(capTotalDayCell.dataset.workDate || "");
+      if (!dateISO) return;
+
+      openDayModal({
+        dateISO,
+        werknemers,
+        inhuurById,
+        inhuurPeopleVisible,
+        absences,
+        assignMap,
+        projectAssignMap,
+        sectById,
+        projMetaById,
+        sectProjKey,
+        sectParaKey,
+        sectNameKey,
+        showAbsenceForm: true
+      });
+      return;
+    }
+
       // ✅ klik op verlof-samenvatting => dagmodal met algemene vrije dag openen
     const absenceSummaryCell = ev.target.closest("td.day-absence-summary-click[data-work-date]");
     if (absenceSummaryCell) {
@@ -4011,7 +4044,8 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
         projMetaById,
         sectProjKey,
         sectParaKey,
-        sectNameKey
+        sectNameKey,
+        showAbsenceForm: true
       });
       return;
     }
@@ -4217,7 +4251,8 @@ if (capCell) {
       projMetaById,
       sectProjKey,
       sectParaKey,
-      sectNameKey
+      sectNameKey,
+      showAbsenceForm: true
     });
     return;
   }

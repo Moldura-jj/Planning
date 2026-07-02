@@ -2259,6 +2259,14 @@ td.project-two-line .bar.placeholder{
   outline-offset:-1px;
 }
 
+.planner-table td.cap-total-day-click{
+  cursor:pointer;
+}
+.planner-table td.cap-total-day-click:hover{
+  outline:1px solid rgba(0,0,0,.18);
+  outline-offset:-1px;
+}
+
 .day-absence-box{
   border-bottom:1px solid var(--line);
   padding:0 0 14px;
