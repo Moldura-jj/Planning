@@ -1779,8 +1779,28 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
     if (titleEl) titleEl.textContent = dayName.charAt(0).toUpperCase() + dayName.slice(1);
     if (subEl) subEl.textContent = nice;
 
+    const ctx = window.__plannerCtx || {};
+
     // naam maps
-    const empNameById = new Map((werknemers || []).map(w => [String(w.id), String(w.name || "").trim()]));
+    const empNameById = new Map();
+    const addEmpName = (w) => {
+      if (!w) return;
+      const name = String(w.naam ?? w.name ?? w.fullname ?? w.display_name ?? "").trim();
+      if (!name) return;
+      const ids = [
+        w.id,
+        w.werknemer_id,
+        w.employee_id,
+        w.user_id,
+        w.auth_user_id
+      ];
+      for (const id of ids) {
+        const key = String(id ?? "").trim();
+        if (key && !empNameById.has(key)) empNameById.set(key, name);
+      }
+    };
+    for (const w of (werknemers || [])) addEmpName(w);
+    for (const w of (ctx.werknemersCap || [])) addEmpName(w);
     const inhuurNameById = new Map();
 
     // A) uit inhuurPeopleVisible (array met {inhuur_id, name})
@@ -1857,7 +1877,6 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
     }
 
     // ✅ ook tonen: iedereen met beschikbaarheid (uren > 0) op deze dag
-    const ctx = window.__plannerCtx || {};
     const capByEmp = ctx.capByEmp || new Map();
     const inhuurByEmp = ctx.inhuurByEmp || new Map();
 
@@ -2910,6 +2929,7 @@ for (const p of (projecten || [])) {
         capByEmp,
         absenceByEmp,
         inhuurByEmp,
+        werknemersCap,
       };
 
 
