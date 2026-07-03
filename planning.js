@@ -5920,7 +5920,8 @@ console.log("CAP SAVE", {
 // ✅ klik op project productie/montage conceptregel => automatisch dummy-dagen plannen
 // ======================
 const autoPlanTd = ev.target.closest("td.project-auto-plan-click");
-if (autoPlanTd) {
+const autoPlanPlannedHours = Number(autoPlanTd?.dataset?.plannedHours || 0);
+if (autoPlanTd && !(autoPlanPlannedHours > 0)) {
   if (__wasDragging) return;
   ev.stopPropagation();
 
@@ -5937,22 +5938,6 @@ if (autoPlanTd) {
   }
 
   const typeLabel = workType === "montage" ? "montage" : "productie";
-
-  if (plannedHours > 0) {
-    const run = getContiguousRunFromCell(autoPlanTd);
-    const limitedRun = limitRunToMaxWorkdays(run.startISO || dateISO, run.endISO || dateISO, 5);
-    const deleteStart = limitedRun.startISO || dateISO;
-    const deleteEnd = limitedRun.endISO || dateISO;
-    const deleteHours = getRunHoursBetweenFromDom(autoPlanTd, deleteStart, deleteEnd);
-    const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
-    const msg =
-      `${fmtHours(deleteHours || plannedHours)} uur ${typeLabel} verwijderen van ${dateTxt}?`;
-    if (!confirm(msg)) return;
-
-    const ok = await removeProjectDummyRange(projectId, deleteStart, deleteEnd, workType);
-    if (ok) await loadAndRender();
-    return;
-  }
 
   if (!(totalHours > 0)) {
     alert("Geen uren gevonden om te plannen.");
@@ -5974,15 +5959,17 @@ if (autoPlanTd) {
 }
 
 // ======================
-// ✅ klik op project-montage regel (fallback oude modal; normaal afgevangen door auto-plan hierboven)
+// ✅ klik op project-productie/montage regel met bestaande planning => project-planningsmodal
 // ======================
-const ptd = ev.target.closest("td.project-montage-click");
+const ptd = ev.target.closest("td.project-productie-click, td.project-montage-click");
 if (ptd) {
   if (__wasDragging) return;
 
 
 const projectId = String(ptd.dataset.projectId || "").trim();
 const dateISO   = String(ptd.dataset.workDate || "").trim();
+const projectWorkType = String(ptd.dataset.workType || (ptd.classList.contains("project-productie-click") ? "productie" : "montage")).toLowerCase().trim();
+const projectTypeLabel = projectWorkType === "productie" ? "Productie" : "Montage";
 
 if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO) {
   alert("Geen geldig project-id gevonden voor deze projectregel.");
@@ -6017,7 +6004,7 @@ if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO)
   if (autoProdBtn) autoProdBtn.hidden = true;
   if (autoMontBtn) autoMontBtn.hidden = true;
 
-  if (subEl) subEl.textContent = `${dateISO} • ${projectId} • Montage (project)`;
+  if (subEl) subEl.textContent = `${dateISO} • ${projectId} • ${projectTypeLabel} (project)`;
 
 
 
@@ -6067,6 +6054,10 @@ if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO)
   const renderBothLists = () => {
     listProd.innerHTML = "";
     listMont.innerHTML = "";
+    const activeList = projectWorkType === "productie" ? listProd : listMont;
+    const inactiveList = projectWorkType === "productie" ? listMont : listProd;
+    const activeSet = projectWorkType === "productie" ? selected.productie : selected.montage;
+    const activeDummyKey = projectWorkType === "productie" ? "dummyProd" : "dummyMont";
 
     const isDummy = (eid) => String(eid) === String(DUMMY_EMP_ID);
 
@@ -6088,52 +6079,54 @@ if (!projectId || projectId === "undefined" || projectId === "null" || !dateISO)
 
       // ✅ Concept teller i.p.v. checkbox
       if (isDummy(eid)) {
-        const rowM = document.createElement("div");
-        rowM.className = "assign-item";
-        rowM.style.display = "flex";
-        rowM.style.justifyContent = "space-between";
-        rowM.style.alignItems = "center";
-rowM.innerHTML = `
+        const rowConcept = document.createElement("div");
+        rowConcept.className = "assign-item";
+        rowConcept.style.display = "flex";
+        rowConcept.style.justifyContent = "space-between";
+        rowConcept.style.alignItems = "center";
+rowConcept.innerHTML = `
   <span>${escapeHtml(name)}</span>
   <span style="display:flex; gap:6px; align-items:center;">
     <button type="button" class="btn small concept-minus">−</button>
-    <span class="concept-count" style="min-width:18px; text-align:center;">${selected.dummyMont || 0}</span>
+    <span class="concept-count" style="min-width:18px; text-align:center;">${selected[activeDummyKey] || 0}</span>
     <button type="button" class="btn small concept-plus">+</button>
   </span>
 `;
 
-const minusM = rowM.querySelector(".concept-minus");
-const plusM  = rowM.querySelector(".concept-plus");
-const countM = rowM.querySelector(".concept-count");
+const minusM = rowConcept.querySelector(".concept-minus");
+const plusM  = rowConcept.querySelector(".concept-plus");
+const countM = rowConcept.querySelector(".concept-count");
 
 
-        plusM.onclick  = () => { selected.dummyMont = Number(selected.dummyMont || 0) + 1; countM.textContent = String(selected.dummyMont); };
-        minusM.onclick = () => { selected.dummyMont = Math.max(0, Number(selected.dummyMont || 0) - 1); countM.textContent = String(selected.dummyMont); };
+        plusM.onclick  = () => {
+          selected[activeDummyKey] = Number(selected[activeDummyKey] || 0) + 1;
+          countM.textContent = String(selected[activeDummyKey]);
+        };
+        minusM.onclick = () => {
+          selected[activeDummyKey] = Math.max(0, Number(selected[activeDummyKey] || 0) - 1);
+          countM.textContent = String(selected[activeDummyKey]);
+        };
 
-        // ✅ bij project-montage wil je eigenlijk alleen montage-kolom tonen:
-        // daarom alleen in listMont plaatsen
-        listMont.appendChild(rowM);
+        activeList.appendChild(rowConcept);
         continue;
       }
 
-      // Montage checkbox
       const rowM = document.createElement("label");
       rowM.className = "assign-item";
       rowM.innerHTML = `
-        <input type="checkbox" ${selected.montage.has(eid) ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="montage" />
+        <input type="checkbox" ${activeSet.has(eid) ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="${escapeAttr(projectWorkType)}" />
         <span>${escapeHtml(name)}</span>
       `;
       rowM.querySelector("input").onchange = (e) => {
         const id = String(e.target.dataset.eid || "");
         if (!id) return;
-        if (e.target.checked) selected.montage.add(id);
-        else selected.montage.delete(id);
+        if (e.target.checked) activeSet.add(id);
+        else activeSet.delete(id);
       };
-      listMont.appendChild(rowM);
+      activeList.appendChild(rowM);
     }
 
-    // optioneel: verberg productie-kolom visueel
-    listProd.innerHTML = `<div class="muted" style="padding:8px;">(n.v.t.)</div>`;
+    inactiveList.innerHTML = `<div class="muted" style="padding:8px;">(n.v.t.)</div>`;
   };
 
   renderBothLists();
@@ -6144,32 +6137,34 @@ const countM = rowM.querySelector(".concept-count");
       .from("project_assignments")
       .delete()
       .eq("project_id", projectId)
-      .eq("work_date", dateISO);
+      .eq("work_date", dateISO)
+      .eq("work_type", projectWorkType);
 
     if (del.error) { alert("Fout verwijderen: " + del.error.message); return; }
 
     const rows = [];
 
-    for (const eid of selected.montage) {
+    const activeSet = projectWorkType === "productie" ? selected.productie : selected.montage;
+    for (const eid of activeSet) {
       const werknemerId = Number(eid);
 
       if (Number.isFinite(werknemerId)) {
-        rows.push({ project_id: projectId, work_date: dateISO, werknemer_id: werknemerId, work_type: "montage" });
+        rows.push({ project_id: projectId, work_date: dateISO, werknemer_id: werknemerId, work_type: projectWorkType });
       } else {
         rows.push({
           project_id: projectId,
           work_date: dateISO,
           werknemer_id: Number(DUMMY_EMP_ID),
-          work_type: "montage",
+          work_type: projectWorkType,
           note: "inhuur:" + String(eid)
         });
       }
     }
 
     // concepten (dummy) meerdere keren opslaan
-    const dummyMontCount = Number(selected.dummyMont || 0);
-    for (let i = 0; i < dummyMontCount; i++) {
-      rows.push({ project_id: projectId, work_date: dateISO, werknemer_id: Number(DUMMY_EMP_ID), work_type: "montage" });
+    const dummyCount = Number((projectWorkType === "productie" ? selected.dummyProd : selected.dummyMont) || 0);
+    for (let i = 0; i < dummyCount; i++) {
+      rows.push({ project_id: projectId, work_date: dateISO, werknemer_id: Number(DUMMY_EMP_ID), work_type: projectWorkType });
     }
 
     if (rows.length) {
