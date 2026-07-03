@@ -806,6 +806,21 @@ function ensureHoverTip(){
   const RANGE_DAYS = 100;
   let rangeStart = startOfISOWeek(new Date()); // maandag
 
+  function addMonthsSafe(date, months){
+    const d = new Date(date);
+    const wantedDay = d.getDate();
+    d.setDate(1);
+    d.setMonth(d.getMonth() + Number(months || 0));
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    d.setDate(Math.min(wantedDay, lastDay));
+    return d;
+  }
+
+  function shiftRangeByMonths(months){
+    rangeStart = startOfISOWeek(addMonthsSafe(rangeStart, months));
+    loadAndRender();
+  }
+
   function bindUI(){
     const btnMenu = el("btnMenu");
     if (btnMenu) btnMenu.onclick = () => (location.href = "./index.html");
@@ -817,10 +832,10 @@ function ensureHoverTip(){
     if (btnToday) btnToday.onclick = () => { rangeStart = startOfISOWeek(new Date()); loadAndRender(); };
 
     const btnPrev = el("btnPrev");
-    if (btnPrev) btnPrev.onclick = () => { rangeStart = addDays(rangeStart, -RANGE_DAYS); loadAndRender(); };
+    if (btnPrev) btnPrev.onclick = () => shiftRangeByMonths(-1);
 
     const btnNext = el("btnNext");
-    if (btnNext) btnNext.onclick = () => { rangeStart = addDays(rangeStart, +RANGE_DAYS); loadAndRender(); };
+    if (btnNext) btnNext.onclick = () => shiftRangeByMonths(1);
 
     const btnRefresh = el("btnRefresh");
     if (btnRefresh) btnRefresh.onclick = () => loadAndRender();
@@ -2131,6 +2146,13 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
     const startISO = toISODate(start);
     const endISO = toISODate(end);
     const todayISO = toISODate(new Date());
+    const periodLabel = el("current-week-label");
+    if (periodLabel) {
+      const sameMonth = start.getMonth() === end.getMonth() && start.getFullYear() === end.getFullYear();
+      periodLabel.textContent = sameMonth
+        ? `${monthNameNL(start.getMonth())} ${start.getFullYear()}`
+        : `${monthNameNL(start.getMonth())} ${start.getFullYear()} - ${monthNameNL(end.getMonth())} ${end.getFullYear()}`;
+    }
 
 
     captureOpenState();  // ✅ hier direct
