@@ -730,6 +730,15 @@ tr.project-row.is-open > td.sticky-left{
   border-left:4px solid rgba(37, 99, 235, 0.35);
 }
 
+tr.project-row.project-plan-hidden > td.plan-cell .plan-stack,
+tr.project-row.project-plan-hidden > td.hourscol > *{
+  visibility:hidden;
+}
+
+tr.project-row.project-plan-hidden > td.plan-cell{
+  pointer-events:none;
+}
+
 /* =========================
    CAPACITY / TOTALS STYLING
 ========================= */

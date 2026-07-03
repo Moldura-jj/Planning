@@ -7405,7 +7405,10 @@ loadAndRender();
 
     // ✅ projectregel highlighten als open
     const projRow = btn.closest("tr");
-    if (projRow) projRow.classList.toggle("is-open", open);
+    if (projRow) {
+      projRow.classList.toggle("is-open", open);
+      projRow.classList.toggle("project-plan-hidden", open);
+    }
 
 
     gridEl.querySelectorAll("tr.section-row, tr.section-details-row").forEach(tr => {
