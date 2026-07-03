@@ -3759,6 +3759,25 @@ for (const p of (projecten || [])) {
       absenceTotalByDay[d] = (absenceTotalByDay[d] || 0) + h;
     }
 
+    const fullAbsenceByDay = {};
+    for (const dObj of dates) {
+      const iso = toISODate(dObj);
+      let availableCount = 0;
+      let absentFullCount = 0;
+
+      for (const [emp, dm] of capByEmp) {
+        const available = Number(dm?.get(iso) || 0);
+        if (!(available > 0)) continue;
+
+        availableCount += 1;
+        const absRows = absenceByEmp.get(String(emp))?.get(iso) || [];
+        const absenceHours = absRows.reduce((sum, r) => sum + Number(r.hours || 0), 0);
+        if (absenceHours + 0.001 >= available) absentFullCount += 1;
+      }
+
+      fullAbsenceByDay[iso] = availableCount > 0 && absentFullCount === availableCount;
+    }
+
     // ===== Inhuur aggregatie (per inhuur_id per dag + totaal per dag) =====
     const inhuurById = new Map(); // inhuur_id -> { name }
     for (const p of (inhuurPeopleVisible || [])) {
@@ -7505,7 +7524,7 @@ loadAndRender();
 
 
     // mount
-    applyGeneralAbsenceColumnClasses(table, dates, plannedAbsenceByDay);
+    applyGeneralAbsenceColumnClasses(table, dates, fullAbsenceByDay);
     gridEl.innerHTML = "";
     gridEl.appendChild(table);
     applyMiniHoursOverrunColors(gridEl);
@@ -7810,11 +7829,11 @@ function infoRow(text, cols){
   return tr;
 }
 
-  function applyGeneralAbsenceColumnClasses(table, dates, absenceByDay = {}){
+  function applyGeneralAbsenceColumnClasses(table, dates, fullAbsenceByDay = {}){
     if (!table || !Array.isArray(dates)) return;
 
     const activeIndexes = dates
-      .map((d, idx) => Number(absenceByDay?.[toISODate(d)] || 0) > 0 ? idx : -1)
+      .map((d, idx) => fullAbsenceByDay?.[toISODate(d)] ? idx : -1)
       .filter(idx => idx >= 0);
 
     if (!activeIndexes.length) return;
