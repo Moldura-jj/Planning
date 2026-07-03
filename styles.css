@@ -666,11 +666,11 @@ td.details-fill{ text-align:left !important; vertical-align:top; padding:0 !impo
   text-align:left;
 }
 
-/* kleuren via TD class (werkt met jouw JS) */
-td.plan-cell.bar-prod .bar{ background:#b7f0c2 !important; }
-td.plan-cell.bar-mont .bar{ background:#fde68a !important; }
-td.plan-cell.bar-prep .bar{ background:#c7e0ff !important; }
-td.plan-cell.bar-generic .bar{ background:#e5e7eb !important; }
+/* Oude TD-kleurklassen alleen toepassen op balken zonder eigen typeklasse. */
+td.plan-cell.bar-prod .bar:not(.bar-wvb):not(.bar-prod):not(.bar-mont){ background:#b7f0c2 !important; }
+td.plan-cell.bar-mont .bar:not(.bar-wvb):not(.bar-prod):not(.bar-mont){ background:#fde68a !important; }
+td.plan-cell.bar-prep .bar:not(.bar-wvb):not(.bar-prod):not(.bar-mont){ background:#c7e0ff !important; }
+td.plan-cell.bar-generic .bar:not(.bar-wvb):not(.bar-prod):not(.bar-mont){ background:#e5e7eb !important; }
 
 /* =========================
    BARS AAN ELKAAR (start/end rounding)
