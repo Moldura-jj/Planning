@@ -1,6 +1,4 @@
   import { makeSupabaseClient, requireSession } from "./auth.js";
-
-
   
 
   function parseISODate(iso){
@@ -3311,10 +3309,12 @@ for (const p of projecten || []) {
         montHours: 0,
         reisHours: 0,
 
+        dummyWvb: 0,
         dummyProd: 0,
         dummyCnc: 0,
         dummyMont: 0,
         dummyReis: 0,
+        dummyWvbHours: 0,
         dummyProdHours: 0,
         dummyCncHours: 0,
         dummyMontHours: 0,
@@ -3341,7 +3341,10 @@ const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
       const dummyHours = parseProjectDummyHours(note);
 
       if (wt === "wvb" || wt === "werkvoorbereiding" || wt.includes("werkvoor")) {
-        if (!isDummy) {
+        if (isDummy) {
+          entry.dummyWvb += 1;
+          entry.dummyWvbHours += dummyHours;
+        } else {
           entry.wvb.add(emp);
           entry.wvbHours += rowHours;
         }
@@ -3832,7 +3835,9 @@ for (const p of (projecten || [])) {
       for (const [iso, entry] of dm) {
         const capFactor = pf || 1;
 
-        plannedWvbByDay[iso] = Number(plannedWvbByDay[iso] || 0) + (Number(entry.wvbHours || 0) / capFactor);
+        plannedWvbByDay[iso] = Number(plannedWvbByDay[iso] || 0)
+          + (Number(entry.wvbHours || 0) / capFactor)
+          + (sectionDummyHours(entry, "Wvb") / capFactor);
         plannedProdByDay[iso] = Number(plannedProdByDay[iso] || 0) + (Number(entry.prodHours || 0) / capFactor);
         plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0) + (Number(entry.montHours || 0) / capFactor);
         plannedCncByDay[iso] = Number(plannedCncByDay[iso] || 0) + (Number(entry.cncHours || 0) / capFactor);
@@ -4190,7 +4195,7 @@ for (const dd of dates) {
     // echte ingevoerde uren uit section_assignments
     const capFactorP = pfP || 1;
 
-    plP.prep += Number(e.wvbHours || 0) / capFactorP;
+    plP.prep += (Number(e.wvbHours || 0) / capFactorP) + (sectionDummyHours(e, "Wvb") * pfP);
     plP.prod += Number(e.prodHours || 0) / capFactorP;
     plP.cnc  += Number(e.cncHours || 0) / capFactorP;
     plP.mont += Number(e.montHours || 0) / capFactorP;
@@ -4277,7 +4282,7 @@ for (const dd of dates) {
     }
 
   // splits voor compacte projectregel: medewerkers/inhuur apart van concept
-  let wvbReal = 0, prodReal = 0, prodDummyHours = 0, montReal = 0, montDummyHours = 0;
+  let wvbReal = 0, wvbDummyHours = 0, prodReal = 0, prodDummyHours = 0, montReal = 0, montDummyHours = 0;
 
   for (const s of secs) {
     const sidRaw = s?.[sectIdKey]
@@ -4290,6 +4295,7 @@ for (const dd of dates) {
     if (!entry) continue;
 
     wvbReal += Number(entry.wvbHours || 0);
+    wvbDummyHours += sectionDummyHours(entry, "Wvb");
     prodReal += Number(entry.prodHours || 0) + Number(entry.inhuurProdIds?.size || 0);
     prodDummyHours += sectionDummyHours(entry, "Prod");
 
@@ -4309,7 +4315,7 @@ for (const dd of dates) {
 
   projAssignByDay[iso] = {
     prod, mont, dummyProd, dummyMont,
-    wvbReal,
+    wvbReal, wvbDummy: wvbDummyHours,
     prodReal, prodDummy: prodDummyHours,
     montReal, montDummy: montDummyHours
   };
@@ -4428,7 +4434,7 @@ for (const dd of dates) {
     const capFactorS = pfS || 1;
 
     // ✅ echte ingevoerde uren gebruiken, net als bij de projectregel
-    plS.prep += Number(e.wvbHours || 0) / capFactorS;
+    plS.prep += (Number(e.wvbHours || 0) / capFactorS) + (sectionDummyHours(e, "Wvb") * pfS);
     plS.prod += Number(e.prodHours || 0) / capFactorS;
     plS.cnc  += Number(e.cncHours || 0) / capFactorS;
     plS.mont += Number(e.montHours || 0) / capFactorS;
@@ -4461,12 +4467,14 @@ for (const dd of dates) {
         const wvbReal = entry ? Number(entry.wvbHours || 0) : 0;
         const prodReal = entry ? Number(entry.prodHours || 0) : 0;
         const montReal = entry ? Number(entry.montHours || 0) : 0;
+        const wvbDummy = entry ? sectionDummyHours(entry, "Wvb") : 0;
         const prodDummy = entry ? sectionDummyHours(entry, "Prod") : 0;
         const montDummy = entry ? sectionDummyHours(entry, "Mont") : 0;
 
         assignByDay[iso] = {
-          wvb: wvbReal,
+          wvb: wvbReal + wvbDummy,
           wvbReal,
+          wvbDummy,
           prod: prodReal + prodDummy,
           mont: montReal + montDummy,
           prodReal,
@@ -6151,15 +6159,17 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
   ev.stopPropagation();
 
   const clickedType = String(conceptHit?.dataset?.workType || "").toLowerCase().trim();
-  const plannedHours = clickedType === "montage"
-    ? Number(sectionConceptTd.dataset.conceptMontHours || sectionConceptTd.dataset.plannedHours || 0)
-    : clickedType === "productie"
-      ? Number(sectionConceptTd.dataset.conceptProdHours || sectionConceptTd.dataset.plannedHours || 0)
-      : Number(sectionConceptTd.dataset.plannedHours || 0);
+  const plannedHours = clickedType === "wvb"
+    ? Number(sectionConceptTd.dataset.conceptWvbHours || sectionConceptTd.dataset.plannedHours || 0)
+    : clickedType === "montage"
+      ? Number(sectionConceptTd.dataset.conceptMontHours || sectionConceptTd.dataset.plannedHours || 0)
+      : clickedType === "productie"
+        ? Number(sectionConceptTd.dataset.conceptProdHours || sectionConceptTd.dataset.plannedHours || 0)
+        : Number(sectionConceptTd.dataset.plannedHours || 0);
   const sectionId = String(sectionConceptTd.dataset.sectionId || "").trim();
   const workType = (clickedType || String(sectionConceptTd.dataset.workType || "")).toLowerCase().trim();
   const dateISO = String(sectionConceptTd.dataset.workDate || "").trim();
-  if (!sectionId || !dateISO || !["productie", "montage"].includes(workType)) return;
+  if (!sectionId || !dateISO || !["wvb", "productie", "montage"].includes(workType)) return;
 
   const run = getContiguousRunFromCell(sectionConceptTd, workType);
   const limitedRun = limitRunToMaxWorkdays(run.startISO || dateISO, run.endISO || dateISO, 5);
@@ -6167,7 +6177,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
   const deleteEnd = limitedRun.endISO || dateISO;
   const deleteHours = getRunHoursBetweenFromDom(sectionConceptTd, deleteStart, deleteEnd, workType);
   const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
-  const typeLabel = workType === "montage" ? "montage" : "productie";
+  const typeLabel = workType === "wvb" ? "WVB" : (workType === "montage" ? "montage" : "productie");
 
   if (!confirm(`${fmtHours(deleteHours || plannedHours)} uur concept ${typeLabel} verwijderen van ${dateTxt}?`)) return;
 
@@ -6194,8 +6204,8 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
       // current selection
       const cur = assignMap.get(sid)?.get(dateISO) || {
         wvb: new Set(), productie: new Set(), montage: new Set(),
-        dummyProd: 0, dummyMont: 0, dummySub: 0,
-        dummyProdHours: 0, dummyMontHours: 0,
+        dummyWvb: 0, dummyProd: 0, dummyMont: 0, dummySub: 0,
+        dummyWvbHours: 0, dummyProdHours: 0, dummyMontHours: 0,
         dummyCncHours: 0, dummyReisHours: 0
       };
 
@@ -6209,8 +6219,10 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
         prodHours: new Map(),
         montHours: new Map(),
 
+        dummyWvb: Number(cur.dummyWvb || 0),
         dummyProd: Number(cur.dummyProd || 0),
         dummyMont: Number(cur.dummyMont || 0),
+        dummyWvbHours: sectionDummyHours(cur, "Wvb"),
         dummyProdHours: sectionDummyHours(cur, "Prod"),
         dummyMontHours: sectionDummyHours(cur, "Mont"),
 
@@ -6225,7 +6237,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
           const wt = String(r.work_type || "").toLowerCase();
           const h = Number(r.hours || 1);
 
-          if (wt === "wvb" || wt === "werkvoorbereiding" || wt.includes("werkvoor")) selected.wvbHours.set(eid, h);
+          if ((wt === "wvb" || wt === "werkvoorbereiding" || wt.includes("werkvoor")) && eid !== String(DUMMY_SEC_ID)) selected.wvbHours.set(eid, h);
           if (wt === "productie") selected.prodHours.set(eid, h);
           if (wt === "montage") selected.montHours.set(eid, h);
         }
@@ -6241,7 +6253,8 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
         if (!dm) return totals;
 
         for (const [, entry] of dm) {
-          totals.wvb += Number(entry.wvbHours || 0);
+          totals.wvb += Number(entry.wvbHours || 0)
+            + sectionDummyHours(entry, "Wvb");
 
           totals.prod += Number(entry.prodHours || 0)
             + Number(entry.cncHours || 0)
@@ -6256,6 +6269,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
             + (Number(entry.inhuurMontIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
         }
 
+        totals.wvb = roundHours2(totals.wvb);
         totals.prod = roundHours2(totals.prod);
         totals.mont = roundHours2(totals.mont);
         return totals;
@@ -6786,7 +6800,11 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
         }
 
         const ensureConceptRows = () => {
-          if (listProd?.querySelector(".assign-item-concept[data-type='productie']") && listMont?.querySelector(".assign-item-concept[data-type='montage']")) return;
+          if (
+            listWvb?.querySelector(".assign-item-concept[data-type='wvb']") &&
+            listProd?.querySelector(".assign-item-concept[data-type='productie']") &&
+            listMont?.querySelector(".assign-item-concept[data-type='montage']")
+          ) return;
 
           const parseConceptHoursInput = (inp) => {
             const n = Number(String(inp?.value || "0").replace(",", "."));
@@ -6794,8 +6812,12 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
           };
 
           const sumSelectedHoursForConcept = (type) => {
-            const ids = type === "montage" ? selected.montage : selected.productie;
-            const hoursMap = type === "montage" ? selected.montHours : selected.prodHours;
+            const ids = type === "wvb"
+              ? selected.wvb
+              : (type === "montage" ? selected.montage : selected.productie);
+            const hoursMap = type === "wvb"
+              ? selected.wvbHours
+              : (type === "montage" ? selected.montHours : selected.prodHours);
             return roundHours2(Array.from(ids || []).reduce((sum, id) => {
               const werknemerId = Number(id);
               if (Number.isFinite(werknemerId)) return sum + Number(hoursMap.get(id) || 0);
@@ -6806,23 +6828,31 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
           const conceptDefaultHoursForType = (type) => {
             const selectedHours = sumSelectedHoursForConcept(type);
             if (selectedHours > 0) return selectedHours;
-            const current = type === "montage"
-              ? Number(selected.dummyMontHours || 0)
-              : Number(selected.dummyProdHours || 0);
+            const current = type === "wvb"
+              ? Number(selected.dummyWvbHours || 0)
+              : (type === "montage"
+                ? Number(selected.dummyMontHours || 0)
+                : Number(selected.dummyProdHours || 0));
             if (current > 0) return current;
-            const remaining = type === "montage"
-              ? Number(sectionRemainingHours.mont || 0) + Number(sectionDummyHours(cur, "Mont") || 0)
-              : Number(sectionRemainingHours.prod || 0) + Number(sectionDummyHours(cur, "Prod") || 0);
+            const remaining = type === "wvb"
+              ? Number(sectionRemainingHours.wvb || 0) + Number(sectionDummyHours(cur, "Wvb") || 0)
+              : (type === "montage"
+                ? Number(sectionRemainingHours.mont || 0) + Number(sectionDummyHours(cur, "Mont") || 0)
+                : Number(sectionRemainingHours.prod || 0) + Number(sectionDummyHours(cur, "Prod") || 0));
             if (remaining > 0) return roundHours2(Math.min(remaining, PROJECT_DUMMY_HOURS_PER_DAY));
             return PROJECT_DUMMY_HOURS_PER_DAY;
           };
 
           const clearSelectedEmployeesForConcept = (type) => {
+            const isWvb = type === "wvb";
             const isMont = type === "montage";
-            const ids = Array.from(isMont ? selected.montage : selected.productie);
-            const targetList = isMont ? listMont : listProd;
+            const ids = Array.from(isWvb ? selected.wvb : (isMont ? selected.montage : selected.productie));
+            const targetList = isWvb ? listWvb : (isMont ? listMont : listProd);
             for (const id of ids) {
-              if (isMont) {
+              if (isWvb) {
+                selected.wvb.delete(id);
+                selected.wvbHours.delete(id);
+              } else if (isMont) {
                 selected.montage.delete(id);
                 selected.montHours.delete(id);
               } else {
@@ -6836,7 +6866,10 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
           const syncConcept = (type, checked, hours) => {
             const h = checked ? Math.max(0, roundHours2(hours || 0)) : 0;
-            if (type === "montage") {
+            if (type === "wvb") {
+              selected.dummyWvbHours = h;
+              selected.dummyWvb = h > 0 ? 1 : 0;
+            } else if (type === "montage") {
               selected.dummyMontHours = h;
               selected.dummyMont = h > 0 ? 1 : 0;
             } else {
@@ -6846,11 +6879,14 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
           };
 
           const buildConceptRow = (type) => {
+            const isWvb = type === "wvb";
             const isMont = type === "montage";
-            const currentHours = isMont
-              ? Number(selected.dummyMontHours || 0)
-              : Number(selected.dummyProdHours || 0);
-            const checked = currentHours > 0 || Number(isMont ? selected.dummyMont : selected.dummyProd) > 0;
+            const currentHours = isWvb
+              ? Number(selected.dummyWvbHours || 0)
+              : (isMont
+                ? Number(selected.dummyMontHours || 0)
+                : Number(selected.dummyProdHours || 0));
+            const checked = currentHours > 0 || Number(isWvb ? selected.dummyWvb : (isMont ? selected.dummyMont : selected.dummyProd)) > 0;
             const value = currentHours > 0 ? currentHours : (checked ? conceptDefaultHoursForType(type) : 0);
 
             const row = document.createElement("label");
@@ -6900,6 +6936,9 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
             return row;
           };
 
+          if (!listWvb?.querySelector(".assign-item-concept[data-type='wvb']")) {
+            listWvb.appendChild(buildConceptRow("wvb"));
+          }
           if (!listProd?.querySelector(".assign-item-concept[data-type='productie']")) {
             listProd.appendChild(buildConceptRow("productie"));
           }
@@ -7182,6 +7221,14 @@ if (listSubc) {
         }
       }
 
+      const selectedWvbAssignedHours = roundHours2(
+        Array.from(selected.wvb || []).reduce((sum, eid) => {
+          const werknemerId = Number(eid);
+          if (Number.isFinite(werknemerId)) return sum + Number(selected.wvbHours.get(eid) || 0);
+          return sum + PROJECT_DUMMY_HOURS_PER_DAY;
+        }, 0)
+      );
+
       const selectedProdAssignedHours = roundHours2(
         Array.from(selected.productie || []).reduce((sum, eid) => {
           const werknemerId = Number(eid);
@@ -7199,13 +7246,19 @@ if (listSubc) {
       );
 
             // ✅ Concepten (dummy) als uren opslaan; medewerkeruren nemen concepturen over
+      const dummyWvbCount = Number(selected.dummyWvb || 0);
       const dummyProdCount = Number(selected.dummyProd || 0);
       const dummyMontCount = Number(selected.dummyMont || 0);
+      const dummyWvbHoursRaw = roundHours2(Number(selected.dummyWvbHours || 0) || (dummyWvbCount * PROJECT_DUMMY_HOURS_PER_DAY));
       const dummyProdHoursRaw = roundHours2(Number(selected.dummyProdHours || 0) || (dummyProdCount * PROJECT_DUMMY_HOURS_PER_DAY));
       const dummyMontHoursRaw = roundHours2(Number(selected.dummyMontHours || 0) || (dummyMontCount * PROJECT_DUMMY_HOURS_PER_DAY));
+      const dummyWvbHours = Math.max(0, roundHours2(dummyWvbHoursRaw - selectedWvbAssignedHours));
       const dummyProdHours = Math.max(0, roundHours2(dummyProdHoursRaw - selectedProdAssignedHours));
       const dummyMontHours = Math.max(0, roundHours2(dummyMontHoursRaw - selectedMontAssignedHours));
 
+      if (dummyWvbCount > 0 && dummyWvbHours > 0) {
+        rows.push({ section_id: sid, work_date: dateISO, werknemer_id: Number(DUMMY_SEC_ID), work_type: "wvb", note: `concept-hours:${dummyWvbHours}` });
+      }
       if (dummyProdCount > 0 && dummyProdHours > 0) {
         rows.push({ section_id: sid, work_date: dateISO, werknemer_id: Number(DUMMY_SEC_ID), work_type: "productie", note: `concept-hours:${dummyProdHours}` });
       }
@@ -7998,6 +8051,7 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
 
   const projectKeys = {
     wvbReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.wvbReal || 0) > 0 ? "wvb-real" : ""),
+    wvbConcept: dates.map(d => Number(assignByDay?.[toISODate(d)]?.wvbDummy || 0) > 0 ? "wvb-concept" : ""),
     prodReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.prodReal || 0) > 0 ? "prod-real" : ""),
     prodConcept: dates.map(d => Number(assignByDay?.[toISODate(d)]?.prodDummy || 0) > 0 ? "prod-concept" : ""),
     montReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.montReal || 0) > 0 ? "mont-real" : ""),
@@ -8080,10 +8134,12 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
       : `<div class="marker deadline placeholder">oplever</div>`;
     html += `</div>`;
 
-    const hasSplit = (wvbReal > 0) || (prodReal > 0) || (prodConcept > 0) || (montReal > 0) || (montConcept > 0);
+    const wvbConcept = Number(assignByDay?.[iso]?.wvbDummy || 0);
+    const hasSplit = (wvbReal > 0) || (wvbConcept > 0) || (prodReal > 0) || (prodConcept > 0) || (montReal > 0) || (montConcept > 0);
 
     if (hasSplit) {
       html += barHtml({ arr: projectKeys.wvbReal, i, key: projectKeys.wvbReal[i], hours: wvbReal, colorCls: "bar-wvb bar-real" });
+      html += barHtml({ arr: projectKeys.wvbConcept, i, key: projectKeys.wvbConcept[i], hours: wvbConcept, colorCls: "bar-wvb bar-concept dummy-hatch" });
       html += barHtml({ arr: projectKeys.prodReal, i, key: projectKeys.prodReal[i], hours: prodReal, colorCls: "bar-prod bar-real" });
       html += barHtml({ arr: projectKeys.prodConcept, i, key: projectKeys.prodConcept[i], hours: prodConcept, colorCls: "bar-prod bar-concept dummy-hatch" });
       html += barHtml({ arr: projectKeys.montReal, i, key: projectKeys.montReal[i], hours: montReal, colorCls: "bar-mont bar-real" });
@@ -8188,6 +8244,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
 
     const wvb = Number(assignCountByDay?.[iso]?.wvb || 0);
     const wvbReal = Number(assignCountByDay?.[iso]?.wvbReal || 0);
+    const wvbDummyHours = Number(assignCountByDay?.[iso]?.wvbDummy || 0);
     const prod = Number(assignCountByDay?.[iso]?.prod || 0);
     const mont = Number(assignCountByDay?.[iso]?.mont || 0);
     const prodReal = Number(assignCountByDay?.[iso]?.prodReal || 0);
@@ -8206,9 +8263,10 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     td.dataset.projectId = String(projectId || "");
     td.dataset.workDate  = iso;
     const isConceptRow = tr.classList.contains("section-concept-row"); // legacy losse conceptregel
+    const hasSectionConceptWvb = wvbDummyHours > 0;
     const hasSectionConceptProd = prodDummyHours > 0;
     const hasSectionConceptMont = montDummyHours > 0;
-    const hasSectionConcept = hasSectionConceptProd || hasSectionConceptMont;
+    const hasSectionConcept = hasSectionConceptWvb || hasSectionConceptProd || hasSectionConceptMont;
 
     // tooltip met namen (prod/mont)
     const entry = assignMap?.get(String(sectionId))?.get(iso);
@@ -8235,7 +8293,10 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     if (montConceptHours > 0) montTipRows.push(`Concept ${formatHoursCell(montConceptHours)}u`);
 
     let tip = "";
-    if (wvbNames.length) tip += `WVB:\n- ${wvbNames.join("\n- ")}`;
+    const wvbConceptHours = sectionDummyHours(entry, "Wvb");
+    const wvbTipRows = [...wvbNames];
+    if (wvbConceptHours > 0) wvbTipRows.push(`Concept ${formatHoursCell(wvbConceptHours)}u`);
+    if (wvbTipRows.length) tip += `WVB:\n- ${wvbTipRows.join("\n- ")}`;
     if (prodTipRows.length) tip += (tip ? "\n\n" : "") + `Productie:\n- ${prodTipRows.join("\n- ")}`;
     if (inhuurProdNames.length) tip += (tip ? "\n\n" : "") + `Inhuur productie:\n- ${inhuurProdNames.join("\n- ")}`;
 
@@ -8254,10 +8315,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     td.dataset.ddKind = isConceptRow ? "section-concept" : "section";
     td.dataset.ddKey  = key || "";
     if (isConceptRow || hasSectionConcept) {
-      const conceptType = hasSectionConceptProd ? "productie" : (hasSectionConceptMont ? "montage" : "");
-      const conceptHours = hasSectionConceptProd ? prodDummyHours : montDummyHours;
+      const conceptType = hasSectionConceptWvb ? "wvb" : (hasSectionConceptProd ? "productie" : (hasSectionConceptMont ? "montage" : ""));
+      const conceptHours = hasSectionConceptWvb ? wvbDummyHours : (hasSectionConceptProd ? prodDummyHours : montDummyHours);
       td.dataset.workType = conceptType;
       td.dataset.plannedHours = String(conceptHours);
+      td.dataset.conceptWvbHours = String(wvbDummyHours || 0);
       td.dataset.conceptProdHours = String(prodDummyHours || 0);
       td.dataset.conceptMontHours = String(montDummyHours || 0);
       td.classList.add("section-concept-click");
@@ -8285,7 +8347,8 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     const slotState = (idx, slot) => {
       const c = cellAt(idx);
       if (!c) return false;
-      if (slot === "wvbReal") return Number(c.wvbReal || c.wvb || 0) > 0;
+      if (slot === "wvbReal") return Number(c.wvbReal || 0) > 0;
+      if (slot === "wvbConcept") return Number(c.wvbDummy || 0) > 0;
       if (slot === "prodReal") return Number(c.prodReal || 0) > 0;
       if (slot === "prodConcept") return Number(c.prodDummy || 0) > 0;
       if (slot === "montReal") return Number(c.montReal || 0) > 0;
@@ -8311,7 +8374,19 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       }
     }
 
-    // 1) Productie - echte medewerkers
+    // 1) WVB - concept
+    {
+      const clsW = slotClasses("wvbConcept", "bar bar-wvb bar-concept bar-wvb-concept dummy-hatch");
+      if (wvbDummyHours > 0) {
+        const isEnd = !slotState(i + 1, "wvbConcept");
+        const resizeHandle = isEnd ? `<span class="bar-resize-handle" draggable="true" data-work-type="wvb" title="Concepturen groter/kleiner trekken"></span>` : "";
+        html += `<div class="${clsW}" data-work-type="wvb">${escapeHtml(formatHoursCell(wvbDummyHours))}${resizeHandle}</div>`;
+      } else {
+        html += `<div class="${clsW}">&nbsp;</div>`;
+      }
+    }
+
+    // 2) Productie - echte medewerkers
     {
       const clsP = slotClasses("prodReal", "bar bar-prod bar-real bar-prod-real");
       if (prodReal > 0) {
@@ -8901,7 +8976,7 @@ function getRunHoursBetweenFromDom(td, startISO, endISO, workType = ""){
 
   let total = 0;
   const wantedType = String(workType || td.dataset.workType || "").toLowerCase().trim();
-  const isSectionConcept = td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click") && ["productie","montage"].includes(wantedType);
+  const isSectionConcept = td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click") && ["wvb","productie","montage"].includes(wantedType);
   const selector = td.classList.contains("project-auto-plan-click")
     ? "td.project-auto-plan-click"
     : "td.dd-dropzone[data-work-date]";
@@ -8912,9 +8987,11 @@ function getRunHoursBetweenFromDom(td, startISO, endISO, workType = ""){
     if (!iso || iso < startISO || iso > endISO) continue;
 
     if (isSectionConcept) {
-      total += wantedType === "montage"
-        ? Number(cell.dataset.conceptMontHours || 0)
-        : Number(cell.dataset.conceptProdHours || 0);
+      total += wantedType === "wvb"
+        ? Number(cell.dataset.conceptWvbHours || 0)
+        : (wantedType === "montage"
+          ? Number(cell.dataset.conceptMontHours || 0)
+          : Number(cell.dataset.conceptProdHours || 0));
       continue;
     }
 
@@ -9040,7 +9117,7 @@ async function moveSectionConceptDay(sectionId, workType, fromDate, toDate){
   const type = String(workType || "").toLowerCase().trim();
   const f = String(fromDate || "").trim();
   const t = String(toDate || "").trim();
-  if (!sid || !["productie", "montage"].includes(type) || !f || !t || f === t) return;
+  if (!sid || !["wvb", "productie", "montage"].includes(type) || !f || !t || f === t) return;
 
   const { data: rows, error: selErr } = await sb
     .from("section_assignments")
@@ -9073,7 +9150,7 @@ async function moveSectionConceptDay(sectionId, workType, fromDate, toDate){
 async function moveSectionConceptRange(sectionId, workType, fromStartISO, fromEndISO, deltaDays){
   const sid = String(sectionId || "").trim();
   const type = String(workType || "").toLowerCase().trim();
-  if (!sid || !["productie", "montage"].includes(type) || !fromStartISO || !fromEndISO) return;
+  if (!sid || !["wvb", "productie", "montage"].includes(type) || !fromStartISO || !fromEndISO) return;
 
   const { data: rows, error: selErr } = await sb
     .from("section_assignments")
@@ -9110,7 +9187,7 @@ async function removeSectionConceptRange(sectionId, workType, startISO, endISO){
   const type = String(workType || "").toLowerCase().trim();
   const start = String(startISO || "").trim();
   const end = String(endISO || "").trim();
-  if (!sid || !["productie", "montage"].includes(type) || !start || !end) return false;
+  if (!sid || !["wvb", "productie", "montage"].includes(type) || !start || !end) return false;
 
   const { data: rows, error: selErr } = await sb
     .from("section_assignments")
@@ -9145,7 +9222,7 @@ async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEn
   const startISO = String(runStartISO || "").trim();
   const endISO = String(runEndISO || "").trim();
   const targetISO = String(targetEndISO || "").trim();
-  if (!sid || !["productie", "montage"].includes(type) || !startISO || !endISO || !targetISO) return;
+  if (!sid || !["wvb", "productie", "montage"].includes(type) || !startISO || !endISO || !targetISO) return;
 
   const targetDays = countPlannerWorkdaysInclusive(startISO, targetISO);
   if (targetDays <= 0) return;
@@ -9154,9 +9231,11 @@ async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEn
   const requestedHours = roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
 
   const sObj = sectById?.get(String(sid)) || {};
-  const maxHours = type === "montage"
-    ? roundHours2(Number(sObj?.uren_montage ?? sObj?.uren_mont ?? 0) + Number(sObj?.uren_reis ?? 0))
-    : roundHours2(Number(sObj?.uren_prod ?? 0) + Number(sObj?.uren_cnc ?? sObj?.uren_cnc_prod ?? 0));
+  const maxHours = type === "wvb"
+    ? roundHours2(Number(sObj?.uren_wvb ?? sObj?.uren_prep ?? sObj?.uren_werkvoorbereiding ?? 0))
+    : (type === "montage"
+      ? roundHours2(Number(sObj?.uren_montage ?? sObj?.uren_mont ?? 0) + Number(sObj?.uren_reis ?? 0))
+      : roundHours2(Number(sObj?.uren_prod ?? 0) + Number(sObj?.uren_cnc ?? sObj?.uren_cnc_prod ?? 0)));
 
   const { data: rows, error: selErr } = await sb
     .from("section_assignments")
@@ -9930,15 +10009,17 @@ function getContiguousRunFromCell(td, workType = ""){
   const type = String(workType || "").toLowerCase().trim();
   if (!tr || !curISO) return { startISO: curISO, endISO: curISO };
 
-  const isSectionConcept = td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click") && ["productie","montage"].includes(type);
+  const isSectionConcept = td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click") && ["wvb","productie","montage"].includes(type);
   const cells = Array.from(tr.querySelectorAll("td.dd-dropzone[data-work-date]"));
   const byISO = new Map(cells.map(c => [String(c.dataset.workDate||""), c]));
 
   const conceptHoursFor = (cell) => {
     if (!cell) return 0;
-    return type === "montage"
-      ? Number(cell.dataset.conceptMontHours || 0)
-      : Number(cell.dataset.conceptProdHours || 0);
+    return type === "wvb"
+      ? Number(cell.dataset.conceptWvbHours || 0)
+      : (type === "montage"
+        ? Number(cell.dataset.conceptMontHours || 0)
+        : Number(cell.dataset.conceptProdHours || 0));
   };
 
   if (isSectionConcept) {
