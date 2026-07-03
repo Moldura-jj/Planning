@@ -6144,47 +6144,14 @@ const countM = rowM.querySelector(".concept-count");
 }
 
 // ======================
-// ✅ klik op sectie-conceptregel => concepturen verwijderen
+// Conceptblok in sectieregel: klik opent het normale planningsmodal.
+// Verwijderen gebeurt niet meer direct via klik, zodat concepturen naar een medewerker
+// kunnen worden omgezet vanuit hetzelfde modal.
 // ======================
 const sectionConceptTd = ev.target.closest("td.section-concept-click");
 if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) {
   if (__wasDragging) return;
-
-  // In de gewone sectieregel staan concepturen nu in dezelfde cel.
-  // Alleen klikken op het gearceerde conceptdeel verwijdert; klikken op de rest opent gewoon de inplanmodal.
-  const conceptHit = ev.target.closest(".bar-part-concept, .bar.dummy-hatch, .bar-resize-handle");
-  if (!sectionConceptTd.closest("tr")?.classList.contains("section-concept-row") && !conceptHit) {
-    // val door naar normale section-click handler
-  } else {
-  ev.stopPropagation();
-
-  const clickedType = String(conceptHit?.dataset?.workType || "").toLowerCase().trim();
-  const plannedHours = clickedType === "wvb"
-    ? Number(sectionConceptTd.dataset.conceptWvbHours || sectionConceptTd.dataset.plannedHours || 0)
-    : clickedType === "montage"
-      ? Number(sectionConceptTd.dataset.conceptMontHours || sectionConceptTd.dataset.plannedHours || 0)
-      : clickedType === "productie"
-        ? Number(sectionConceptTd.dataset.conceptProdHours || sectionConceptTd.dataset.plannedHours || 0)
-        : Number(sectionConceptTd.dataset.plannedHours || 0);
-  const sectionId = String(sectionConceptTd.dataset.sectionId || "").trim();
-  const workType = (clickedType || String(sectionConceptTd.dataset.workType || "")).toLowerCase().trim();
-  const dateISO = String(sectionConceptTd.dataset.workDate || "").trim();
-  if (!sectionId || !dateISO || !["wvb", "productie", "montage"].includes(workType)) return;
-
-  const run = getContiguousRunFromCell(sectionConceptTd, workType);
-  const limitedRun = limitRunToMaxWorkdays(run.startISO || dateISO, run.endISO || dateISO, 5);
-  const deleteStart = limitedRun.startISO || dateISO;
-  const deleteEnd = limitedRun.endISO || dateISO;
-  const deleteHours = getRunHoursBetweenFromDom(sectionConceptTd, deleteStart, deleteEnd, workType);
-  const dateTxt = deleteStart === deleteEnd ? deleteStart : `${deleteStart} t/m ${deleteEnd}`;
-  const typeLabel = workType === "wvb" ? "WVB" : (workType === "montage" ? "montage" : "productie");
-
-  if (!confirm(`${fmtHours(deleteHours || plannedHours)} uur concept ${typeLabel} verwijderen van ${dateTxt}?`)) return;
-
-  const ok = await removeSectionConceptRange(sectionId, workType, deleteStart, deleteEnd);
-  if (ok) await loadAndRender();
-  return;
-  }
+  if (ev.target.closest(".bar-resize-handle")) return;
 }
       if (__wasDragging) return;
 
