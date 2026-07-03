@@ -4182,8 +4182,7 @@ for(const p of sortedProjecten){
       const kl = getProjectCustomer(p);
       const complRaw = p?.[completionKey] ?? "";
       const complTxt = formatDateNL(complRaw);
-      const complISO0 = asISODate(complRaw);
-      const complISO  = complISO0 ? toISODate(addDays(parseISODate(complISO0), -1)) : "";
+      const complISO  = asISODate(complRaw);
       const deliveryRaw = p?.[deliveryKey] ?? "";
       const deliveryISO = asISODate(deliveryRaw);
       const deliveryTxt = formatDateNL(deliveryRaw);
