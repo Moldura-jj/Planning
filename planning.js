@@ -4108,7 +4108,28 @@ trMonth.appendChild(hdrCell("", `hdr-cell hourscol sticky-top sticky-left2 ${hou
 
 
     // Projects + sections (expand/collapse)
-for(const p of projecten || []){
+const todayISOForSort = toISODate(new Date());
+const sortedProjecten = (projecten || []).slice().sort((a, b) => {
+  const aISO = asISODate(a?.[deliveryKey] ?? "");
+  const bISO = asISODate(b?.[deliveryKey] ?? "");
+  const aHas = !!aISO;
+  const bHas = !!bISO;
+  if (aHas && !bHas) return -1;
+  if (!aHas && bHas) return 1;
+  if (aHas && bHas) {
+    const aFuture = aISO >= todayISOForSort;
+    const bFuture = bISO >= todayISOForSort;
+    if (aFuture !== bFuture) return aFuture ? -1 : 1;
+    const dateCmp = aISO.localeCompare(bISO);
+    if (dateCmp !== 0) return dateCmp;
+  }
+
+  const aNr = String(a?.[projNrKey] ?? "");
+  const bNr = String(b?.[projNrKey] ?? "");
+  return aNr.localeCompare(bNr, "nl", { numeric: true });
+});
+
+for(const p of sortedProjecten){
   const pid = p?.[projIdKey];
 
   const nr  = p?.[projNrKey] ?? "";
@@ -6154,6 +6175,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
   if (ev.target.closest(".bar-resize-handle")) return;
 }
       if (__wasDragging) return;
+      if (ev.target.closest(".bar-resize-handle")) return;
 
       const td = ev.target.closest("td.section-click");
       if (!td) return;
@@ -8256,6 +8278,9 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     const entry = assignMap?.get(String(sectionId))?.get(iso);
     const dummyProd = prodDummyHours > 0;
     const dummyMont = montDummyHours > 0;
+    const wvbRealIds = Array.from(entry?.wvb || []);
+    const prodRealIds = Array.from(entry?.productie || []);
+    const montRealIds = Array.from(entry?.montage || []);
 
     if (entry) {
     const wvbNames = Array.from(entry.wvb || []).map(id => empNameById.get(String(id)) || String(id));
@@ -8352,7 +8377,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     {
       const clsW = slotClasses("wvbReal", "bar bar-wvb bar-real bar-wvb-real");
       if (wvbReal > 0) {
-        html += `<div class="${clsW}">${escapeHtml(formatHoursCell(wvbReal))}</div>`;
+        const isEnd = !slotState(i + 1, "wvbReal");
+        const resizeHandle = isEnd && wvbRealIds.length === 1
+          ? `<span class="bar-resize-handle" draggable="true" data-resize-kind="section-real" data-work-type="wvb" data-employee-id="${escapeAttr(wvbRealIds[0])}" title="Medewerkeruren groter/kleiner trekken"></span>`
+          : "";
+        html += `<div class="${clsW}" data-work-type="wvb">${escapeHtml(formatHoursCell(wvbReal))}${resizeHandle}</div>`;
       } else {
         html += `<div class="${clsW}">&nbsp;</div>`;
       }
@@ -8374,7 +8403,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     {
       const clsP = slotClasses("prodReal", "bar bar-prod bar-real bar-prod-real");
       if (prodReal > 0) {
-        html += `<div class="${clsP}">${escapeHtml(formatHoursCell(prodReal))}</div>`;
+        const isEnd = !slotState(i + 1, "prodReal");
+        const resizeHandle = isEnd && prodRealIds.length === 1
+          ? `<span class="bar-resize-handle" draggable="true" data-resize-kind="section-real" data-work-type="productie" data-employee-id="${escapeAttr(prodRealIds[0])}" title="Medewerkeruren groter/kleiner trekken"></span>`
+          : "";
+        html += `<div class="${clsP}" data-work-type="productie">${escapeHtml(formatHoursCell(prodReal))}${resizeHandle}</div>`;
       } else {
         html += `<div class="${clsP}">&nbsp;</div>`;
       }
@@ -8396,7 +8429,11 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     {
       const clsM = slotClasses("montReal", "bar bar-mont bar-real bar-mont-real");
       if (montReal > 0) {
-        html += `<div class="${clsM}">${escapeHtml(formatHoursCell(montReal))}</div>`;
+        const isEnd = !slotState(i + 1, "montReal");
+        const resizeHandle = isEnd && montRealIds.length === 1
+          ? `<span class="bar-resize-handle" draggable="true" data-resize-kind="section-real" data-work-type="montage" data-employee-id="${escapeAttr(montRealIds[0])}" title="Medewerkeruren groter/kleiner trekken"></span>`
+          : "";
+        html += `<div class="${clsM}" data-work-type="montage">${escapeHtml(formatHoursCell(montReal))}${resizeHandle}</div>`;
       } else {
         html += `<div class="${clsM}">&nbsp;</div>`;
       }
@@ -9037,6 +9074,32 @@ function getRunHoursFromDom(td, workType = ""){
   return getRunHoursBetweenFromDom(td, run.startISO, run.endISO, workType);
 }
 
+function getSectionTypeMaxHours(sectionId, workType){
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const sObj = sectById?.get(String(sid)) || {};
+
+  if (type === "wvb") {
+    return roundHours2(pickSectionNumber(sObj, ["uren_wvb", "uren_prep", "uren_werkvoorbereiding"]));
+  }
+
+  if (type === "montage") {
+    return roundHours2(
+      pickSectionNumber(sObj, ["uren_montage", "uren_mont", "montage_uren"]) +
+      pickSectionNumber(sObj, ["uren_reis", "reis_uren"])
+    );
+  }
+
+  if (type === "productie") {
+    return roundHours2(
+      pickSectionNumber(sObj, ["uren_prod", "productie_uren"]) +
+      pickSectionNumber(sObj, ["uren_cnc", "uren_cnc_prod", "cnc_uren"])
+    );
+  }
+
+  return 0;
+}
+
 function isSectionConceptRow(row, workType = ""){
   const emp = String(row?.werknemer_id ?? "");
   const type = String(row?.work_type || "").toLowerCase().trim();
@@ -9214,18 +9277,7 @@ async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEn
   // Nieuwe lengte = aantal werkdagen vanaf startdatum, nooit meer dan het sectiemaximum minus wat al elders gepland is.
   const requestedHours = roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
 
-  const sObj = sectById?.get(String(sid)) || {};
-  const maxHours = type === "wvb"
-    ? roundHours2(pickSectionNumber(sObj, ["uren_wvb", "uren_prep", "uren_werkvoorbereiding"]))
-    : (type === "montage"
-      ? roundHours2(
-        pickSectionNumber(sObj, ["uren_montage", "uren_mont", "montage_uren"]) +
-        pickSectionNumber(sObj, ["uren_reis", "reis_uren"])
-      )
-      : roundHours2(
-        pickSectionNumber(sObj, ["uren_prod", "productie_uren"]) +
-        pickSectionNumber(sObj, ["uren_cnc", "uren_cnc_prod", "cnc_uren"])
-      ));
+  const maxHours = getSectionTypeMaxHours(sid, type);
 
   if (!(maxHours > 0)) {
     alert("Concept aanpassen lukt niet: het maximale aantal uren van deze sectie kon niet worden gevonden.");
@@ -9280,6 +9332,85 @@ async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEn
   if (newRows.length) {
     const ins = await sb.from("section_assignments").insert(newRows);
     if (ins.error) alert("Concept resize insert fout: " + ins.error.message);
+  }
+}
+
+async function resizeSectionEmployeeRun({ sectionId, workType, employeeId, runStartISO, runEndISO, targetEndISO }){
+  const sid = String(sectionId || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const eid = String(employeeId || "").trim();
+  const startISO = String(runStartISO || "").trim();
+  const endISO = String(runEndISO || "").trim();
+  const targetISO = String(targetEndISO || "").trim();
+
+  if (!sid || !eid || !["wvb", "productie", "montage"].includes(type) || !startISO || !endISO || !targetISO) return;
+
+  const targetDays = countPlannerWorkdaysInclusive(startISO, targetISO);
+  if (targetDays <= 0) return;
+
+  const requestedHours = roundHours2(targetDays * PROJECT_DUMMY_HOURS_PER_DAY);
+  const maxHours = getSectionTypeMaxHours(sid, type);
+  if (!(maxHours > 0)) {
+    alert("Medewerkeruren aanpassen lukt niet: het maximale aantal uren van deze sectie kon niet worden gevonden.");
+    return;
+  }
+
+  const { data: rows, error: selErr } = await sb
+    .from("section_assignments")
+    .select("id, work_date, werknemer_id, work_type, note, hours")
+    .eq("section_id", sid)
+    .eq("work_type", type)
+    .limit(200000);
+
+  if (selErr) {
+    alert("Medewerker resize select fout: " + selErr.message);
+    return;
+  }
+
+  const allRows = rows || [];
+  const currentRows = allRows.filter(r =>
+    String(r.werknemer_id ?? "") === eid &&
+    String(r.work_date || "") >= startISO &&
+    String(r.work_date || "") <= endISO &&
+    !isSectionConceptRow(r, type) &&
+    !String(r.note || "").startsWith("inhuur:")
+  );
+
+  let alreadyPlannedOutsideRun = 0;
+  for (const r of allRows) {
+    const isCurrent = currentRows.some(x => String(x.id) === String(r.id));
+    if (isCurrent) continue;
+
+    if (isSectionConceptRow(r, type)) alreadyPlannedOutsideRun += parseProjectDummyHours(r.note, PROJECT_DUMMY_HOURS_PER_DAY);
+    else if (String(r.note || "").startsWith("inhuur:")) alreadyPlannedOutsideRun += Number(r.hours || PROJECT_DUMMY_HOURS_PER_DAY);
+    else alreadyPlannedOutsideRun += Number(r.hours || 0);
+  }
+
+  const remainingForThisRun = Math.max(0, roundHours2(maxHours - alreadyPlannedOutsideRun));
+  const newHours = Math.min(requestedHours, remainingForThisRun);
+
+  if (currentRows.length) {
+    const del = await sb.from("section_assignments").delete().in("id", currentRows.map(r => r.id));
+    if (del.error) {
+      alert("Medewerker resize delete fout: " + del.error.message);
+      return;
+    }
+  }
+
+  if (newHours <= 0) return;
+
+  const segments = buildSectionConceptHoursSegments(startISO, newHours);
+  const newRows = segments.map(seg => ({
+    section_id: sid,
+    work_date: seg.work_date,
+    werknemer_id: Number(eid),
+    work_type: type,
+    hours: seg.hours
+  }));
+
+  if (newRows.length) {
+    const ins = await sb.from("section_assignments").insert(newRows);
+    if (ins.error) alert("Medewerker resize insert fout: " + ins.error.message);
   }
 }
 
@@ -9489,17 +9620,26 @@ function wireDragDrop(root){
       const td = handle.closest("td.project-auto-plan-click, td.section-concept-click");
       if (!td) return;
 
-      const run = getContiguousRunFromCell(td, String(handle.dataset.workType || td.dataset.workType || ""));
-      const isSectionConcept = td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click");
+      const handleResizeKind = String(handle.dataset.resizeKind || "");
+      const handleWorkType = String(handle.dataset.workType || td.dataset.workType || "");
+      const employeeId = String(handle.dataset.employeeId || "");
+      const isSectionReal = handleResizeKind === "section-real";
+      const run = isSectionReal
+        ? getContiguousEmployeeRunFromCell(td, handleWorkType, employeeId)
+        : getContiguousRunFromCell(td, handleWorkType);
+      const isSectionConcept = !isSectionReal && td.classList.contains("section-concept-click") && !td.classList.contains("project-auto-plan-click");
       const payload = {
-        kind: isSectionConcept ? "section-concept-resize" : "project-resize",
-        resizeKind: isSectionConcept ? "section-concept" : String(td.dataset.ddKind || ""),
+        kind: isSectionReal ? "section-real-resize" : (isSectionConcept ? "section-concept-resize" : "project-resize"),
+        resizeKind: isSectionReal ? "section-real" : (isSectionConcept ? "section-concept" : String(td.dataset.ddKind || "")),
         sectionId: String(td.dataset.sectionId || ""),
         projectId: String(td.dataset.projectId || ""),
-        workType: String(handle.dataset.workType || td.dataset.workType || ""),
+        employeeId,
+        workType: handleWorkType,
         runStart: run.startISO,
         runEnd: run.endISO,
-        currentHours: getRunHoursFromDom(td, String(handle.dataset.workType || td.dataset.workType || "")),
+        currentHours: isSectionReal
+          ? getSectionEmployeeHoursFromCell(td, handleWorkType, employeeId)
+          : getRunHoursFromDom(td, handleWorkType),
         remainingHours: Number(td.dataset.totalHours || 0)
       };
 
@@ -9628,6 +9768,28 @@ function wireDragDrop(root){
           runEndISO: String(payload.runEnd || ""),
           targetEndISO: toDate,
           currentHours: Number(payload.currentHours || 0)
+        });
+
+        loadAndRender();
+        return;
+      }
+
+      if (kind === "section-real-resize") {
+        const resizeKind = String(payload.resizeKind || "");
+        const targetKind = String(cell.dataset.ddKind || "");
+        const fromSid = String(payload.sectionId || "");
+        const toSid = String(cell.dataset.sectionId || "");
+
+        if (resizeKind !== "section-real" || targetKind !== "section") return;
+        if (!fromSid || !toSid || fromSid !== toSid) return;
+
+        await resizeSectionEmployeeRun({
+          sectionId: fromSid,
+          workType: String(payload.workType || ""),
+          employeeId: String(payload.employeeId || ""),
+          runStartISO: String(payload.runStart || ""),
+          runEndISO: String(payload.runEnd || ""),
+          targetEndISO: toDate
         });
 
         loadAndRender();
@@ -10032,8 +10194,58 @@ function getContiguousRunFromCell(td, workType = ""){
       if (!c || conceptHoursFor(c) <= 0) break;
       endISO = next;
     }
-    return { startISO, endISO };
+  return { startISO, endISO };
+}
+
+function getSectionEmployeeHoursFromCell(cell, workType, employeeId){
+  if (!cell) return 0;
+  const sid = String(cell.dataset.sectionId || "").trim();
+  const iso = String(cell.dataset.workDate || "").trim();
+  const type = String(workType || "").toLowerCase().trim();
+  const eid = String(employeeId || "").trim();
+  if (!sid || !iso || !type || !eid) return 0;
+
+  const entry = assignMap?.get(sid)?.get(iso);
+  if (!entry?.rows) return 0;
+
+  let total = 0;
+  for (const r of entry.rows) {
+    if (String(r.werknemer_id ?? "") !== eid) continue;
+    if (String(r.work_type || "").toLowerCase().trim() !== type) continue;
+    if (isSectionConceptRow(r, type)) continue;
+    if (String(r.note || "").startsWith("inhuur:")) continue;
+    total += Number(r.hours || 0);
   }
+  return roundHours2(total);
+}
+
+function getContiguousEmployeeRunFromCell(td, workType, employeeId){
+  const tr = td.closest("tr");
+  const curISO = String(td.dataset.workDate || "");
+  if (!tr || !curISO) return { startISO: curISO, endISO: curISO };
+
+  const cells = Array.from(tr.querySelectorAll("td.dd-dropzone[data-work-date]"));
+  const byISO = new Map(cells.map(c => [String(c.dataset.workDate || ""), c]));
+
+  let startISO = curISO;
+  let endISO = curISO;
+
+  while (true) {
+    const prev = toISODate(addDays(parseISODate(startISO), -1));
+    const c = byISO.get(prev);
+    if (!c || getSectionEmployeeHoursFromCell(c, workType, employeeId) <= 0) break;
+    startISO = prev;
+  }
+
+  while (true) {
+    const next = toISODate(addDays(parseISODate(endISO), +1));
+    const c = byISO.get(next);
+    if (!c || getSectionEmployeeHoursFromCell(c, workType, employeeId) <= 0) break;
+    endISO = next;
+  }
+
+  return { startISO, endISO };
+}
 
   const key = String(td.dataset.ddKey || "");
   if (!key) return { startISO: curISO, endISO: curISO };
