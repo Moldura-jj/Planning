@@ -9641,7 +9641,7 @@ function wireDragDrop(root){
       e.stopPropagation();
       __wasDragging = true;
 
-      const td = handle.closest("td.project-auto-plan-click, td.section-concept-click");
+      const td = handle.closest("td.project-auto-plan-click, td.section-concept-click, td.section-click");
       if (!td) return;
 
       const handleResizeKind = String(handle.dataset.resizeKind || "");
