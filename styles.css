@@ -759,8 +759,9 @@ tr.project-row.project-plan-hidden > td.plan-cell{
   position:absolute;
   top:0;
   bottom:0;
-  left:0;
+  left:50%;
   width:8px;
+  transform:translateX(-4px);
   background:
     linear-gradient(
       to right,
