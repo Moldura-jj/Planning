@@ -9249,10 +9249,21 @@ async function resizeSectionConceptRun({ sectionId, workType, runStartISO, runEn
 
   const sObj = sectById?.get(String(sid)) || {};
   const maxHours = type === "wvb"
-    ? roundHours2(Number(sObj?.uren_wvb ?? sObj?.uren_prep ?? sObj?.uren_werkvoorbereiding ?? 0))
+    ? roundHours2(pickSectionNumber(sObj, ["uren_wvb", "uren_prep", "uren_werkvoorbereiding"]))
     : (type === "montage"
-      ? roundHours2(Number(sObj?.uren_montage ?? sObj?.uren_mont ?? 0) + Number(sObj?.uren_reis ?? 0))
-      : roundHours2(Number(sObj?.uren_prod ?? 0) + Number(sObj?.uren_cnc ?? sObj?.uren_cnc_prod ?? 0)));
+      ? roundHours2(
+        pickSectionNumber(sObj, ["uren_montage", "uren_mont", "montage_uren"]) +
+        pickSectionNumber(sObj, ["uren_reis", "reis_uren"])
+      )
+      : roundHours2(
+        pickSectionNumber(sObj, ["uren_prod", "productie_uren"]) +
+        pickSectionNumber(sObj, ["uren_cnc", "uren_cnc_prod", "cnc_uren"])
+      ));
+
+  if (!(maxHours > 0)) {
+    alert("Concept aanpassen lukt niet: het maximale aantal uren van deze sectie kon niet worden gevonden.");
+    return;
+  }
 
   const { data: rows, error: selErr } = await sb
     .from("section_assignments")
