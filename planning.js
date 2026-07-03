@@ -8082,6 +8082,14 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     montReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.montReal || 0) > 0 ? "mont-real" : ""),
     montConcept: dates.map(d => Number(assignByDay?.[toISODate(d)]?.montDummy || 0) > 0 ? "mont-concept" : ""),
   };
+  const projectSlotVisible = {
+    wvbReal: projectKeys.wvbReal.some(Boolean),
+    wvbConcept: projectKeys.wvbConcept.some(Boolean),
+    prodReal: projectKeys.prodReal.some(Boolean),
+    prodConcept: projectKeys.prodConcept.some(Boolean),
+    montReal: projectKeys.montReal.some(Boolean),
+    montConcept: projectKeys.montConcept.some(Boolean),
+  };
 
   const legacyKeys = dates.map((d, i) => {
     const iso = toISODate(d);
@@ -8163,12 +8171,12 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
     const hasSplit = (wvbReal > 0) || (wvbConcept > 0) || (prodReal > 0) || (prodConcept > 0) || (montReal > 0) || (montConcept > 0);
 
     if (hasSplit) {
-      html += barHtml({ arr: projectKeys.wvbReal, i, key: projectKeys.wvbReal[i], hours: wvbReal, colorCls: "bar-wvb bar-real" });
-      html += barHtml({ arr: projectKeys.wvbConcept, i, key: projectKeys.wvbConcept[i], hours: wvbConcept, colorCls: "bar-wvb bar-concept dummy-hatch" });
-      html += barHtml({ arr: projectKeys.prodReal, i, key: projectKeys.prodReal[i], hours: prodReal, colorCls: "bar-prod bar-real" });
-      html += barHtml({ arr: projectKeys.prodConcept, i, key: projectKeys.prodConcept[i], hours: prodConcept, colorCls: "bar-prod bar-concept dummy-hatch" });
-      html += barHtml({ arr: projectKeys.montReal, i, key: projectKeys.montReal[i], hours: montReal, colorCls: "bar-mont bar-real" });
-      html += barHtml({ arr: projectKeys.montConcept, i, key: projectKeys.montConcept[i], hours: montConcept, colorCls: "bar-mont bar-concept dummy-hatch" });
+      if (projectSlotVisible.wvbReal) html += barHtml({ arr: projectKeys.wvbReal, i, key: projectKeys.wvbReal[i], hours: wvbReal, colorCls: "bar-wvb bar-real" });
+      if (projectSlotVisible.wvbConcept) html += barHtml({ arr: projectKeys.wvbConcept, i, key: projectKeys.wvbConcept[i], hours: wvbConcept, colorCls: "bar-wvb bar-concept dummy-hatch" });
+      if (projectSlotVisible.prodReal) html += barHtml({ arr: projectKeys.prodReal, i, key: projectKeys.prodReal[i], hours: prodReal, colorCls: "bar-prod bar-real" });
+      if (projectSlotVisible.prodConcept) html += barHtml({ arr: projectKeys.prodConcept, i, key: projectKeys.prodConcept[i], hours: prodConcept, colorCls: "bar-prod bar-concept dummy-hatch" });
+      if (projectSlotVisible.montReal) html += barHtml({ arr: projectKeys.montReal, i, key: projectKeys.montReal[i], hours: montReal, colorCls: "bar-mont bar-real" });
+      if (projectSlotVisible.montConcept) html += barHtml({ arr: projectKeys.montConcept, i, key: projectKeys.montConcept[i], hours: montConcept, colorCls: "bar-mont bar-concept dummy-hatch" });
     } else if (legacyKey) {
       const prevKey = (i > 0) ? legacyKeys[i - 1] : "";
       const nextKey = (i < legacyKeys.length - 1) ? legacyKeys[i + 1] : "";
@@ -8239,6 +8247,14 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     if (label) return `lbl:${label}`;
     return "";
   });
+  const sectionSlotVisible = {
+    wvbReal: dates.some(d => Number(assignCountByDay?.[toISODate(d)]?.wvbReal || 0) > 0),
+    wvbConcept: dates.some(d => Number(assignCountByDay?.[toISODate(d)]?.wvbDummy || 0) > 0),
+    prodReal: dates.some(d => Number(assignCountByDay?.[toISODate(d)]?.prodReal || 0) > 0),
+    prodConcept: dates.some(d => Number(assignCountByDay?.[toISODate(d)]?.prodDummy || 0) > 0),
+    montReal: dates.some(d => Number(assignCountByDay?.[toISODate(d)]?.montReal || 0) > 0),
+    montConcept: dates.some(d => Number(assignCountByDay?.[toISODate(d)]?.montDummy || 0) > 0),
+  };
 
   const mixedBarContent = (realHours, dummyHours, totalHours) => {
     const real = Number(realHours || 0);
@@ -8393,7 +8409,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     };
 
     // 0) WVB - echte medewerkers
-    {
+    if (sectionSlotVisible.wvbReal) {
       const clsW = slotClasses("wvbReal", "bar bar-wvb bar-real bar-wvb-real");
       if (wvbReal > 0) {
         const isEnd = !slotState(i + 1, "wvbReal");
@@ -8407,7 +8423,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     }
 
     // 1) WVB - concept
-    {
+    if (sectionSlotVisible.wvbConcept) {
       const clsW = slotClasses("wvbConcept", "bar bar-wvb bar-concept bar-wvb-concept dummy-hatch");
       if (wvbDummyHours > 0) {
         const isEnd = !slotState(i + 1, "wvbConcept");
@@ -8419,7 +8435,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     }
 
     // 2) Productie - echte medewerkers
-    {
+    if (sectionSlotVisible.prodReal) {
       const clsP = slotClasses("prodReal", "bar bar-prod bar-real bar-prod-real");
       if (prodReal > 0) {
         const isEnd = !slotState(i + 1, "prodReal");
@@ -8433,7 +8449,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     }
 
     // 2) Productie - concept
-    {
+    if (sectionSlotVisible.prodConcept) {
       const clsP = slotClasses("prodConcept", "bar bar-prod bar-concept bar-prod-concept dummy-hatch");
       if (prodDummyHours > 0) {
         const isEnd = !slotState(i + 1, "prodConcept");
@@ -8445,7 +8461,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     }
 
     // 3) Montage - echte medewerkers
-    {
+    if (sectionSlotVisible.montReal) {
       const clsM = slotClasses("montReal", "bar bar-mont bar-real bar-mont-real");
       if (montReal > 0) {
         const isEnd = !slotState(i + 1, "montReal");
@@ -8459,7 +8475,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     }
 
     // 4) Montage - concept
-    {
+    if (sectionSlotVisible.montConcept) {
       const clsM = slotClasses("montConcept", "bar bar-mont bar-concept bar-mont-concept dummy-hatch");
       if (montDummyHours > 0) {
         const isEnd = !slotState(i + 1, "montConcept");
