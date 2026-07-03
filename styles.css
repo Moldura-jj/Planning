@@ -739,6 +739,31 @@ tr.project-row.project-plan-hidden > td.plan-cell{
   pointer-events:none;
 }
 
+tr:not(.project-row) > td.project-delivery-col::before,
+tr.project-row.project-plan-hidden > td.project-delivery-col::before,
+tr:not(.project-row) > td.project-completion-col::after,
+tr.project-row.project-plan-hidden > td.project-completion-col::after{
+  content:"";
+  position:absolute;
+  top:0;
+  bottom:0;
+  width:3px;
+  pointer-events:none;
+  z-index:3;
+}
+
+tr:not(.project-row) > td.project-delivery-col::before,
+tr.project-row.project-plan-hidden > td.project-delivery-col::before{
+  left:0;
+  background:#fde68a;
+}
+
+tr:not(.project-row) > td.project-completion-col::after,
+tr.project-row.project-plan-hidden > td.project-completion-col::after{
+  left:4px;
+  background:#f59e0b;
+}
+
 /* =========================
    CAPACITY / TOTALS STYLING
 ========================= */
