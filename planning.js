@@ -3051,7 +3051,7 @@ const firstProjectKey = (keys, { preferFilled = true, fallbackExisting = true } 
 };
 
 const customerKeyCandidates = [
-  "klantnaam","klant_naam","naam_klant","klantname","klant_name","klant",
+  "name_kl","klantnaam","klant_naam","naam_klant","klantname","klant_name","klant",
   "customer","customername","customer_name","customerName",
   "client","clientname","client_name","clientName",
   "debiteur","debiteurnaam","debiteur_naam","debtor","debtorname","debtor_name",
