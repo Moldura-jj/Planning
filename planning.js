@@ -4164,6 +4164,7 @@ for(const p of sortedProjecten){
       const complISO  = complISO0 ? toISODate(addDays(parseISODate(complISO0), -1)) : "";
       const deliveryRaw = p?.[deliveryKey] ?? "";
       const deliveryISO = asISODate(deliveryRaw);
+      const deliveryTxt = formatDateNL(deliveryRaw);
 
       console.log("RAW completion:", complRaw, "=> ISO:", complISO);
 
@@ -4186,6 +4187,10 @@ for(const p of sortedProjecten){
         <span class="projtext" data-proj="${escapeAttr(pid)}">
           <div class="projline1">${escapeHtml(nr)} - ${escapeHtml(kl)}</div>
           <div class="projline2">${escapeHtml(nm)}</div>
+        </span>
+        <span class="project-date-summary" aria-label="Projectdatums">
+          <span>Lever ${escapeHtml(deliveryTxt || "-")}</span>
+          <span>Oplever ${escapeHtml(complTxt || "-")}</span>
         </span>
       `;
 
