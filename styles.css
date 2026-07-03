@@ -753,6 +753,7 @@ tr.project-row.is-open > td.sticky-left{
   min-width:0;
 }
 .cap-cell-fill.prod{ background:rgba(34,197,94,.30); }
+.cap-cell-fill.wvb{ background:rgba(14,165,233,.30); }
 .cap-cell-fill.mont{ background:#fde68a; }
 .cap-cell-fill.absence{ background:rgba(245,158,11,.32); }
 .cap-cell-value{
@@ -894,7 +895,7 @@ td.section-click{
 
 /* assignment modal variant */
 .modal.assign-modal{
-  width:760px;
+  width:980px;
   max-width:calc(100vw - 24px);
 }
 
@@ -1222,6 +1223,7 @@ td.section-click{
 
 /* als prod+mont op dezelfde dag staan: kleur op de bar zelf (niet via td) */
 .plan-stack .bar.bar-prod{ background:#b7f0c2 !important; }
+.plan-stack .bar.bar-wvb{ background:#7dd3fc !important; }
 .plan-stack .bar.bar-mont{ background:#fde68a !important; }
 .plan-stack .bar.bar-prep{ background:#c7e0ff !important; }
 .plan-stack .bar.bar-generic{ background:#e5e7eb !important; }
@@ -1459,6 +1461,9 @@ td.section-click{
 /* Alleen kleur geven als er echt uren > 0 zijn */
 .planner-table tr.planned-prod td.sum-cell.has-val:not(.wknd){
   background: rgba(34,197,94,.18) !important;   /* groen */
+}
+.planner-table tr.planned-wvb td.sum-cell.has-val:not(.wknd){
+  background: rgba(14,165,233,.22) !important;  /* blauw */
 }
 .planner-table tr.planned-mont td.sum-cell.has-val:not(.wknd){
   background: rgba(250,204,21,.28) !important;  /* geel */
@@ -1756,6 +1761,7 @@ td.hourscol{
 }
 
 .cap-planchip.prod{ background: var(--chip-green); }
+.cap-planchip.wvb{ background:#e0f2fe; }
 .cap-planchip.mont{ background: #fde68a; } /* geel (montage) */
 
 .cap-planempty{
@@ -1775,6 +1781,7 @@ td.hourscol{
 .cap-planwrap{ display:flex; flex-direction:column; gap:8px; }
 .cap-planchip{ border-radius:14px; padding:8px 10px; font-size:12px; line-height:1.25; }
 .cap-planchip.prod{ background: var(--chip-green); }
+.cap-planchip.wvb{ background:#e0f2fe; }
 .cap-planchip.mont{ background: #fde68a; }
 .cap-planempty{ color: var(--muted); padding: 8px 0; }
 
@@ -1900,6 +1907,7 @@ td.hourscol{
 /* mobiel: alles onder elkaar */
 @media (max-width: 720px){
   .assign-grid{ grid-template-columns: 1fr; }
+  .assign-grid-3{ grid-template-columns: 1fr; }
   .inhuur-spacer,
   .right-empty{ display:none; }
   .hr.span-2{ grid-column:auto; }
@@ -1908,6 +1916,13 @@ td.hourscol{
 .assign-grid-2{
   display:grid;
   grid-template-columns: 1fr 1fr;
+  gap: 18px 22px;
+  align-items:start;
+}
+
+.assign-grid-3{
+  display:grid;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 18px 22px;
   align-items:start;
 }
@@ -1997,6 +2012,7 @@ td.hourscol{
   line-height:1.25;
 }
 .dm-card.prod{ background:#dcfce7; border-color:#bbf7d0; }
+.dm-card.wvb{ background:#e0f2fe; border-color:#7dd3fc; }
 .dm-card.mont{ background:#fef9c3; border-color:#fde68a; }
 
 .dayhead-btn{
@@ -2012,7 +2028,8 @@ td.hourscol{
 
 
 @media (max-width: 720px){
-  .assign-grid-2{ grid-template-columns: 1fr; }
+  .assign-grid-2,
+  .assign-grid-3{ grid-template-columns: 1fr; }
 }
 
 /* Projectpagina bewerkbare velden fix */
@@ -2570,6 +2587,7 @@ td.project-two-line .bar.placeholder{
 }
 
 .cap-right .cap-planseg.prod{ background: var(--chip-green); }
+.cap-right .cap-planseg.wvb{ background:#e0f2fe; }
 .cap-right .cap-planseg.mont{ background: #fde68a; }
 
 

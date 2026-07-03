@@ -1500,7 +1500,19 @@ function asISODate(v){
           <button class="btn small" id="amClose" type="button">✕</button>
         </div>
         <div class="bd">
-          <div class="assign-grid-2">
+          <div class="assign-grid-3">
+            <!-- WVB -->
+            <div class="assign-stack">
+              <div class="assign-col">
+                <div class="assign-col-title">WVB</div>
+                <div id="amListWvb" class="assign-list"></div>
+              </div>
+
+              <div class="hr"></div>
+
+              <div class="assign-col right-empty"></div>
+            </div>
+
             <!-- LINKS -->
             <div class="assign-stack">
               <div class="assign-col">
@@ -2741,6 +2753,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       const txt = buildLabel(pid, sid);
 
       // echte medewerkers
+      for (const eid of (entry.wvb || []))       addEmpItem(eid, "wvb", txt);
       for (const eid of (entry.productie || [])) addEmpItem(eid, "productie", txt);
       for (const eid of (entry.montage || []))   addEmpItem(eid, "montage", txt);
       for (const eid of (entry.cnc || []))       addEmpItem(eid, "cnc", txt);
@@ -2857,7 +2870,7 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
         <div class="dm-items">
           ${items.length
             ? items.map(it => `
-                <div class="dm-card ${it.type === "montage" ? "mont" : it.type === "productie" ? "prod" : it.type === "absence" ? "absence" : ""}">
+                <div class="dm-card ${it.type === "wvb" ? "wvb" : it.type === "montage" ? "mont" : it.type === "productie" ? "prod" : it.type === "absence" ? "absence" : ""}">
                   ${escapeHtml(it.text).replace(/\n/g,"<br>")}
                 </div>
               `).join("")
@@ -3284,11 +3297,13 @@ for (const p of projecten || []) {
       const dmA = assignMap.get(sid);
 
       if (!dmA.has(d)) dmA.set(d, {
+        wvb: new Set(),
         productie: new Set(),
         cnc: new Set(),
         montage: new Set(),
         reis: new Set(),
 
+        wvbHours: 0,
         prodHours: 0,
         cncHours: 0,
         montHours: 0,
@@ -3322,6 +3337,13 @@ for (const p of projecten || []) {
 
 const note = String(a.note || ""); // <- zet deze regel boven je wt checks (1x)
       const dummyHours = parseProjectDummyHours(note);
+
+      if (wt === "wvb" || wt === "werkvoorbereiding" || wt.includes("werkvoor")) {
+        if (!isDummy) {
+          entry.wvb.add(emp);
+          entry.wvbHours += rowHours;
+        }
+      }
 
       if (wt === "productie") {
         if (isDummy && note.startsWith("inhuur:")) {
@@ -3440,6 +3462,7 @@ function dbgSectionKeysForProject(pid){
         if (!busyByDay.has(dateISO)) busyByDay.set(dateISO, new Set());
         const set = busyByDay.get(dateISO);
 
+        for (const id of (entry.wvb || [])) set.add(String(id));
         for (const id of (entry.productie || [])) set.add(String(id));
         for (const id of (entry.montage || [])) set.add(String(id));
       }
@@ -3509,7 +3532,7 @@ function dbgSectionKeysForProject(pid){
           const wt = String(r.work_type || "").toLowerCase();
 
           if (rEmp !== eid) continue;
-          if (!["productie", "montage", "cnc", "reis"].includes(wt)) continue;
+          if (!["wvb", "werkvoorbereiding", "productie", "montage", "cnc", "reis"].includes(wt) && !wt.includes("werkvoor")) continue;
 
           total += Number(r.hours || 0);
         }
@@ -3527,7 +3550,7 @@ function dbgSectionKeysForProject(pid){
           const wt = String(r.work_type || "").toLowerCase();
 
           if (rEmp !== eid) continue;
-          if (!["productie", "montage", "cnc", "reis"].includes(wt)) continue;
+          if (!["wvb", "werkvoorbereiding", "productie", "montage", "cnc", "reis"].includes(wt) && !wt.includes("werkvoor")) continue;
 
           total += Number(r.hours || HOURS_PER_PERSON_DAY);
         }
@@ -3577,8 +3600,8 @@ for (const a of (pAssigns || [])) {
   const dmP = projectAssignMap.get(pid);
 
   if (!dmP.has(d)) dmP.set(d, {
-    productie: new Set(), cnc: new Set(), montage: new Set(), reis: new Set(),
-    prodHours: 0, cncHours: 0, montHours: 0, reisHours: 0,
+    wvb: new Set(), productie: new Set(), cnc: new Set(), montage: new Set(), reis: new Set(),
+    wvbHours: 0, prodHours: 0, cncHours: 0, montHours: 0, reisHours: 0,
     dummyProd: 0, dummyCnc: 0, dummyMont: 0, dummyReis: 0,
     dummyProdHours: 0, dummyCncHours: 0, dummyMontHours: 0, dummyReisHours: 0,
     dummySub: 0, subcNames: [],
@@ -3596,6 +3619,13 @@ const note = String(a.note || "");
   const isDummy = (emp === String(DUMMY_EMP_ID)); // ✅ project dummy alleen
   const dummyHours = parseProjectDummyHours(note);
   const rowHours = dummyHours;
+
+if (wt === "wvb" || wt === "werkvoorbereiding" || wt.includes("werkvoor")) {
+  if (!isDummy) {
+    entry.wvb.add(emp);
+    entry.wvbHours += rowHours;
+  }
+}
 
 if (wt === "productie") {
   if (isDummy && note.startsWith("inhuur:")) {
@@ -3755,6 +3785,8 @@ for (const p of (projecten || [])) {
 
 
     // planned prod/mont per day (unieke medewerkers per dag * 7,75 * planFactor)
+    const plannedWvbByDay = {};
+    const plannedWvbByEmpDay = new Map();
     const plannedProdByDay = {};
     const plannedCncByDay = {};
     const plannedMontByDay = {};
@@ -3786,6 +3818,7 @@ for (const p of (projecten || [])) {
 
     for (const d of dates) {
       const iso = toISODate(d);
+      plannedWvbByDay[iso] = 0;
       plannedProdByDay[iso] = 0;
       plannedCncByDay[iso] = 0;
       plannedMontByDay[iso] = 0;
@@ -3797,12 +3830,27 @@ for (const p of (projecten || [])) {
       for (const [iso, entry] of dm) {
         const capFactor = pf || 1;
 
+        plannedWvbByDay[iso] = Number(plannedWvbByDay[iso] || 0) + (Number(entry.wvbHours || 0) / capFactor);
         plannedProdByDay[iso] = Number(plannedProdByDay[iso] || 0) + (Number(entry.prodHours || 0) / capFactor);
         plannedMontByDay[iso] = Number(plannedMontByDay[iso] || 0) + (Number(entry.montHours || 0) / capFactor);
         plannedCncByDay[iso] = Number(plannedCncByDay[iso] || 0) + (Number(entry.cncHours || 0) / capFactor);
         plannedReisByDay[iso] = Number(plannedReisByDay[iso] || 0) + (Number(entry.reisHours || 0) / capFactor);
         plannedProdByDay[iso] += sectionDummyHours(entry, "Prod") * pf;
         plannedMontByDay[iso] += sectionDummyHours(entry, "Mont") * pf;
+      }
+    }
+
+    for (const [sid, dm] of assignMap) {
+      for (const [iso, entry] of dm) {
+        for (const r of (entry.rows || [])) {
+          const wt = String(r.work_type || "").toLowerCase().trim();
+          const emp = String(r.werknemer_id ?? "").trim();
+          if (!emp || emp === String(DUMMY_SEC_ID)) continue;
+          if (!(wt === "wvb" || wt === "werkvoorbereiding" || wt.includes("werkvoor"))) continue;
+          if (!plannedWvbByEmpDay.has(emp)) plannedWvbByEmpDay.set(emp, new Map());
+          const dmEmp = plannedWvbByEmpDay.get(emp);
+          dmEmp.set(iso, Number(dmEmp.get(iso) || 0) + (Number(r.hours || 0) / (pf || 1)));
+        }
       }
     }
 
@@ -3916,7 +3964,7 @@ for (const p of (projecten || [])) {
       const segHtml = (segments || []).map(seg => {
         const pct = Math.max(0, Math.min(100 - usedPct, (Number(seg.hours || 0) / denom) * 100));
         usedPct += pct;
-        const cls = seg.type === "montage" ? "mont" : seg.type === "absence" ? "absence" : "prod";
+        const cls = seg.type === "wvb" ? "wvb" : seg.type === "montage" ? "mont" : seg.type === "absence" ? "absence" : "prod";
         return `<span class="cap-cell-fill ${cls}" style="width:${pct.toFixed(4)}%;"></span>`;
       }).join("");
 
@@ -4140,6 +4188,7 @@ for (const dd of dates) {
     // echte ingevoerde uren uit section_assignments
     const capFactorP = pfP || 1;
 
+    plP.prep += Number(e.wvbHours || 0) / capFactorP;
     plP.prod += Number(e.prodHours || 0) / capFactorP;
     plP.cnc  += Number(e.cncHours || 0) / capFactorP;
     plP.mont += Number(e.montHours || 0) / capFactorP;
@@ -4226,7 +4275,7 @@ for (const dd of dates) {
     }
 
   // splits voor compacte projectregel: medewerkers/inhuur apart van concept
-  let prodReal = 0, prodDummyHours = 0, montReal = 0, montDummyHours = 0;
+  let wvbReal = 0, prodReal = 0, prodDummyHours = 0, montReal = 0, montDummyHours = 0;
 
   for (const s of secs) {
     const sidRaw = s?.[sectIdKey]
@@ -4238,6 +4287,7 @@ for (const dd of dates) {
     const entry = assignMap.get(sidC)?.get(iso);
     if (!entry) continue;
 
+    wvbReal += Number(entry.wvbHours || 0);
     prodReal += Number(entry.prodHours || 0) + Number(entry.inhuurProdIds?.size || 0);
     prodDummyHours += sectionDummyHours(entry, "Prod");
 
@@ -4247,6 +4297,7 @@ for (const dd of dates) {
 
   const peSplit = projectAssignMap.get(String(pid))?.get(iso);
   if (peSplit) {
+    wvbReal += Number(peSplit.wvbHours || 0);
     prodReal += Number(peSplit.prodHours || 0) + (Number(peSplit.inhuurProdIds?.size || 0) * PROJECT_DUMMY_HOURS_PER_DAY);
     prodDummyHours += Number(peSplit.dummyProdHours || (Number(peSplit.dummyProd || 0) * PROJECT_DUMMY_HOURS_PER_DAY));
 
@@ -4256,6 +4307,7 @@ for (const dd of dates) {
 
   projAssignByDay[iso] = {
     prod, mont, dummyProd, dummyMont,
+    wvbReal,
     prodReal, prodDummy: prodDummyHours,
     montReal, montDummy: montDummyHours
   };
@@ -4374,6 +4426,7 @@ for (const dd of dates) {
     const capFactorS = pfS || 1;
 
     // ✅ echte ingevoerde uren gebruiken, net als bij de projectregel
+    plS.prep += Number(e.wvbHours || 0) / capFactorS;
     plS.prod += Number(e.prodHours || 0) / capFactorS;
     plS.cnc  += Number(e.cncHours || 0) / capFactorS;
     plS.mont += Number(e.montHours || 0) / capFactorS;
@@ -4403,12 +4456,15 @@ for (const dd of dates) {
         for (const dd of dates) {
           const iso = toISODate(dd);
           const entry = dmA?.get(iso);
+        const wvbReal = entry ? Number(entry.wvbHours || 0) : 0;
         const prodReal = entry ? Number(entry.prodHours || 0) : 0;
         const montReal = entry ? Number(entry.montHours || 0) : 0;
         const prodDummy = entry ? sectionDummyHours(entry, "Prod") : 0;
         const montDummy = entry ? sectionDummyHours(entry, "Mont") : 0;
 
         assignByDay[iso] = {
+          wvb: wvbReal,
+          wvbReal,
           prod: prodReal + prodDummy,
           mont: montReal + montDummy,
           prodReal,
@@ -4985,6 +5041,92 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
     }
     tbody.appendChild(balanceRow("Saldo", dates, saldoByDay));
 
+    // APART BLOK: Werkvoorbereiding
+    tbody.appendChild(spacerRow(dates.length));
+    tbody.appendChild(sectionHeaderRow("Werkvoorbereiding", dates.length));
+
+    const wvbCapKey = "wvb-cap";
+    const trWvbTotal = document.createElement("tr");
+    trWvbTotal.className = "cap-total-row wvb-cap-total-row";
+    markZebra(trWvbTotal);
+
+    const tdWvbTotalLeft = document.createElement("td");
+    tdWvbTotalLeft.className = "rowhdr sticky-left cap-total-left";
+    tdWvbTotalLeft.innerHTML = `
+      <button class="expander cap-expander" data-cap="${wvbCapKey}" aria-label="toggle werkvoorbereiding">▶</button>
+      <b>Uren beschikbaar WVB</b>
+    `;
+    trWvbTotal.appendChild(tdWvbTotalLeft);
+
+    const hoursTdWvbTotal = document.createElement("td");
+    hoursTdWvbTotal.className = "cell hourscol sticky-left2";
+    hoursTdWvbTotal.style.left = "380px";
+    if (!hoursColOpen) hoursTdWvbTotal.style.display = "none";
+    trWvbTotal.appendChild(hoursTdWvbTotal);
+
+    for (const d of dates) {
+      const iso = toISODate(d);
+      const td = document.createElement("td");
+      td.className = `cell sum-cell ${isWeekend(d) ? "wknd" : ""}`;
+      td.textContent = fmt0(capTotalByDay[iso] || 0);
+      trWvbTotal.appendChild(td);
+    }
+    tbody.appendChild(trWvbTotal);
+
+    for (const w of (werknemersCap || [])) {
+      const empId =
+        w?.[empIdKey] ??
+        w?.werknemer_id ??
+        w?.id ??
+        w?.employee_id ??
+        w?.user_id ??
+        "";
+      const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
+      const empIdStr = String(empId ?? "").trim();
+
+      const tr = document.createElement("tr");
+      tr.className = "cap-emp-row hidden wvb-cap-emp-row";
+      tr.dataset.capParent = wvbCapKey;
+      markZebra(tr);
+
+      const leftEmp = document.createElement("td");
+      leftEmp.className = "rowhdr sticky-left cap-name";
+      leftEmp.textContent = empName;
+      tr.appendChild(leftEmp);
+
+      const hoursTdWvbEmp = document.createElement("td");
+      hoursTdWvbEmp.className = "cell hourscol sticky-left2";
+      hoursTdWvbEmp.style.left = "380px";
+      if (!hoursColOpen) hoursTdWvbEmp.style.display = "none";
+      tr.appendChild(hoursTdWvbEmp);
+
+      for (const d of dates) {
+        const iso = toISODate(d);
+        const available = Number(capByEmp.get(empIdStr)?.get(iso) || 0);
+        const planned = Number(plannedWvbByEmpDay.get(empIdStr)?.get(iso) || 0);
+        const td = document.createElement("td");
+        td.className = `cell cap-cell ${isWeekend(d) ? "wknd" : ""}`;
+        if (planned > 0) td.classList.add("cap-assigned-wvb");
+        td.innerHTML = renderCapacityCellContent(
+          available,
+          planned > 0 ? [{ type: "wvb", hours: planned }] : [],
+          available || 7.5
+        );
+        tr.appendChild(td);
+      }
+
+      tbody.appendChild(tr);
+    }
+
+    tbody.appendChild(labelRow("Gepland WVB", dates, plannedWvbByDay, "planned-wvb"));
+
+    const saldoWvbByDay = {};
+    for (const d of dates) {
+      const iso = toISODate(d);
+      saldoWvbByDay[iso] = Math.round((Number(capTotalByDay?.[iso] || 0) - Number(plannedWvbByDay?.[iso] || 0)) * 100) / 100;
+    }
+    tbody.appendChild(balanceRow("Saldo WVB", dates, saldoWvbByDay));
+
     // (optioneel) Capaciteit met nieuwe order / Nieuwe order: laat ik als “hook” staan
     // omdat ik jouw project_orders schema nog niet gezien heb.
     // Je kunt dit later 1-op-1 invullen.
@@ -5440,10 +5582,10 @@ function getPlannedForEmpDate(empIdStr, dateISO) {
       if (rEmp !== emp) continue;
 
       const wt = String(r.work_type || "").toLowerCase().trim();
-      if (wt !== "productie" && wt !== "montage") continue;
+      if (wt !== "productie" && wt !== "montage" && wt !== "wvb" && wt !== "werkvoorbereiding" && !wt.includes("werkvoor")) continue;
 
       pushItem({
-        type: wt,
+        type: (wt === "werkvoorbereiding" || wt.includes("werkvoor")) ? "wvb" : wt,
         text: buildPlanLabel({ pid, sid, type: wt }),
         hours: Number(r.hours || 0) || 7.5
       });
@@ -5460,10 +5602,10 @@ function getPlannedForEmpDate(empIdStr, dateISO) {
       if (rEmp !== emp) continue;
 
       const wt = String(r.work_type || "").toLowerCase().trim();
-      if (wt !== "productie" && wt !== "montage") continue;
+      if (wt !== "productie" && wt !== "montage" && wt !== "wvb" && wt !== "werkvoorbereiding" && !wt.includes("werkvoor")) continue;
 
       pushItem({
-        type: wt,
+        type: (wt === "werkvoorbereiding" || wt.includes("werkvoor")) ? "wvb" : wt,
         text: buildPlanLabel({ pid, sid: null, type: wt }),
         hours: Number(r.hours || 0) || 7.5
       });
@@ -5517,7 +5659,7 @@ formEl.innerHTML = `
         ? `<div class="cap-planbar">${planned.map(p => {
             const h = Number(p.hours || 0);
             const pct = Math.max(0, Math.min(100, (h / 7.5) * 100));
-            const cls = p.type === "absence" ? "absence" : (p.type === "montage" ? "mont" : "prod");
+            const cls = p.type === "absence" ? "absence" : p.type === "wvb" ? "wvb" : (p.type === "montage" ? "mont" : "prod");
             return `
               <div class="cap-planchip cap-planseg ${cls}" style="flex-basis:${pct}%;" title="${escapeAttr(fmtHours(h))} uur">
                 <div class="cap-planseg-title">${escapeHtml(String(p.text)).replace(/\n/g, "<br>")}</div>
@@ -6049,17 +6191,19 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
       // current selection
       const cur = assignMap.get(sid)?.get(dateISO) || {
-        productie: new Set(), montage: new Set(),
+        wvb: new Set(), productie: new Set(), montage: new Set(),
         dummyProd: 0, dummyMont: 0, dummySub: 0,
         dummyProdHours: 0, dummyMontHours: 0,
         dummyCncHours: 0, dummyReisHours: 0
       };
 
       const selected = {
+        wvb: new Set(cur.wvb),
         productie: new Set(cur.productie),
         montage: new Set(cur.montage),
 
         // uren per medewerker
+        wvbHours: new Map(),
         prodHours: new Map(),
         montHours: new Map(),
 
@@ -6079,6 +6223,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
           const wt = String(r.work_type || "").toLowerCase();
           const h = Number(r.hours || 1);
 
+          if (wt === "wvb" || wt === "werkvoorbereiding" || wt.includes("werkvoor")) selected.wvbHours.set(eid, h);
           if (wt === "productie") selected.prodHours.set(eid, h);
           if (wt === "montage") selected.montHours.set(eid, h);
         }
@@ -6089,11 +6234,13 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
       for (const iid of (cur.inhuurMontIds || [])) selected.montage.add(String(iid));
 
       const getSectionPlannedTotals = () => {
-        const totals = { prod: 0, mont: 0 };
+        const totals = { wvb: 0, prod: 0, mont: 0 };
         const dm = assignMap.get(String(sid));
         if (!dm) return totals;
 
         for (const [, entry] of dm) {
+          totals.wvb += Number(entry.wvbHours || 0);
+
           totals.prod += Number(entry.prodHours || 0)
             + Number(entry.cncHours || 0)
             + sectionDummyHours(entry, "Prod")
@@ -6113,6 +6260,9 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
       };
 
       const sectionRequiredHours = {
+        wvb: roundHours2(
+          pickSectionNumber(sObj, ["uren_wvb", "uren_prep", "uren_werkvoorbereiding"])
+        ),
         prod: roundHours2(
           pickSectionNumber(sObj, ["uren_prod"]) +
           pickSectionNumber(sObj, ["uren_cnc", "uren_cnc_prod", "cnc_uren"])
@@ -6125,6 +6275,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
       const sectionPlannedTotals = getSectionPlannedTotals();
       const sectionRemainingHours = {
+        wvb: Math.max(0, roundHours2(sectionRequiredHours.wvb - sectionPlannedTotals.wvb)),
         prod: Math.max(0, roundHours2(sectionRequiredHours.prod - sectionPlannedTotals.prod)),
         mont: Math.max(0, roundHours2(sectionRequiredHours.mont - sectionPlannedTotals.mont)),
       };
@@ -6146,6 +6297,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
       const prevSectMontCount = (cur?.montage?.size || 0) + Number(cur?.dummyMont || 0);
 
       const subEl = modal.wrap.querySelector("#amSub");
+      const listWvb = modal.wrap.querySelector("#amListWvb");
       const listProd = modal.wrap.querySelector("#amListProd");
       const listMont = modal.wrap.querySelector("#amListMont");
       const saveBtn = modal.wrap.querySelector("#amSave");
@@ -6182,6 +6334,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
 
 
       const renderBothLists = () => {
+        if (listWvb) listWvb.innerHTML = "";
         listProd.innerHTML = "";
         listMont.innerHTML = "";
         if (listSubc) listSubc.innerHTML = "";
@@ -6191,6 +6344,7 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
         const busySet = getBusyOtherProjects(dateISO, projectId);
 
         const keepVisible = new Set([
+          ...Array.from(selected.wvb),
           ...Array.from(selected.productie),
           ...Array.from(selected.montage),
         ]);
@@ -6348,12 +6502,102 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
       }
 
 
+          // --- WVB rij ---
+          const rowW = document.createElement("label");
+          rowW.className = "assign-item";
+
+          const wvbChecked = selected.wvb.has(eid);
+          const pfForDefault = Number(settings.planFactor || 1);
+          const wvbDefaultHours = Math.min(
+            Number(sectionRemainingHours.wvb || 0),
+            Number(remainingCapacityHours || 0) * pfForDefault
+          );
+          const wvbHours = selected.wvbHours.has(eid)
+            ? selected.wvbHours.get(eid)
+            : roundHours2(wvbDefaultHours);
+
+          rowW.innerHTML = `
+            <input type="checkbox" ${wvbChecked ? "checked" : ""} data-eid="${escapeAttr(eid)}" data-type="wvb" />
+            <span style="flex:1;">
+              ${escapeHtml(name)}
+              <small class="cap-left-info">
+                ${fmt1(remainingCapacityHours)}u vrij / ${fmt1(availableHours)}u beschikbaar
+              </small>
+            </span>
+
+            <label style="display:flex; align-items:center; gap:4px;">
+              <input
+                type="checkbox"
+                class="full-day-wvb"
+                data-eid="${escapeAttr(eid)}"
+                ${wvbHours === availableHours && availableHours > 0 ? "checked" : ""}
+              />
+              <span class="muted" style="font-size:12px;">hele dag</span>
+            </label>
+
+            <input
+              class="input assign-hours-wvb"
+              type="text"
+              inputmode="decimal"
+              data-eid="${escapeAttr(eid)}"
+              value="${String(wvbHours).replace(".", ",")}"
+              style="width:58px;"
+            />
+          `;
+
+          const wvbChk = rowW.querySelector('input[data-type="wvb"]');
+          const wvbHoursInp = rowW.querySelector(".assign-hours-wvb");
+          const wvbFullDay = rowW.querySelector(".full-day-wvb");
+
+          wvbChk.onchange = (e) => {
+            const id = String(e.target.dataset.eid || "");
+            if (!id) return;
+
+            if (e.target.checked) {
+              selected.productie.delete(id);
+              selected.montage.delete(id);
+              selected.prodHours.delete(id);
+              selected.montHours.delete(id);
+              const prodOther = listProd?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="productie"]`);
+              const montOther = listMont?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="montage"]`);
+              if (prodOther) prodOther.checked = false;
+              if (montOther) montOther.checked = false;
+
+              selected.wvb.add(id);
+              const hRaw = String(wvbHoursInp.value || String(wvbHours || 0)).replace(",", ".");
+              const h = Number(hRaw) || 0;
+              selected.wvbHours.set(id, h);
+            } else {
+              selected.wvb.delete(id);
+              selected.wvbHours.delete(id);
+            }
+          };
+
+          wvbHoursInp.oninput = () => {
+            wvbHoursInp.value = wvbHoursInp.value.replace(/[^0-9.,]/g, "");
+            const h = Number(String(wvbHoursInp.value || "0").replace(",", "."));
+            if (selected.wvb.has(eid)) selected.wvbHours.set(eid, h || 0);
+          };
+
+          wvbFullDay.onchange = () => {
+            if (wvbFullDay.checked) {
+              const remaining = getEmployeeRemainingCapacityHours(eid, dateISO, {
+                sectionId: sid
+              });
+              const pf = Number(settings.planFactor || 1);
+              const fullHours = remaining * pf;
+              wvbHoursInp.value = String(Math.round(fullHours * 100) / 100).replace(".", ",");
+              selected.wvbHours.set(eid, fullHours);
+            }
+          };
+
+          if (listWvb) listWvb.appendChild(rowW);
+
           // --- Productie rij ---
           const rowP = document.createElement("label");
           rowP.className = "assign-item";
 
           const prodChecked = selected.productie.has(eid);
-          const pfForDefault = Number(settings.planFactor || 1);
           const replaceableProdHours = sectionDummyHours(cur, "Prod");
           const prodDefaultHours = Math.min(
             Number(sectionRemainingHours.prod || 0) + Number(replaceableProdHours || 0),
@@ -6401,6 +6645,11 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
         if (!id) return;
 
         if (e.target.checked) {
+          selected.wvb.delete(id);
+          selected.wvbHours.delete(id);
+          const wvbOther = listWvb?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="wvb"]`);
+          if (wvbOther) wvbOther.checked = false;
+
           selected.montage.delete(id);
           const other = listMont?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="montage"]`);
           if (other) other.checked = false;
@@ -6491,6 +6740,11 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
         if (!id) return;
 
         if (e.target.checked) {
+          selected.wvb.delete(id);
+          selected.wvbHours.delete(id);
+          const wvbOther = listWvb?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="wvb"]`);
+          if (wvbOther) wvbOther.checked = false;
+
           selected.productie.delete(id);
           const other = listProd?.querySelector(`input[data-eid="${cssEsc(id)}"][data-type="productie"]`);
           if (other) other.checked = false;
@@ -6782,6 +7036,27 @@ if (listSubc) {
       saveBtn.onclick = async () => {
                 const capacityErrors = [];
 
+        // WVB controleren
+        for (const eid of selected.wvb) {
+          const werknemerId = Number(eid);
+          if (!Number.isFinite(werknemerId)) continue;
+
+          const h = Number(selected.wvbHours.get(eid) || 0);
+          const neededCapacity = toCapacityHours(h);
+          const remaining = getEmployeeRemainingCapacityHours(eid, dateISO, {
+            sectionId: sid
+          });
+
+          if (neededCapacity > remaining + 0.001) {
+            const w = werknemers.find(x => String(x?.[empIdKey] ?? "") === String(eid));
+            const name = String(w?.[empNameKey] || eid);
+
+            capacityErrors.push(
+              `${name}: WVB ${fmt1(h)}u vraagt ${fmt1(neededCapacity)}u capaciteit, maar er is nog ${fmt1(remaining)}u vrij.`
+            );
+          }
+        }
+
         // Productie controleren
         for (const eid of selected.productie) {
           const werknemerId = Number(eid);
@@ -6841,6 +7116,21 @@ if (listSubc) {
 
 
       const rows = [];
+
+      // ✅ WVB: echte medewerker
+      for (const eid of selected.wvb) {
+        const werknemerId = Number(eid);
+
+        if (Number.isFinite(werknemerId)) {
+          rows.push({
+            section_id: sid,
+            work_date: dateISO,
+            werknemer_id: werknemerId,
+            work_type: "wvb",
+            hours: Number(selected.wvbHours.get(eid) || 0)
+          });
+        }
+      }
 
       // ✅ Productie: echte medewerker (nummer) of inhuur (tekst/uuid)
       for (const eid of selected.productie) {
@@ -7305,6 +7595,7 @@ function bindHoverTips(){
     const s = String(t||"").toLowerCase();
     if(!s) return "";
     // jouw PDF-termen
+    if(s === "wvb") return "werkvoorbereiding";
     if(s.includes("werkvoor")) return "werkvoorbereiding";
     if(s.includes("prod")) return "productie";
     if(s.includes("mont")) return "montage";
@@ -7314,7 +7605,7 @@ function bindHoverTips(){
 
   function isProdType(t){ const s=String(t||"").toLowerCase(); return s.includes("prod") || s==="productie"; }
   function isMontType(t){ const s=String(t||"").toLowerCase(); return s.includes("mont") || s==="montage"; }
-  function isPrepType(t){ const s=String(t||"").toLowerCase(); return s.includes("werkvoor"); }
+  function isPrepType(t){ const s=String(t||"").toLowerCase(); return s.includes("werkvoor") || s === "wvb"; }
   function isDeliveryType(t){ const s=String(t||"").toLowerCase(); return s.includes("oplever"); }
   function isCncType(t){ const s=String(t||"").toLowerCase(); return s.includes("cnc"); }
   function isReisType(t){ const s=String(t||"").toLowerCase(); return s.includes("reis") || s.includes("travel") || s.includes("rit"); }
@@ -7704,6 +7995,7 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
 function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = "", assignByDay = {}) {
 
   const projectKeys = {
+    wvbReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.wvbReal || 0) > 0 ? "wvb-real" : ""),
     prodReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.prodReal || 0) > 0 ? "prod-real" : ""),
     prodConcept: dates.map(d => Number(assignByDay?.[toISODate(d)]?.prodDummy || 0) > 0 ? "prod-concept" : ""),
     montReal: dates.map(d => Number(assignByDay?.[toISODate(d)]?.montReal || 0) > 0 ? "mont-real" : ""),
@@ -7748,6 +8040,7 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
 
     const prod = Number(assignByDay?.[iso]?.prod || 0);
     const mont = Number(assignByDay?.[iso]?.mont || 0);
+    const wvbReal = Number(assignByDay?.[iso]?.wvbReal || 0);
     const prodReal = Number(assignByDay?.[iso]?.prodReal || 0);
     const prodConcept = Number(assignByDay?.[iso]?.prodDummy || 0);
     const montReal = Number(assignByDay?.[iso]?.montReal || 0);
@@ -7785,9 +8078,10 @@ function appendProjectDayCells(tr, dates, labels, markerISO = "", deliveryISO = 
       : `<div class="marker deadline placeholder">oplever</div>`;
     html += `</div>`;
 
-    const hasSplit = (prodReal > 0) || (prodConcept > 0) || (montReal > 0) || (montConcept > 0);
+    const hasSplit = (wvbReal > 0) || (prodReal > 0) || (prodConcept > 0) || (montReal > 0) || (montConcept > 0);
 
     if (hasSplit) {
+      html += barHtml({ arr: projectKeys.wvbReal, i, key: projectKeys.wvbReal[i], hours: wvbReal, colorCls: "bar-wvb bar-real" });
       html += barHtml({ arr: projectKeys.prodReal, i, key: projectKeys.prodReal[i], hours: prodReal, colorCls: "bar-prod bar-real" });
       html += barHtml({ arr: projectKeys.prodConcept, i, key: projectKeys.prodConcept[i], hours: prodConcept, colorCls: "bar-prod bar-concept dummy-hatch" });
       html += barHtml({ arr: projectKeys.montReal, i, key: projectKeys.montReal[i], hours: montReal, colorCls: "bar-mont bar-real" });
@@ -7847,13 +8141,15 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     String(w?.[empNameKey] || w?.[empIdKey] || "")
   ]));
 
-  // keys (voor rounded start/end van prod/mont)
+  // keys (voor rounded start/end van wvb/prod/mont)
   const keys = dates.map((d, i) => {
     const iso = toISODate(d);
+    const wvb = Number(assignCountByDay?.[iso]?.wvb || 0);
     const prod = Number(assignCountByDay?.[iso]?.prod || 0);
     const mont = Number(assignCountByDay?.[iso]?.mont || 0);
     const label = labels[i] || "";
 
+    if (wvb > 0) return "wvb";
     if (prod > 0 && mont > 0) return "both";
     if (prod > 0) return "prod";
     if (mont > 0) return "mont";
@@ -7888,6 +8184,8 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     const d = dates[i];
     const iso = toISODate(d);
 
+    const wvb = Number(assignCountByDay?.[iso]?.wvb || 0);
+    const wvbReal = Number(assignCountByDay?.[iso]?.wvbReal || 0);
     const prod = Number(assignCountByDay?.[iso]?.prod || 0);
     const mont = Number(assignCountByDay?.[iso]?.mont || 0);
     const prodReal = Number(assignCountByDay?.[iso]?.prodReal || 0);
@@ -7916,6 +8214,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     const dummyMont = montDummyHours > 0;
 
     if (entry) {
+    const wvbNames = Array.from(entry.wvb || []).map(id => empNameById.get(String(id)) || String(id));
     const prodNames = Array.from(entry.productie || []).map(id => empNameById.get(String(id)) || String(id));
     const montNames = Array.from(entry.montage || []).map(id => empNameById.get(String(id)) || String(id));
 
@@ -7934,7 +8233,8 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     if (montConceptHours > 0) montTipRows.push(`Concept ${formatHoursCell(montConceptHours)}u`);
 
     let tip = "";
-    if (prodTipRows.length) tip += `Productie:\n- ${prodTipRows.join("\n- ")}`;
+    if (wvbNames.length) tip += `WVB:\n- ${wvbNames.join("\n- ")}`;
+    if (prodTipRows.length) tip += (tip ? "\n\n" : "") + `Productie:\n- ${prodTipRows.join("\n- ")}`;
     if (inhuurProdNames.length) tip += (tip ? "\n\n" : "") + `Inhuur productie:\n- ${inhuurProdNames.join("\n- ")}`;
 
     if (montTipRows.length) tip += (tip ? "\n\n" : "") + `Montage:\n- ${montTipRows.join("\n- ")}`;
@@ -7961,7 +8261,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       td.classList.add("section-concept-click");
     }
 
-    const hasPlan = (prod > 0) || (mont > 0) || (subc > 0);
+    const hasPlan = (wvb > 0) || (prod > 0) || (mont > 0) || (subc > 0);
     if (hasPlan) {
       td.setAttribute("draggable", "true");
       td.classList.add("dd-draggable");
@@ -7983,6 +8283,7 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
     const slotState = (idx, slot) => {
       const c = cellAt(idx);
       if (!c) return false;
+      if (slot === "wvbReal") return Number(c.wvbReal || c.wvb || 0) > 0;
       if (slot === "prodReal") return Number(c.prodReal || 0) > 0;
       if (slot === "prodConcept") return Number(c.prodDummy || 0) > 0;
       if (slot === "montReal") return Number(c.montReal || 0) > 0;
@@ -7997,6 +8298,16 @@ const empNameKey = pickKey((werknemersCap?.[0] || werknemers?.[0]), [
       const isEnd   = !slotState(i + 1, slot);
       return `${baseCls}${isStart ? " bar-start" : ""}${isEnd ? " bar-end" : ""}`;
     };
+
+    // 0) WVB - echte medewerkers
+    {
+      const clsW = slotClasses("wvbReal", "bar bar-wvb bar-real bar-wvb-real");
+      if (wvbReal > 0) {
+        html += `<div class="${clsW}">${escapeHtml(formatHoursCell(wvbReal))}</div>`;
+      } else {
+        html += `<div class="${clsW}">&nbsp;</div>`;
+      }
+    }
 
     // 1) Productie - echte medewerkers
     {
