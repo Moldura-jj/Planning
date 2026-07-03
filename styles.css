@@ -739,29 +739,43 @@ tr.project-row.project-plan-hidden > td.plan-cell{
   pointer-events:none;
 }
 
-tr:not(.project-row) > td.project-delivery-col::before,
-tr.project-row.project-plan-hidden > td.project-delivery-col::before,
-tr:not(.project-row) > td.project-completion-col::after,
-tr.project-row.project-plan-hidden > td.project-completion-col::after{
+.planner-table td.project-delivery-col,
+.planner-table td.project-completion-col{
+  --date-line-delivery:transparent;
+  --date-line-completion:transparent;
+}
+
+.planner-table td.project-delivery-col{
+  --date-line-delivery:#facc15;
+}
+
+.planner-table td.project-completion-col{
+  --date-line-completion:#f59e0b;
+}
+
+.planner-table td.project-delivery-col::before,
+.planner-table td.project-completion-col::before{
   content:"";
   position:absolute;
   top:0;
   bottom:0;
-  width:3px;
-  pointer-events:none;
-  z-index:3;
-}
-
-tr:not(.project-row) > td.project-delivery-col::before,
-tr.project-row.project-plan-hidden > td.project-delivery-col::before{
   left:0;
-  background:#fde68a;
+  width:8px;
+  background:
+    linear-gradient(
+      to right,
+      var(--date-line-delivery) 0 3px,
+      transparent 3px 4px,
+      var(--date-line-completion) 4px 7px,
+      transparent 7px 8px
+    );
+  pointer-events:none;
+  z-index:6;
 }
 
-tr:not(.project-row) > td.project-completion-col::after,
-tr.project-row.project-plan-hidden > td.project-completion-col::after{
-  left:4px;
-  background:#f59e0b;
+.planner-table td.project-delivery-col .marker-row,
+.planner-table td.project-completion-col .marker-row{
+  visibility:hidden;
 }
 
 /* =========================
