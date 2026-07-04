@@ -1268,10 +1268,10 @@ td.section-click{
 .settings-employee-head,
 .settings-employee-row{
   display:grid;
-  grid-template-columns:minmax(220px, 1.3fr) repeat(7, minmax(72px, .45fr));
+  grid-template-columns:minmax(220px, 1.3fr) repeat(7, minmax(88px, .45fr));
   gap:8px;
   align-items:center;
-  min-width:820px;
+  min-width:960px;
 }
 
 .settings-employee-head{
@@ -1284,6 +1284,23 @@ td.section-click{
 .settings-employee-hours{
   text-align:right;
   font-variant-numeric:tabular-nums;
+}
+
+.settings-employee-day{
+  display:grid;
+  gap:4px;
+}
+
+.settings-employee-discipline,
+.cap-discipline{
+  min-height:30px;
+  padding:4px 8px;
+  font-size:12px;
+}
+
+.cap-hourswrap{
+  display:grid;
+  gap:6px;
 }
 
 /* als prod+mont op dezelfde dag staan: kleur op de bar zelf (niet via td) */
@@ -1818,6 +1835,11 @@ td.hourscol{
 }
 
 .cap-hourswrap{ display:flex; align-items:center; }
+.cap-left .cap-hourswrap{
+  display:grid;
+  gap:6px;
+  align-items:stretch;
+}
 .cap-hours{
   width: 72px;           /* kleiner veld */
   text-align: center;

@@ -320,6 +320,20 @@ const defaultSettings = {
     return "id";
   }
 
+  function normalizeCapacityDiscipline(value){
+    const s = String(value || "").toLowerCase().trim();
+    if (s === "wvb" || s.includes("werkvoor")) return "wvb";
+    if (s === "montage" || s === "mont") return "montage";
+    return "productie";
+  }
+
+  function capacityDisciplineLabel(value){
+    const d = normalizeCapacityDiscipline(value);
+    if (d === "wvb") return "WVB";
+    if (d === "montage") return "Mont.";
+    return "Prod.";
+  }
+
   async function loadSettingsEmployees(){
     const box = el("settingsEmployees");
     if (!box) return;
@@ -351,9 +365,8 @@ const defaultSettings = {
     if (employeeIds.length) {
       const capRes = await sb
         .from("capacity_entries")
-        .select("werknemer_id, work_date, hours")
+        .select("werknemer_id, work_date, hours, type")
         .in("werknemer_id", employeeIds)
-        .eq("type", "werk")
         .gte("work_date", startISO)
         .lte("work_date", endISO)
         .limit(5000);
@@ -363,7 +376,10 @@ const defaultSettings = {
           const empId = String(r.werknemer_id ?? "").trim();
           const iso = String(r.work_date || "").slice(0,10);
           if (!capacityMap.has(empId)) capacityMap.set(empId, new Map());
-          capacityMap.get(empId).set(iso, Number(r.hours || 0));
+          capacityMap.get(empId).set(iso, {
+            hours: Number(r.hours || 0),
+            discipline: normalizeCapacityDiscipline(r.type)
+          });
         }
       }
     }
@@ -377,7 +393,8 @@ const defaultSettings = {
           id: empId,
           idField: getEmployeeIdField(w),
           name: getEmployeeDisplayName(w),
-          dayHours: weekDays.map(d => Number(dm.get(toISODate(d)) || 0)),
+          dayHours: weekDays.map(d => Number(dm.get(toISODate(d))?.hours || 0)),
+          dayDisciplines: weekDays.map(d => normalizeCapacityDiscipline(dm.get(toISODate(d))?.discipline || "productie")),
           isNew: false
         };
       });
@@ -404,12 +421,19 @@ const defaultSettings = {
         <div class="settings-employee-row" data-index="${idx}">
           <input class="input settings-employee-name" type="text" value="${escapeAttr(w.name)}" placeholder="Naam medewerker" />
           ${weekDays.map((d, dayIdx) => `
-            <input class="input settings-employee-hours"
-              type="text"
-              inputmode="decimal"
-              data-day-index="${dayIdx}"
-              value="${escapeAttr(Number(w.dayHours?.[dayIdx] || 0) ? fmtHours(Number(w.dayHours?.[dayIdx] || 0)) : "")}"
-              placeholder="${isWeekend(d) ? "0" : "7,5"}" />
+            <div class="settings-employee-day">
+              <input class="input settings-employee-hours"
+                type="text"
+                inputmode="decimal"
+                data-day-index="${dayIdx}"
+                value="${escapeAttr(Number(w.dayHours?.[dayIdx] || 0) ? fmtHours(Number(w.dayHours?.[dayIdx] || 0)) : "")}"
+                placeholder="${isWeekend(d) ? "0" : "7,5"}" />
+              <select class="input settings-employee-discipline" data-day-index="${dayIdx}" aria-label="Discipline">
+                <option value="productie" ${normalizeCapacityDiscipline(w.dayDisciplines?.[dayIdx]) === "productie" ? "selected" : ""}>Prod.</option>
+                <option value="montage" ${normalizeCapacityDiscipline(w.dayDisciplines?.[dayIdx]) === "montage" ? "selected" : ""}>Mont.</option>
+                <option value="wvb" ${normalizeCapacityDiscipline(w.dayDisciplines?.[dayIdx]) === "wvb" ? "selected" : ""}>WVB</option>
+              </select>
+            </div>
           `).join("")}
         </div>
       `).join("") || `<div class="muted">Nog geen vaste medewerkers.</div>`}
@@ -431,11 +455,13 @@ const defaultSettings = {
       const name = String(row.querySelector(".settings-employee-name")?.value || "").trim();
       const dayHours = Array.from(row.querySelectorAll(".settings-employee-hours"))
         .map(inp => parseHoursInput(inp.value || ""));
-      return { ...old, name, dayHours };
+      const dayDisciplines = Array.from(row.querySelectorAll(".settings-employee-discipline"))
+        .map(sel => normalizeCapacityDiscipline(sel.value || "productie"));
+      return { ...old, name, dayHours, dayDisciplines };
     }).filter(w => w.name);
   }
 
-  function buildFixedCapacityRowsForWeek(empId, weekStart, dayHours){
+  function buildFixedCapacityRowsForWeek(empId, weekStart, dayHours, dayDisciplines = []){
     const rows = [];
     for (let i = 0; i < 7; i++) {
       const d = addDays(weekStart, i);
@@ -445,7 +471,7 @@ const defaultSettings = {
         work_date: toISODate(d),
         werknemer_id: Number(empId),
         hours: Math.round(h * 100) / 100,
-        type: "werk"
+        type: normalizeCapacityDiscipline(dayDisciplines?.[i] || "productie")
       });
     }
     return rows;
@@ -526,7 +552,7 @@ const defaultSettings = {
       .from("capacity_entries")
       .select("work_date, werknemer_id, hours, type")
       .eq("werknemer_id", employeeId)
-      .eq("type", "werk")
+      .in("type", ["werk", "productie", "montage", "wvb"])
       .gte("work_date", startISO)
       .lte("work_date", endISO)
       .limit(5000);
@@ -584,12 +610,12 @@ const defaultSettings = {
           .from("capacity_entries")
           .delete()
           .eq("werknemer_id", Number(empId))
-          .eq("type", "werk")
+          .in("type", ["werk", "productie", "montage", "wvb"])
           .gte("work_date", startISO)
           .lte("work_date", endISO);
         if (del.error) throw new Error("Capaciteit verwijderen: " + del.error.message);
 
-          const capRows = buildFixedCapacityRowsForWeek(empId, wkStart, row.dayHours);
+          const capRows = buildFixedCapacityRowsForWeek(empId, wkStart, row.dayHours, row.dayDisciplines);
         if (capRows.length) {
           const insCap = await sb.from("capacity_entries").insert(capRows);
           if (insCap.error) throw new Error("Capaciteit opslaan: " + insCap.error.message);
@@ -689,7 +715,13 @@ function buildPlannedSetsByDay(planningItems){
     el("btnSettingsCancel")?.addEventListener("click", closeSettingsModal);
     el("settingsBackdrop")?.addEventListener("click", closeSettingsModal);
     el("btnEmployeeAdd")?.addEventListener("click", () => {
-      settingsEmployeesSnapshot.push({ id: "", name: "", dayHours: [7.5, 7.5, 7.5, 7.5, 7.5, 0, 0], isNew: true });
+      settingsEmployeesSnapshot.push({
+        id: "",
+        name: "",
+        dayHours: [7.5, 7.5, 7.5, 7.5, 7.5, 0, 0],
+        dayDisciplines: ["productie", "productie", "productie", "productie", "productie", "productie", "productie"],
+        isNew: true
+      });
       renderSettingsEmployees();
       setTimeout(() => {
         const rows = el("settingsEmployees")?.querySelectorAll(".settings-employee-row");
@@ -3738,6 +3770,7 @@ for (const p of (projecten || [])) {
 
     // capacity: per werknemer per dag  (KEYS ALS STRING!)
     const capByEmp = new Map(); // empIdStr -> dateISO -> sumHours
+    const capDisciplineByEmpDay = new Map(); // empIdStr -> dateISO -> productie/montage/wvb
     for (const r of cap || []) {
       const empStr = String(r.werknemer_id ?? "").trim();
 
@@ -3746,7 +3779,7 @@ for (const p of (projecten || [])) {
 
       const d = String(r.work_date || "").trim();
       const h = Number(r.hours || 0);
-      const t = String(r.type || "werk");
+      const t = normalizeCapacityDiscipline(r.type);
       const sign = (t === "werk") ? 1 : 1;
 
       if (!empStr || !d) continue;
@@ -3754,20 +3787,30 @@ for (const p of (projecten || [])) {
       if (!capByEmp.has(empStr)) capByEmp.set(empStr, new Map());
       const dm = capByEmp.get(empStr);
       dm.set(d, (dm.get(d) || 0) + (h * sign));
+
+      if (!capDisciplineByEmpDay.has(empStr)) capDisciplineByEmpDay.set(empStr, new Map());
+      capDisciplineByEmpDay.get(empStr).set(d, t);
     }
 
 
     // totals capaciteit per dag
     const capTotalByDay = {};
+    const capProdMontTotalByDay = {};
+    const capWvbTotalByDay = {};
     for(const [emp, dm] of capByEmp){
       for(const [d,h] of dm){
+        const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(emp)?.get(d));
         capTotalByDay[d] = (capTotalByDay[d] || 0) + h;
+        if (discipline === "wvb") capWvbTotalByDay[d] = (capWvbTotalByDay[d] || 0) + h;
+        else capProdMontTotalByDay[d] = (capProdMontTotalByDay[d] || 0) + h;
       }
     }
 
     // ===== Verlof aggregatie (per werknemer per dag + totaal per dag) =====
     const absenceByEmp = new Map(); // empId -> Map(dateISO -> rows[])
     const absenceTotalByDay = {};
+    const absenceProdMontByDay = {};
+    const absenceWvbByDay = {};
     for (const r of (absences || [])) {
       const empStr = String(r.werknemer_id ?? "").trim();
       const d = String(r.work_date || "").trim();
@@ -3779,6 +3822,10 @@ for (const p of (projecten || [])) {
       if (!dm.has(d)) dm.set(d, []);
       dm.get(d).push(r);
       absenceTotalByDay[d] = (absenceTotalByDay[d] || 0) + h;
+
+      const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(empStr)?.get(d));
+      if (discipline === "wvb") absenceWvbByDay[d] = (absenceWvbByDay[d] || 0) + h;
+      else absenceProdMontByDay[d] = (absenceProdMontByDay[d] || 0) + h;
     }
 
     const fullAbsenceByDay = {};
@@ -3827,6 +3874,7 @@ for (const p of (projecten || [])) {
     // ✅ Inhuur meenemen in "Uren beschikbaar" totals
     for (const k of Object.keys(inhuurTotalByDay)) {
       capTotalByDay[k] = (capTotalByDay[k] || 0) + (inhuurTotalByDay[k] || 0);
+      capProdMontTotalByDay[k] = (capProdMontTotalByDay[k] || 0) + (inhuurTotalByDay[k] || 0);
     }
 
 
@@ -3838,6 +3886,7 @@ for (const p of (projecten || [])) {
     const plannedMontByDay = {};
     const plannedReisByDay = {};
     const plannedAbsenceByDay = {};
+    const plannedWvbAbsenceByDay = {};
 
     // ✅ ook projectniveau mee nemen (↳ Montage / ↳ Productie)
     const plannedSetsByDay = buildPlannedSetsByDay([...(assigns || []), ...(pAssigns || [])]);
@@ -3869,7 +3918,8 @@ for (const p of (projecten || [])) {
       plannedCncByDay[iso] = 0;
       plannedMontByDay[iso] = 0;
       plannedReisByDay[iso] = 0;
-      plannedAbsenceByDay[iso] = Number(absenceTotalByDay[iso] || 0);
+      plannedAbsenceByDay[iso] = Number(absenceProdMontByDay[iso] || 0);
+      plannedWvbAbsenceByDay[iso] = Number(absenceWvbByDay[iso] || 0);
     }
 
     for (const [sid, dm] of assignMap) {
@@ -4071,6 +4121,7 @@ for (const p of (projecten || [])) {
 
         // ✅ nieuw: beschikbaarheid
         capByEmp,
+        capDisciplineByEmpDay,
         absenceByEmp,
         inhuurByEmp,
         werknemersCap,
@@ -4923,16 +4974,16 @@ for (const dd of dates) {
   trTotal.appendChild(hoursTdTotal);
 
   // totalen per dag (som van alle medewerkers)
-  for (const d of dates){
-    const iso = toISODate(d);
-    const td = document.createElement("td");
-    td.className = `cell sum-cell ${isWeekend(d) ? "wknd" : ""}`;
-    td.classList.add("cap-total-day-click");
-    td.dataset.workDate = iso;
-    td.title = "Algemene vrije dag invullen/bewerken";
-    td.textContent = fmt0(capTotalByDay[iso] || 0);
-    trTotal.appendChild(td);
-  }
+    for (const d of dates){
+      const iso = toISODate(d);
+      const td = document.createElement("td");
+      td.className = `cell sum-cell ${isWeekend(d) ? "wknd" : ""}`;
+      td.classList.add("cap-total-day-click");
+      td.dataset.workDate = iso;
+      td.title = "Algemene vrije dag invullen/bewerken";
+      td.textContent = fmt0(capProdMontTotalByDay[iso] || 0);
+      trTotal.appendChild(td);
+    }
   tbody.appendChild(trTotal);
 
     // ---- medewerker rijen (standaard verborgen) ----
@@ -4961,6 +5012,13 @@ const empId =
   "";
 
 const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
+      const empIdStr = String(empId ?? "").trim();
+      const hasProdMontCapacity = dates.some(d => {
+        const iso = toISODate(d);
+        const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(empIdStr)?.get(iso));
+        return discipline !== "wvb" && Number(capByEmp.get(empIdStr)?.get(iso) || 0) > 0;
+      });
+      if (!hasProdMontCapacity) continue;
 
       const tr = document.createElement("tr");
       tr.className = "cap-emp-row hidden";
@@ -4983,12 +5041,11 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
       hoursTdCap.innerHTML = "";
       tr.appendChild(hoursTdCap);
 
-
-      const empIdStr = String(empId ?? "").trim();
-
       for (const d of dates) {
         const dayISO = toISODate(d);
-        const h = capByEmp.get(empIdStr)?.get(dayISO) || 0;
+        const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(empIdStr)?.get(dayISO));
+        const rawHours = Number(capByEmp.get(empIdStr)?.get(dayISO) || 0);
+        const h = discipline !== "wvb" ? rawHours : 0;
 
 
         const td = document.createElement("td");
@@ -5110,7 +5167,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
     const saldoByDay = {};
     for (const d of dates) {
       const iso = toISODate(d);
-      const capTot = Number(capTotalByDay?.[iso] || 0);
+      const capTot = Number(capProdMontTotalByDay?.[iso] || 0);
       const planned = Number(plannedProdByDay?.[iso] || 0) + Number(plannedMontByDay?.[iso] || 0) + Number(plannedAbsenceByDay?.[iso] || 0);
       // afronden op 2 decimalen om “-0” en float-ruis te vermijden
       saldoByDay[iso] = Math.round((capTot - planned) * 100) / 100;
@@ -5144,7 +5201,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
       const iso = toISODate(d);
       const td = document.createElement("td");
       td.className = `cell sum-cell ${isWeekend(d) ? "wknd" : ""}`;
-      td.textContent = fmt0(capTotalByDay[iso] || 0);
+      td.textContent = fmt0(capWvbTotalByDay[iso] || 0);
       trWvbTotal.appendChild(td);
     }
     tbody.appendChild(trWvbTotal);
@@ -5159,6 +5216,12 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
         "";
       const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
       const empIdStr = String(empId ?? "").trim();
+      const hasWvbCapacity = dates.some(d => {
+        const iso = toISODate(d);
+        const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(empIdStr)?.get(iso));
+        return discipline === "wvb" && Number(capByEmp.get(empIdStr)?.get(iso) || 0) > 0;
+      });
+      if (!hasWvbCapacity) continue;
 
       const tr = document.createElement("tr");
       tr.className = "cap-emp-row hidden wvb-cap-emp-row";
@@ -5178,7 +5241,8 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
 
       for (const d of dates) {
         const iso = toISODate(d);
-        const available = Number(capByEmp.get(empIdStr)?.get(iso) || 0);
+        const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(empIdStr)?.get(iso));
+        const available = discipline === "wvb" ? Number(capByEmp.get(empIdStr)?.get(iso) || 0) : 0;
         const planned = Number(plannedWvbByEmpDay.get(empIdStr)?.get(iso) || 0);
         const td = document.createElement("td");
         td.className = `cell cap-cell ${isWeekend(d) ? "wknd" : ""}`;
@@ -5195,11 +5259,12 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
     }
 
     tbody.appendChild(labelRow("Gepland WVB", dates, plannedWvbByDay, "planned-wvb"));
+    tbody.appendChild(labelRow("Verlof WVB", dates, plannedWvbAbsenceByDay, "planned-absence"));
 
     const saldoWvbByDay = {};
     for (const d of dates) {
       const iso = toISODate(d);
-      saldoWvbByDay[iso] = Math.round((Number(capTotalByDay?.[iso] || 0) - Number(plannedWvbByDay?.[iso] || 0)) * 100) / 100;
+      saldoWvbByDay[iso] = Math.round((Number(capWvbTotalByDay?.[iso] || 0) - Number(plannedWvbByDay?.[iso] || 0) - Number(plannedWvbAbsenceByDay?.[iso] || 0)) * 100) / 100;
     }
     tbody.appendChild(balanceRow("Saldo WVB", dates, saldoWvbByDay));
 
@@ -5723,12 +5788,14 @@ function getPlannedForEmpDate(empIdStr, dateISO) {
     if (weekLabelEl) weekLabelEl.textContent = `Week ${weekNumberISO(days[0])}`;
 
     const empMap = capByEmp.get(String(empId)) || new Map();
+    const empDisciplineMap = window.__plannerCtx?.capDisciplineByEmpDay?.get(String(empId)) || new Map();
 
 formEl.innerHTML = `
   <div class="cap-weeklist">
     ${days.map(d => {
       const iso = toISODate(d);
       const val = Number(empMap.get(iso) || 0);
+      const discipline = normalizeCapacityDiscipline(empDisciplineMap.get(iso));
 
       const planned = getPlannedForEmpDate(String(empId).trim(), iso);
       const plannedHtml = planned.length
@@ -5759,6 +5826,11 @@ formEl.innerHTML = `
                 value="${val ? String(val).replace(".", ",") : ""}"
                 placeholder="0"
               />
+              <select class="input cap-discipline" data-iso="${iso}" aria-label="Discipline">
+                <option value="productie" ${discipline === "productie" ? "selected" : ""}>Prod.</option>
+                <option value="montage" ${discipline === "montage" ? "selected" : ""}>Mont.</option>
+                <option value="wvb" ${discipline === "wvb" ? "selected" : ""}>WVB</option>
+              </select>
             </div>
           </div>
           <div class="cap-right cap-absence-target" data-iso="${iso}" data-available="${val || 0}">${plannedHtml}</div>
@@ -5800,28 +5872,35 @@ formEl.innerHTML = `
   const readCurrentWeekInputs = () => {
     const inputs = Array.from(formEl.querySelectorAll("input[data-iso]"));
     const values = [];
+    const disciplines = [];
     for (const inp of inputs) {
       const raw = String(inp.value || "").trim().replace(",", ".");
       const hours = raw ? Number(raw) : 0;
       const hoursRounded = Math.round(hours * 4) / 4;
       values.push(Number.isFinite(hoursRounded) ? hoursRounded : 0);
+      const iso = String(inp.dataset.iso || "");
+      const sel = formEl.querySelector(`select.cap-discipline[data-iso="${cssEsc(iso)}"]`);
+      disciplines.push(normalizeCapacityDiscipline(sel?.value || "productie"));
     }
     while (values.length < 7) values.push(0);
-    return values.slice(0,7);
+    while (disciplines.length < 7) disciplines.push("productie");
+    return { hours: values.slice(0,7), disciplines: disciplines.slice(0,7) };
   };
 
-  const writeWeekToRows = (wkStartDate, values7) => {
+  const writeWeekToRows = (wkStartDate, values7, disciplines7 = []) => {
     const rows = [];
     for (let i=0;i<7;i++){
       const iso = toISODate(addDays(wkStartDate, i));
       const h = Number(values7[i] || 0);
-      if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: "werk" });
+      if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: normalizeCapacityDiscipline(disciplines7[i] || "productie") });
     }
     return rows;
   };
 
   const applyToFutureWeeks = async (mode) => {
-    const values7 = readCurrentWeekInputs();
+    const currentValues = readCurrentWeekInputs();
+    const values7 = currentValues.hours;
+    const disciplines7 = currentValues.disciplines;
     const today = new Date();
     const todayWkStart = startOfISOWeek(today);
     const viewEnd = addDays(new Date(rangeStart), RANGE_DAYS - 1);
@@ -5842,7 +5921,7 @@ formEl.innerHTML = `
           const startISO = toISODate(iter);
           const endISO = toISODate(addDays(iter, 6));
           deleteRanges.push({ startISO, endISO });
-          allInsertRows.push(...writeWeekToRows(iter, values7));
+          allInsertRows.push(...writeWeekToRows(iter, values7, disciplines7));
         }
       }
       iter = addDays(iter, 7);
@@ -5855,7 +5934,7 @@ formEl.innerHTML = `
         .from("capacity_entries")
         .delete()
         .eq("werknemer_id", Number(empId))
-        .eq("type", "werk")
+        .in("type", ["werk", "productie", "montage", "wvb"])
         .gte("work_date", r.startISO)
         .lte("work_date", r.endISO);
 
@@ -5884,7 +5963,8 @@ formEl.innerHTML = `
       const raw = String(inp.value || "").trim().replace(",", ".");
       const h = raw ? Number(raw) : 0;
       if (!iso) continue;
-      if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: "werk" });
+      const sel = formEl.querySelector(`select.cap-discipline[data-iso="${cssEsc(iso)}"]`);
+      if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: normalizeCapacityDiscipline(sel?.value || "productie") });
     }
     
 console.log("CAP SAVE", {
@@ -5898,7 +5978,7 @@ console.log("CAP SAVE", {
       .from("capacity_entries")
       .delete()
       .eq("werknemer_id", Number(empId))
-      .eq("type", "werk")
+      .in("type", ["werk", "productie", "montage", "wvb"])
       .gte("work_date", startISO)
       .lte("work_date", endISO);
 
@@ -7541,6 +7621,7 @@ loadAndRender();
 
       // ✅ beschikbaarheid
       capByEmp,
+      capDisciplineByEmpDay,
       absenceByEmp,
       inhuurByEmp,
       inhuurById, // (handig, maar niet verplicht)
