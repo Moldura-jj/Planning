@@ -931,7 +931,16 @@ function asISODate(v){
   const s = String(v).trim();
   // Pak altijd alleen de datumcomponent (YYYY-MM-DD), voorkomt timezone-shift
   const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-  return m ? m[1] : "";
+  if (m) return m[1];
+
+  const nl = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})/);
+  if (nl) {
+    const dd = String(nl[1]).padStart(2, "0");
+    const mm = String(nl[2]).padStart(2, "0");
+    return `${nl[3]}-${mm}-${dd}`;
+  }
+
+  return "";
 }
 
 
@@ -4205,6 +4214,7 @@ trMonth.appendChild(hdrCell("", `hdr-cell hourscol sticky-top sticky-left2 ${hou
 
     // Projects + sections (expand/collapse)
 const todayISOForSort = toISODate(new Date());
+const todayDateForSort = parseISODate(todayISOForSort);
 const sortedProjecten = (projecten || []).slice().sort((a, b) => {
   const aISO = asISODate(a?.[deliveryKey] ?? "");
   const bISO = asISODate(b?.[deliveryKey] ?? "");
@@ -4213,9 +4223,11 @@ const sortedProjecten = (projecten || []).slice().sort((a, b) => {
   if (aHas && !bHas) return -1;
   if (!aHas && bHas) return 1;
   if (aHas && bHas) {
-    const aFuture = aISO >= todayISOForSort;
-    const bFuture = bISO >= todayISOForSort;
-    if (aFuture !== bFuture) return aFuture ? -1 : 1;
+    const aDate = parseISODate(aISO);
+    const bDate = parseISODate(bISO);
+    const aDistance = aDate && todayDateForSort ? Math.abs(aDate - todayDateForSort) : Number.POSITIVE_INFINITY;
+    const bDistance = bDate && todayDateForSort ? Math.abs(bDate - todayDateForSort) : Number.POSITIVE_INFINITY;
+    if (aDistance !== bDistance) return aDistance - bDistance;
     const dateCmp = aISO.localeCompare(bISO);
     if (dateCmp !== 0) return dateCmp;
   }
