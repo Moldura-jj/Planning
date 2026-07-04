@@ -322,16 +322,18 @@ const defaultSettings = {
 
   function normalizeCapacityDiscipline(value){
     const s = String(value || "").toLowerCase().trim();
+    if (s === "geen" || s === "none" || s === "no" || s === "0") return "geen";
     if (s === "wvb" || s.includes("werkvoor")) return "wvb";
-    if (s === "montage" || s === "mont") return "montage";
-    return "productie";
+    if (s === "prod_mont" || s === "prod+mont" || s === "productie_montage") return "prod_mont";
+    if (s === "montage" || s === "mont" || s === "productie" || s === "prod" || s === "werk") return "prod_mont";
+    return "prod_mont";
   }
 
   function capacityDisciplineLabel(value){
     const d = normalizeCapacityDiscipline(value);
+    if (d === "geen") return "Geen";
     if (d === "wvb") return "WVB";
-    if (d === "montage") return "Mont.";
-    return "Prod.";
+    return "Prod. + mont.";
   }
 
   async function loadSettingsEmployees(){
@@ -394,7 +396,7 @@ const defaultSettings = {
           idField: getEmployeeIdField(w),
           name: getEmployeeDisplayName(w),
           dayHours: weekDays.map(d => Number(dm.get(toISODate(d))?.hours || 0)),
-          dayDisciplines: weekDays.map(d => normalizeCapacityDiscipline(dm.get(toISODate(d))?.discipline || "productie")),
+          dayDisciplines: weekDays.map(d => normalizeCapacityDiscipline(dm.get(toISODate(d))?.discipline || "prod_mont")),
           isNew: false
         };
       });
@@ -429,9 +431,9 @@ const defaultSettings = {
                 value="${escapeAttr(Number(w.dayHours?.[dayIdx] || 0) ? fmtHours(Number(w.dayHours?.[dayIdx] || 0)) : "")}"
                 placeholder="${isWeekend(d) ? "0" : "7,5"}" />
               <select class="input settings-employee-discipline" data-day-index="${dayIdx}" aria-label="Discipline">
-                <option value="productie" ${normalizeCapacityDiscipline(w.dayDisciplines?.[dayIdx]) === "productie" ? "selected" : ""}>Prod.</option>
-                <option value="montage" ${normalizeCapacityDiscipline(w.dayDisciplines?.[dayIdx]) === "montage" ? "selected" : ""}>Mont.</option>
+                <option value="geen" ${normalizeCapacityDiscipline(w.dayDisciplines?.[dayIdx]) === "geen" ? "selected" : ""}>Geen</option>
                 <option value="wvb" ${normalizeCapacityDiscipline(w.dayDisciplines?.[dayIdx]) === "wvb" ? "selected" : ""}>WVB</option>
+                <option value="prod_mont" ${normalizeCapacityDiscipline(w.dayDisciplines?.[dayIdx]) === "prod_mont" ? "selected" : ""}>Prod. + mont.</option>
               </select>
             </div>
           `).join("")}
@@ -456,7 +458,7 @@ const defaultSettings = {
       const dayHours = Array.from(row.querySelectorAll(".settings-employee-hours"))
         .map(inp => parseHoursInput(inp.value || ""));
       const dayDisciplines = Array.from(row.querySelectorAll(".settings-employee-discipline"))
-        .map(sel => normalizeCapacityDiscipline(sel.value || "productie"));
+        .map(sel => normalizeCapacityDiscipline(sel.value || "prod_mont"));
       return { ...old, name, dayHours, dayDisciplines };
     }).filter(w => w.name);
   }
@@ -471,7 +473,7 @@ const defaultSettings = {
         work_date: toISODate(d),
         werknemer_id: Number(empId),
         hours: Math.round(h * 100) / 100,
-        type: normalizeCapacityDiscipline(dayDisciplines?.[i] || "productie")
+        type: normalizeCapacityDiscipline(dayDisciplines?.[i] || "prod_mont")
       });
     }
     return rows;
@@ -552,7 +554,7 @@ const defaultSettings = {
       .from("capacity_entries")
       .select("work_date, werknemer_id, hours, type")
       .eq("werknemer_id", employeeId)
-      .in("type", ["werk", "productie", "montage", "wvb"])
+      .in("type", ["werk", "productie", "montage", "prod_mont", "wvb", "geen"])
       .gte("work_date", startISO)
       .lte("work_date", endISO)
       .limit(5000);
@@ -610,7 +612,7 @@ const defaultSettings = {
           .from("capacity_entries")
           .delete()
           .eq("werknemer_id", Number(empId))
-          .in("type", ["werk", "productie", "montage", "wvb"])
+          .in("type", ["werk", "productie", "montage", "prod_mont", "wvb", "geen"])
           .gte("work_date", startISO)
           .lte("work_date", endISO);
         if (del.error) throw new Error("Capaciteit verwijderen: " + del.error.message);
@@ -719,7 +721,7 @@ function buildPlannedSetsByDay(planningItems){
         id: "",
         name: "",
         dayHours: [7.5, 7.5, 7.5, 7.5, 7.5, 0, 0],
-        dayDisciplines: ["productie", "productie", "productie", "productie", "productie", "productie", "productie"],
+        dayDisciplines: ["prod_mont", "prod_mont", "prod_mont", "prod_mont", "prod_mont", "prod_mont", "prod_mont"],
         isNew: true
       });
       renderSettingsEmployees();
@@ -3802,7 +3804,7 @@ for (const p of (projecten || [])) {
         const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(emp)?.get(d));
         capTotalByDay[d] = (capTotalByDay[d] || 0) + h;
         if (discipline === "wvb") capWvbTotalByDay[d] = (capWvbTotalByDay[d] || 0) + h;
-        else capProdMontTotalByDay[d] = (capProdMontTotalByDay[d] || 0) + h;
+        else if (discipline === "prod_mont") capProdMontTotalByDay[d] = (capProdMontTotalByDay[d] || 0) + h;
       }
     }
 
@@ -3825,7 +3827,7 @@ for (const p of (projecten || [])) {
 
       const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(empStr)?.get(d));
       if (discipline === "wvb") absenceWvbByDay[d] = (absenceWvbByDay[d] || 0) + h;
-      else absenceProdMontByDay[d] = (absenceProdMontByDay[d] || 0) + h;
+      else if (discipline === "prod_mont") absenceProdMontByDay[d] = (absenceProdMontByDay[d] || 0) + h;
     }
 
     const fullAbsenceByDay = {};
@@ -3836,6 +3838,8 @@ for (const p of (projecten || [])) {
 
       for (const [emp, dm] of capByEmp) {
         const available = Number(dm?.get(iso) || 0);
+        const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(String(emp))?.get(iso));
+        if (discipline === "geen") continue;
         if (!(available > 0)) continue;
 
         availableCount += 1;
@@ -5016,7 +5020,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
       const hasProdMontCapacity = dates.some(d => {
         const iso = toISODate(d);
         const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(empIdStr)?.get(iso));
-        return discipline !== "wvb" && Number(capByEmp.get(empIdStr)?.get(iso) || 0) > 0;
+        return discipline === "prod_mont" && Number(capByEmp.get(empIdStr)?.get(iso) || 0) > 0;
       });
       if (!hasProdMontCapacity) continue;
 
@@ -5045,7 +5049,7 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
         const dayISO = toISODate(d);
         const discipline = normalizeCapacityDiscipline(capDisciplineByEmpDay.get(empIdStr)?.get(dayISO));
         const rawHours = Number(capByEmp.get(empIdStr)?.get(dayISO) || 0);
-        const h = discipline !== "wvb" ? rawHours : 0;
+        const h = discipline === "prod_mont" ? rawHours : 0;
 
 
         const td = document.createElement("td");
@@ -5795,7 +5799,7 @@ formEl.innerHTML = `
     ${days.map(d => {
       const iso = toISODate(d);
       const val = Number(empMap.get(iso) || 0);
-      const discipline = normalizeCapacityDiscipline(empDisciplineMap.get(iso));
+      const discipline = normalizeCapacityDiscipline(empDisciplineMap.get(iso) || "prod_mont");
 
       const planned = getPlannedForEmpDate(String(empId).trim(), iso);
       const plannedHtml = planned.length
@@ -5827,9 +5831,9 @@ formEl.innerHTML = `
                 placeholder="0"
               />
               <select class="input cap-discipline" data-iso="${iso}" aria-label="Discipline">
-                <option value="productie" ${discipline === "productie" ? "selected" : ""}>Prod.</option>
-                <option value="montage" ${discipline === "montage" ? "selected" : ""}>Mont.</option>
+                <option value="geen" ${discipline === "geen" ? "selected" : ""}>Geen</option>
                 <option value="wvb" ${discipline === "wvb" ? "selected" : ""}>WVB</option>
+                <option value="prod_mont" ${discipline === "prod_mont" ? "selected" : ""}>Prod. + mont.</option>
               </select>
             </div>
           </div>
@@ -5880,10 +5884,10 @@ formEl.innerHTML = `
       values.push(Number.isFinite(hoursRounded) ? hoursRounded : 0);
       const iso = String(inp.dataset.iso || "");
       const sel = formEl.querySelector(`select.cap-discipline[data-iso="${cssEsc(iso)}"]`);
-      disciplines.push(normalizeCapacityDiscipline(sel?.value || "productie"));
+      disciplines.push(normalizeCapacityDiscipline(sel?.value || "prod_mont"));
     }
     while (values.length < 7) values.push(0);
-    while (disciplines.length < 7) disciplines.push("productie");
+    while (disciplines.length < 7) disciplines.push("prod_mont");
     return { hours: values.slice(0,7), disciplines: disciplines.slice(0,7) };
   };
 
@@ -5892,7 +5896,7 @@ formEl.innerHTML = `
     for (let i=0;i<7;i++){
       const iso = toISODate(addDays(wkStartDate, i));
       const h = Number(values7[i] || 0);
-      if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: normalizeCapacityDiscipline(disciplines7[i] || "productie") });
+      if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: normalizeCapacityDiscipline(disciplines7[i] || "prod_mont") });
     }
     return rows;
   };
@@ -5934,7 +5938,7 @@ formEl.innerHTML = `
         .from("capacity_entries")
         .delete()
         .eq("werknemer_id", Number(empId))
-        .in("type", ["werk", "productie", "montage", "wvb"])
+        .in("type", ["werk", "productie", "montage", "prod_mont", "wvb", "geen"])
         .gte("work_date", r.startISO)
         .lte("work_date", r.endISO);
 
@@ -5964,7 +5968,7 @@ formEl.innerHTML = `
       const h = raw ? Number(raw) : 0;
       if (!iso) continue;
       const sel = formEl.querySelector(`select.cap-discipline[data-iso="${cssEsc(iso)}"]`);
-      if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: normalizeCapacityDiscipline(sel?.value || "productie") });
+      if (h > 0) rows.push({ work_date: iso, werknemer_id: Number(empId), hours: h, type: normalizeCapacityDiscipline(sel?.value || "prod_mont") });
     }
     
 console.log("CAP SAVE", {
@@ -5978,7 +5982,7 @@ console.log("CAP SAVE", {
       .from("capacity_entries")
       .delete()
       .eq("werknemer_id", Number(empId))
-      .in("type", ["werk", "productie", "montage", "wvb"])
+      .in("type", ["werk", "productie", "montage", "prod_mont", "wvb", "geen"])
       .gte("work_date", startISO)
       .lte("work_date", endISO);
 
