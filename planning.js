@@ -7518,15 +7518,14 @@ loadAndRender();
     }
 
 
-    gridEl.querySelectorAll("tr.section-row, tr.section-details-row").forEach(tr => {
-      if (String(tr.dataset.parent || "") === pid) {
-        tr.classList.toggle("hidden", !open);
-        applyZebraVisible();
+    gridEl.querySelectorAll("tr.section-row, tr.section-details-row, tr.order-row, tr.order-line-row").forEach(tr => {
+      if (String(tr.dataset.parent || "") !== pid) return;
 
-
-        if (!open && tr.classList.contains("section-details-row")) {
-          tr.classList.add("hidden");
-        }
+      if (open) {
+        tr.classList.toggle("hidden", !tr.classList.contains("section-row"));
+      } else {
+        tr.classList.add("hidden");
+        tr.classList.remove("is-open");
       }
     });
 
@@ -7535,9 +7534,13 @@ loadAndRender();
         b.textContent = "▶";
       });
 
-      applyZebraVisible();
+      gridEl.querySelectorAll(`tr.order-row[data-parent="${cssEsc(pid)}"] .expander-order`).forEach(b => {
+        b.textContent = "▶";
+      });
 
     }
+
+    applyZebraVisible();
   }
 
 
