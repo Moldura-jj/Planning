@@ -4098,7 +4098,7 @@ for (const p of (projecten || [])) {
 
     // build table
     const table = document.createElement("table");
-    table.className = "planner-table";
+    table.className = "planner-table planner-table-sticky";
     const colgroup = document.createElement("colgroup");
     const colLeft = document.createElement("col");
     colLeft.style.width = "380px";
