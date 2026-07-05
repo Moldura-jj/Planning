@@ -528,7 +528,9 @@ td.rowhdr.sticky-left{ z-index:50; }
   display:flex;
   align-items:center;
   gap:8px;
+  cursor:pointer;
 }
+.project-row > td.plan-cell{ cursor:pointer; }
 .projtext{ cursor:pointer; }
 .projtext:hover .projline1,
 .projtext:hover .projline2{ text-decoration:underline; }
