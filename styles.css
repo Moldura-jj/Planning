@@ -373,6 +373,7 @@ a{ color:inherit; text-decoration:none; }
   /* sizing */
   --left-w: 380px;
   --day-w: 32px;
+  --planner-sticky-offset: 56px;
 
   /* header heights */
   --hdr-month-h: 26px;
@@ -488,19 +489,19 @@ a{ color:inherit; text-decoration:none; }
 /* 3 header rijen */
 .sticky-top{
   position:sticky;
-  top:0;
+  top:var(--planner-sticky-offset);
   z-index:60;
   background:var(--hdr-bg);
 }
 .sticky-top2{
   position:sticky;
-  top:var(--hdr-month-h);
+  top:calc(var(--planner-sticky-offset) + var(--hdr-month-h));
   z-index:59;
   background:var(--hdr-bg);
 }
 .sticky-top3{
   position:sticky;
-  top:calc(var(--hdr-month-h) + var(--hdr-week-h));
+  top:calc(var(--planner-sticky-offset) + var(--hdr-month-h) + var(--hdr-week-h));
   z-index:58;
   background:var(--hdr-bg);
 }
