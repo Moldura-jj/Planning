@@ -137,14 +137,19 @@ function renderProjectPlanning(root, meta, data){
   if (hasAggValues(projectProductie)) rows.push({ cls: "summary", title: "Project - Productie", sub: "", agg: projectProductie });
   if (hasAggValues(projectMontage)) rows.push({ cls: "summary", title: "Project - Montage", sub: "", agg: projectMontage });
 
-  meta.textContent = `${rows.length} regels • ${formatDateNL(toISODate(dates[0]))} t/m ${formatDateNL(toISODate(dates[dates.length - 1]))}`;
+  const tableWidth = 320 + (dates.length * 46);
+  meta.textContent = `${rows.length} regels • werkdagen ${formatDateNL(toISODate(dates[0]))} t/m ${formatDateNL(toISODate(dates[dates.length - 1]))}`;
 
   root.innerHTML = `
-    <table class="project-planning-table">
+    <table class="project-planning-table" style="width:${tableWidth}px; min-width:${tableWidth}px;">
+      <colgroup>
+        <col class="pp-col-label" />
+        ${dates.map(() => `<col class="pp-col-day" />`).join("")}
+      </colgroup>
       <thead>
         <tr>
           <th class="pp-label">Regel</th>
-          ${dates.map(d => `<th class="${isWeekend(d) ? "wknd" : ""}">${dayHead(d)}</th>`).join("")}
+          ${dates.map(d => `<th>${dayHead(d)}</th>`).join("")}
         </tr>
       </thead>
       <tbody>
@@ -164,7 +169,7 @@ function renderPlanningRow(row, dates){
       ${dates.map(d => {
         const iso = toISODate(d);
         const day = row.agg?.get(iso);
-        return `<td class="pp-day ${isWeekend(d) ? "wknd" : ""}">${renderDayChips(day)}</td>`;
+        return `<td class="pp-day">${renderDayChips(day)}</td>`;
       }).join("")}
     </tr>
   `;
@@ -177,7 +182,8 @@ function renderDayChips(day){
     const item = day[type];
     if (!item || !(item.hours > 0)) continue;
     const cls = type === "wvb" ? "wvb" : (type === "montage" || type === "reis" ? "mont" : type === "onderaanneming" ? "subc" : "prod");
-    const label = type === "onderaanneming" ? "OA" : fmtHours(item.hours);
+    const prefix = type === "wvb" ? "W" : type === "montage" ? "M" : type === "reis" ? "R" : type === "onderaanneming" ? "OA" : "P";
+    const label = type === "onderaanneming" ? "OA" : `${prefix} ${fmtHours(item.hours)}`;
     chips.push(`<span class="pp-chip ${cls}${item.concept ? " concept" : ""}" title="${escapeAttr(type)}">${escapeHtml(label)}</span>`);
   }
   return chips.join("");
@@ -257,7 +263,9 @@ function buildDateRange(project, sectionAssignments, projectAssignments){
   if (end < minEnd) end = minEnd;
 
   const days = [];
-  for (let d = start; d <= end && days.length < 140; d = addDays(d, 1)) days.push(d);
+  for (let d = start; d <= end && days.length < 100; d = addDays(d, 1)) {
+    if (!isWeekend(d)) days.push(d);
+  }
   return days;
 }
 
