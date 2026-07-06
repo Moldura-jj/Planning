@@ -1,0 +1,3264 @@
+/* styles.css – clean light UI (cleaned / deduped) */
+
+/* =========================
+   THEME
+========================= */
+:root{
+  --bg:#f4f6fb;
+  --panel:#ffffff;
+  --text:#0f172a;
+  --muted:#64748b;
+  --line:#e2e8f0;
+
+  --acc:#2563eb;
+  --good:#16a34a;
+  --warn:#f59e0b;
+  --bad:#ef4444;
+
+  --chip-blue:#dbeafe;
+  --chip-green:#dcfce7;
+  --chip-purple:#f5d0fe;
+
+  --radius:14px;
+  --shadow:0 8px 28px rgba(2,6,23,.08);
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family:system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background:var(--bg);
+  color:var(--text);
+}
+a{ color:inherit; text-decoration:none; }
+
+.page-project{
+  overflow-x:auto;
+}
+
+.container.full-width{
+  max-width:none !important;
+  width:100%;
+}
+
+/* =========================
+   GENERIC UI
+========================= */
+.topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:14px 16px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+}
+
+.topbar-left,
+.topbar-right{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.topbar-left{
+  min-width:0;
+}
+
+.topbar-right{
+  margin-left:auto;
+}
+
+.app-logo{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  min-height:38px;
+  font-weight:800;
+  color:var(--text);
+  white-space:nowrap;
+}
+
+.app-logo-mark{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:34px;
+  height:34px;
+  border-radius:8px;
+  background:#0f172a;
+  color:#fff;
+  font-size:18px;
+  font-weight:900;
+  letter-spacing:.2px;
+}
+
+.app-logo-text{
+  font-size:16px;
+  letter-spacing:.1px;
+}
+
+.app-logo-img{
+  display:block;
+  height:36px;
+  width:auto;
+  max-width:180px;
+  object-fit:contain;
+}
+
+.nav-projects{
+  min-height:38px;
+  display:inline-flex;
+  align-items:center;
+}
+
+.brand{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-weight:800;
+  letter-spacing:.2px;
+}
+.brand .dot{
+  width:11px;height:11px;border-radius:50%;
+  background:var(--acc);
+  box-shadow:0 0 0 4px rgba(37,99,235,.15);
+}
+
+.btn{
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--text);
+  padding:10px 12px;
+  border-radius:12px;
+  cursor:pointer;
+  font-weight:650;
+}
+.btn:hover{ border-color:#cbd5e1; }
+.btn.small{ padding:8px 10px; border-radius:10px; }
+.btn.ghost{ background:transparent; }
+.btn.primary{
+  background:var(--acc);
+  border-color:var(--acc);
+  color:#fff;
+}
+.btn.primary:hover{ filter:brightness(.98); }
+
+.icon-btn{
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--text);
+  border-radius:10px;
+  padding:8px 10px;
+  cursor:pointer;
+}
+.icon-btn:hover{ background:#f8fafc; }
+
+.card{
+  margin-top:14px;
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.card.planning-card{
+  overflow:visible;
+}
+.card .hd{
+  padding:14px 16px;
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+}
+.card .hd h1, .card .hd h2{ margin:0; font-size:18px; }
+.card .bd{ padding:16px; }
+.planning-card .bd{
+  overflow:visible;
+}
+
+.grid{ display:grid; gap:14px; }
+.grid.cols-2{ grid-template-columns:1fr 1fr; }
+.grid.cols-3{ grid-template-columns:1fr 1fr 1fr; }
+@media (max-width:980px){
+  .grid.cols-2,.grid.cols-3{ grid-template-columns:1fr; }
+}
+
+.kpi-title{
+  font-size:14px;
+  color:var(--muted);
+  margin:0 0 8px;
+}
+
+.fieldgrid{
+  display:grid;
+  grid-template-columns:220px 1fr;
+  gap:8px 12px;
+  align-items:center;
+}
+@media (max-width:720px){
+  .fieldgrid{ grid-template-columns:1fr; }
+}
+.label{ color:var(--muted); font-size:13px; }
+.value{
+  background:#f8fafc;
+  border:1px solid var(--line);
+  border-radius:10px;
+  padding:8px 10px;
+  min-height:36px;
+  display:flex;
+  align-items:center;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+}
+
+.row{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  align-items:center;
+}
+
+.input{
+  width:100%;
+  padding:10px 12px;
+  border-radius:12px;
+  border:1px solid var(--line);
+  background:#fff;
+  outline:none;
+}
+.input:focus{
+  border-color:#93c5fd;
+  box-shadow:0 0 0 4px rgba(147,197,253,.25);
+}
+
+.table{
+  width:100%;
+  border-collapse:collapse;
+  border:1px solid var(--line);
+  border-radius:12px;
+  overflow:hidden;
+}
+.table th, .table td{
+  padding:10px 10px;
+  border-bottom:1px solid var(--line);
+  font-size:14px;
+  vertical-align:top;
+}
+.table th{
+  text-align:left;
+  color:var(--muted);
+  font-weight:400;
+  background:#f8fafc;
+}
+.table tr:hover td{ background:#f8fafc; }
+
+.pill{
+  padding:4px 8px;
+  border-radius:999px;
+  font-size:12px;
+  font-weight:750;
+  border:1px solid var(--line);
+  background:#fff;
+}
+
+.chip{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 12px;
+  border-radius:12px;
+  font-weight:800;
+  letter-spacing:.2px;
+  border:1px solid var(--line);
+}
+.chip.blue{ background:var(--chip-blue); }
+.chip.green{ background:var(--chip-green); }
+.chip.purple{ background:var(--chip-purple); }
+
+.muted{ color:var(--muted); }
+
+.notice{
+  padding:10px 12px;
+  border:1px solid #bae6fd;
+  background:#eff6ff;
+  border-radius:12px;
+  color:#0c4a6e;
+}
+.error{
+  padding:10px 12px;
+  border:1px solid #fecaca;
+  background:#fff1f2;
+  border-radius:12px;
+  color:#7f1d1d;
+}
+
+/* =========================
+   MODAL (generic)
+========================= */
+.modal-backdrop{
+  position:fixed; inset:0;
+  background:rgba(2,6,23,.45);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  padding:18px;
+  z-index:999;
+}
+.modal-backdrop.show{ display:flex; }
+.modal[hidden], .modal-backdrop[hidden]{ display:none !important; }
+
+.modal{
+  width:min(720px, 100%);
+  background:var(--panel);
+  border:1px solid var(--line);
+  border-radius:18px;
+  box-shadow:var(--shadow);
+  overflow:hidden;
+  position:relative; /* niet fullscreen */
+}
+.modal .hd{
+  padding:14px 16px;
+  border-bottom:1px solid var(--line);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+.modal .bd{ padding:16px; }
+.modal .ft{
+  padding:14px 16px;
+  border-top:1px solid var(--line);
+  display:flex;
+  justify-content:flex-end;
+  gap:10px;
+}
+
+.split2{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+@media (max-width:720px){ .split2{ grid-template-columns:1fr; } }
+.hr{ height:1px; background:var(--line); margin:10px 0; }
+
+/* =========================
+   PLANNER PAGE SHELL
+========================= */
+.planner-page{ background:#fff; color:#111; min-height:100vh; }
+
+.planner-topbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:14px 18px;
+  border-bottom:1px solid #e6e8ef;
+  position:sticky;
+  top:0;
+  background:#fff;
+  z-index:50;
+  height:56px; /* vaste hoogte voorkomt sticky-jitter */
+}
+.planner-title{ font-weight:400; font-size:18px; margin-left:10px; }
+.planner-topbar-left{ display:flex; align-items:center; gap:10px; }
+.planner-topbar-right{ display:flex; gap:10px; flex-wrap:wrap; }
+
+.planner-wrap{ padding:12px 10px 30px; }
+.planner-status{ color:#667085; padding:6px 2px; }
+
+.planner-grid,
+.planning-grid{
+  position:relative;
+  overflow: visible;   /* <- geen eigen scroll meer */
+  border:1px solid #e6e8ef;
+  border-radius:12px;
+  background:#fff;
+}
+
+/* =========================
+   PLANNER TABLE (single source of truth)
+========================= */
+.planner-table{
+  /* sizing */
+  --left-w: 380px;
+  --day-w: 32px;
+  --planner-sticky-offset: 0px;
+
+  /* header heights */
+  --hdr-month-h: 26px;
+  --hdr-week-h: 26px;
+  --hdr-day-h: 40px;
+
+  /* grid */
+  --grid-line: #e6eaf0;
+  --hdr-bg: #f2f4f7;
+  --wknd-bg: #dbeafe;
+
+  /* bar / marker height */
+  --stack-h: 22px;
+  --row-h: 18px;
+
+  width: max-content;  /* exact zo breed als je kolommen */
+  min-width: 100%;     /* maar minimaal schermbreedte */
+  border-collapse:separate;
+  border-spacing:0;
+  table-layout:fixed;
+}
+
+/* borders + base cells */
+.planner-table th,
+.planner-table td{
+  border:1px solid #e6e8ef;
+  padding:3px 4px;
+  text-align:center;
+  white-space:nowrap;
+  background-clip:padding-box; /* voorkomt “doorzicht” bij sticky */
+}
+
+/* left column */
+.planner-table th.rowhdr,
+.planner-table td.rowhdr{
+  width:var(--left-w);
+  min-width:var(--left-w);
+  max-width:var(--left-w);
+  text-align:left !important;
+  padding:0 6px;
+  background:#fff;
+}
+
+/* header cells */
+.hdr-cell{
+  background:var(--hdr-bg);
+  font-weight:400;
+  vertical-align:middle;
+}
+
+/* month/week: colspan moet “vrij” blijven */
+.planner-table thead tr.hdr-month th.hdr-cell{
+  height:var(--hdr-month-h);
+  line-height:var(--hdr-month-h);
+  font-size:12px;
+  padding:0 4px;
+}
+.planner-table thead tr.hdr-week th.hdr-cell{
+  height:var(--hdr-week-h);
+  line-height:var(--hdr-week-h);
+  font-size:11px;
+  padding:0 4px;
+}
+
+/* day header: exact gelijk aan dagcellen */
+.planner-table thead tr.hdr-day th.hdr-cell{
+  width:var(--day-w);
+  min-width:var(--day-w);
+  max-width:var(--day-w);
+  height:var(--hdr-day-h);
+  padding:0 !important;
+  font-size:11px;
+  line-height:1.1;
+  vertical-align:bottom;
+}
+
+/* body day cells */
+.planner-table td.cell{
+  width:var(--day-w);
+  min-width:var(--day-w);
+  max-width:var(--day-w);
+  padding:0 !important;
+  box-sizing:border-box;
+}
+
+/* “normale” cellen blijven strak 18px hoog */
+.planner-table td.cell:not(.plan-cell){
+  height:var(--row-h);
+  line-height:var(--row-h);
+}
+
+/* weekend */
+.planner-table td.cell.wknd{ background:var(--wknd-bg) !important; }
+
+/* =========================
+   STICKY (header rows + left col)
+========================= */
+.sticky-left{
+  position:sticky;
+  left:0;
+  z-index:40;
+  background:#fff;
+  box-shadow:1px 0 0 var(--grid-line);
+}
+
+.sticky-left2{
+  position:sticky;
+  left:var(--left-w);
+  z-index:65;
+  background:#fff;
+  box-shadow:1px 0 0 var(--grid-line);
+}
+
+/* 3 header rijen */
+.sticky-top{
+  position:sticky;
+  top:var(--planner-sticky-offset);
+  z-index:60;
+  background:var(--hdr-bg);
+}
+.sticky-top2{
+  position:sticky;
+  top:calc(var(--planner-sticky-offset) + var(--hdr-month-h));
+  z-index:59;
+  background:var(--hdr-bg);
+}
+.sticky-top3{
+  position:sticky;
+  top:calc(var(--planner-sticky-offset) + var(--hdr-month-h) + var(--hdr-week-h));
+  z-index:58;
+  background:var(--hdr-bg);
+}
+
+/* linker header-cellen boven alles */
+.hdr-cell.sticky-left{ z-index:80; background:var(--hdr-bg); }
+.hdr-cell.sticky-left2{ z-index:81; background:var(--hdr-bg); }
+td.rowhdr.sticky-left{ z-index:50; }
+
+/* =========================
+   ROW LABELS / EXPANDERS / DETAILS
+========================= */
+.project-cell{
+  background:#fff;
+  font-weight:400;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  cursor:pointer;
+}
+.project-row > td.plan-cell{ cursor:pointer; }
+.projtext{ cursor:pointer; }
+.projtext:hover .projline1,
+.projtext:hover .projline2{ text-decoration:underline; }
+.section-cell{ background:#fff; color:#344054; }
+.sectext{ opacity:.95; }
+
+.expander{
+  border:1px solid #d0d5dd;
+  background:#fff;
+  border-radius:8px;
+  width:26px;
+  height:22px;
+  cursor:pointer;
+  margin-right:8px;
+}
+.expander-sec{ margin-right:6px; }
+.projtext{ vertical-align:middle; }
+.hidden{ display:none; }
+
+td.details-fill{ text-align:left !important; vertical-align:top; padding:0 !important; }
+.details-wrap{
+  display:block;
+  width:100%;
+  margin:0;
+  padding:8px 10px;
+  text-align:left;
+}
+.details-box{
+  margin:0 !important;
+  display:block;
+  font-size:12px;
+  line-height:1.3;
+}
+.details-title{ font-weight:400; margin-bottom:4px; }
+.details-line{ opacity:.9; }
+
+/* =========================
+   PLANNING BARS + MARKERS
+========================= */
+.planner-table td.plan-cell{
+  height:auto !important;
+  line-height:normal !important;
+  padding:0 !important;
+  vertical-align:top;
+  background:#fff;
+}
+
+/* bars in a cell */
+.plan-cell .bar{
+  width:100%;
+  height:var(--row-h);         /* “oude” bars: 18px */
+  line-height:var(--row-h);
+  border-radius:6px;
+  font-size:11px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  padding:0 6px;
+  text-align:left;
+}
+.bar-prep .bar{ background:#c7e0ff; }
+.bar-prod .bar{ background:#b7f0c2; }
+.bar-mont .bar{ background:#fde68a; }
+.bar-delivery .bar{ background:#ffd7b5; }
+.bar-generic .bar{ background:#e5e7eb; }
+
+.bar.bar-order{
+  background: #facc15;       /* geel */
+  color: #111827;            /* donkere tekst */
+  font-weight: 700;
+  border-radius: 10px;
+  height: 16px;
+  line-height: 16px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+}
+
+
+/* markers (lever/oplever) – standalone (als je ze direct in cel zet) */
+.deadline,
+.delivery{
+  display:inline-block;
+  font-size:10px;
+  padding:1px 4px;
+  border-radius:6px;
+  color:#0f172a;
+  white-space:nowrap;
+}
+.deadline{
+  background:#f59e0b;
+  border:1px solid rgba(0,0,0,.15);
+}
+.delivery{
+  background:#fde68a;
+  border:1px solid rgba(0,0,0,.12);
+  margin-right:4px;
+}
+
+/* =========================
+   STACK SYSTEM (lever/oplever + bars netjes onder elkaar)
+========================= */
+.plan-stack{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  align-items:stretch;
+}
+
+/* stack markers */
+.plan-stack .marker{
+  display:block;
+  width:100%;
+  height:var(--stack-h);
+  line-height:var(--stack-h);
+  margin:0 !important;
+  padding:0 8px;
+  border-radius:10px;
+  font-size:12px;
+  box-sizing:border-box;
+  text-align:left;
+}
+.plan-stack .marker.delivery{
+  background:#fde68a;
+  border:1px solid rgba(0,0,0,.12);
+}
+.plan-stack .marker.deadline{
+  background:#f59e0b;
+  border:1px solid rgba(0,0,0,.15);
+}
+.plan-stack .marker.placeholder{ visibility:hidden; }
+
+/* stack bars */
+.plan-stack .bar{
+  display:block;
+  width:100%;
+  height:var(--stack-h);
+  line-height:var(--stack-h);
+  margin:0 !important;
+  padding:0 6px;
+  border-radius:6px !important;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
+  text-align:left;
+}
+
+/* Oude TD-kleurklassen alleen toepassen op balken zonder eigen typeklasse. */
+td.plan-cell.bar-prod .bar:not(.bar-wvb):not(.bar-prod):not(.bar-mont){ background:#b7f0c2 !important; }
+td.plan-cell.bar-mont .bar:not(.bar-wvb):not(.bar-prod):not(.bar-mont){ background:#fde68a !important; }
+td.plan-cell.bar-prep .bar:not(.bar-wvb):not(.bar-prod):not(.bar-mont){ background:#c7e0ff !important; }
+td.plan-cell.bar-generic .bar:not(.bar-wvb):not(.bar-prod):not(.bar-mont){ background:#e5e7eb !important; }
+
+/* =========================
+   BARS AAN ELKAAR (start/end rounding)
+========================= */
+.planner-table td.plan-cell .bar{ border-radius:0 !important; }
+.planner-table td.plan-cell .bar.bar-start{
+  border-top-left-radius:6px !important;
+  border-bottom-left-radius:6px !important;
+}
+.planner-table td.plan-cell .bar.bar-end{
+  border-top-right-radius:6px !important;
+  border-bottom-right-radius:6px !important;
+}
+/* stack bars moeten rounded blijven */
+.plan-stack .bar{ border-radius:6px !important; }
+
+/* =========================
+   DUMMY (INHUUR) HATCH
+========================= */
+/* zorgt dat pseudo-element netjes over de bar heen ligt */
+.plan-stack .bar{
+  position: relative;
+  overflow: hidden;
+}
+
+/* concept / dummy arcering (altijd zichtbaar, ook op groen) */
+.plan-stack .bar{
+  position:relative;
+  overflow:hidden;
+}
+
+.plan-stack .bar.dummy-hatch::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  z-index:3;                 /* <-- belangrijk: bovenop bar + tekst */
+background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0.00) 0px,
+    rgba(0,0,0,0.00) 2px,
+    rgba(0,0,0,0.18) 2px,
+    rgba(0,0,0,0.18) 3px
+  );
+}
+
+
+/* =========================
+   PROJECT ROW OPEN HIGHLIGHT
+========================= */
+tr.project-row.is-open > td{
+  box-shadow:inset 0 0 0 9999px rgba(37, 99, 235, 0.06);
+}
+tr.project-row.is-open > td.sticky-left{
+  box-shadow:inset 0 0 0 9999px rgba(37, 99, 235, 0.10);
+  font-weight:600;
+  border-left:4px solid rgba(37, 99, 235, 0.35);
+}
+
+tr.project-row.project-plan-hidden > td.plan-cell .plan-stack,
+tr.project-row.project-plan-hidden > td.hourscol > *{
+  visibility:hidden;
+}
+
+tr.project-row.project-plan-hidden > td.plan-cell{
+  pointer-events:none;
+}
+
+.planner-table td.project-delivery-col,
+.planner-table td.project-completion-col{
+  --date-line-delivery:transparent;
+  --date-line-completion:transparent;
+}
+
+.planner-table td.project-delivery-col{
+  --date-line-delivery:#facc15;
+}
+
+.planner-table td.project-completion-col{
+  --date-line-completion:#f59e0b;
+}
+
+.planner-table td.project-delivery-col::before,
+.planner-table td.project-completion-col::before{
+  content:"";
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:0;
+  width:8px;
+  background:
+    linear-gradient(
+      to right,
+      var(--date-line-delivery) 0 3px,
+      transparent 3px 4px,
+      var(--date-line-completion) 4px 7px,
+      transparent 7px 8px
+    );
+  pointer-events:none;
+  z-index:6;
+}
+
+.planner-table td.project-delivery-col .marker-row,
+.planner-table td.project-completion-col .marker-row{
+  visibility:hidden;
+}
+
+/* =========================
+   CAPACITY / TOTALS STYLING
+========================= */
+.block-title .block-hdr{ background:var(--hdr-bg); font-weight:800; }
+.block-title .block-fill{ background:var(--hdr-bg); }
+.block-title.compact .block-hdr{ font-weight:400; }
+
+.cap-emp-row .cap-name{ background:#fff; font-weight:600; }
+.cap-cell{
+  position:relative;
+  overflow:hidden;
+  background:#fff;
+}
+.cap-cell.cap-absence{
+  background:#fff !important;
+}
+.cap-cell-fillbar{
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:stretch;
+  pointer-events:none;
+  z-index:0;
+}
+.cap-cell-fill{
+  display:block;
+  min-width:0;
+}
+.cap-cell-fill.prod{ background:rgba(34,197,94,.30); }
+.cap-cell-fill.wvb{ background:rgba(14,165,233,.30); }
+.cap-cell-fill.mont{ background:#fde68a; }
+.cap-cell-fill.absence{ background:rgba(245,158,11,.32); }
+.cap-cell-value{
+  position:relative;
+  z-index:1;
+}
+.cap-cell-stack{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:1px;
+  line-height:1;
+}
+.cap-absence-chip{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:18px;
+  height:12px;
+  padding:0 3px;
+  border-radius:999px;
+  background:#f59e0b;
+  color:#111827;
+  font-size:10px;
+  font-weight:700;
+}
+
+.sum-row .sum-label{ background:#fff; font-weight:400; }
+.sum-cell{ background:#fff7d6; }
+.sum-cell.ok{ background:#c7f7cf; }
+.sum-cell.warn{ background:#ffe7b5; }
+.sum-cell.bad{ background:#ffc6c6; }
+
+.planner-table td.cap-cell,
+.planner-table td.sum-cell,
+.planner-table td.cap-name,
+.planner-table td.sum-label{
+  font-size:12px;
+  line-height:1.1;
+  font-variant-numeric:tabular-nums;
+}
+
+td.cap-emp-click{ cursor:pointer; }
+td.cap-emp-click:hover{ text-decoration:underline; background:#f8fafc; }
+
+.spacer td{ border:none; padding:6px 0; }
+.spacer-cell{ background:#fff; }
+
+/* Saldo rij */
+.balance-row .balance-label{ background:#fff; font-weight:400; font-size:12px; }
+.planner-table td.balance-cell{
+  font-size:12px !important;
+  font-weight:400 !important;
+  line-height:1.1;
+}
+.planner-table td.balance-cell.pos{ background:#c7f7cf !important; }
+.planner-table td.balance-cell.neg{ background:#ffc6c6 !important; }
+.planner-table td.balance-cell.zero{ background:#ffe7b5 !important; }
+
+/* =========================
+   ZEBRA (clean, predictable)
+========================= */
+.planner-table td.cell:not(.sticky-left2){ position:relative; }
+
+/* linkerkolom zebra */
+.planner-table tbody tr.zebra > td.rowhdr{
+  background:#f5f6f8 !important;
+}
+
+/* zebra overlay op kalendercellen, niet weekend */
+.planner-table tbody tr.zebra > td.cell:not(.wknd):not(.hourscol)::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background:rgba(245, 246, 248, 0.55);
+  pointer-events:none;
+  z-index:0;
+}
+
+/* content boven overlay */
+.planner-table td.cell .bar,
+.planner-table td.cell .deadline,
+.planner-table td.cell .delivery,
+.planner-table td.cell .assign-badge{
+  position:relative;
+  z-index:1;
+}
+
+/* zebra overlay UIT voor capaciteit/som/saldo, maar backgrounds intact laten */
+.planner-table tbody tr.cap-total-row.zebra > td::after,
+.planner-table tbody tr.cap-emp-row.zebra > td::after,
+.planner-table tbody tr.sum-row.zebra > td::after,
+.planner-table tbody tr.balance-row.zebra > td::after{
+  content:none !important;
+}
+
+/* zwarte scheidingslijnen altijd boven zebra houden */
+.planner-table tbody tr.project-topline.zebra > td::after,
+.planner-table tbody tr.project-bottomline.zebra > td::after,
+.planner-table tbody tr.order-topline.zebra > td::after,
+.planner-table tbody tr.order-bottomline.zebra > td::after{
+  content:none !important;
+}
+
+.planner-table tbody tr.cap-total-row.zebra > td::after,
+.planner-table tbody tr.cap-emp-row.zebra > td::after,
+.planner-table tbody tr.sum-row.zebra > td::after,
+.planner-table tbody tr.balance-row.zebra > td::after{
+  content:none !important;
+}
+
+/* =========================
+   SECTION ASSIGNMENTS (tooltip + modal)
+========================= */
+td.section-click{
+  position:relative;
+  cursor:pointer;
+}
+
+.assign-badge{
+  position:absolute;
+  right:2px;
+  bottom:2px;
+  min-width:16px;
+  height:16px;
+  padding:0 5px;
+  border-radius:999px;
+  font-size:10px;
+  line-height:16px;
+  text-align:center;
+  background:#111827;
+  color:#fff;
+  opacity:.85;
+}
+/* verberg badges (zoals je had) */
+.assign-badge{ display:none !important; }
+
+
+/* assignment modal variant */
+.modal.assign-modal{
+  width:980px;
+  max-width:calc(100vw - 24px);
+}
+
+.modal.project-sections-modal{
+  width:min(980px, calc(100vw - 24px));
+  max-height:88vh;
+  display:flex;
+  flex-direction:column;
+}
+
+.modal.new-project-modal{
+  width:min(980px, calc(100vw - 24px));
+  max-height:88vh;
+  display:flex;
+  flex-direction:column;
+}
+
+.new-project-modal .bd{
+  overflow:auto;
+}
+
+.btn-new-project{
+  min-height:22px;
+  padding:2px 9px;
+  border-radius:7px;
+  font-size:12px;
+  line-height:1.2;
+}
+
+.project-header-actions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+
+.btn-collapse-projects{
+  min-height:22px;
+  padding:2px 9px;
+  border-radius:7px;
+  font-size:12px;
+  line-height:1.2;
+  white-space:nowrap;
+}
+
+.new-project-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+
+.new-project-grid label{
+  display:grid;
+  gap:5px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.new-project-grid input{
+  color:var(--text);
+  font-weight:500;
+}
+
+.new-project-section-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin:18px 0 10px;
+}
+
+.new-project-sections{
+  display:grid;
+  gap:6px;
+  overflow:auto;
+}
+
+.new-project-sections-head,
+.new-project-section-row{
+  display:grid;
+  grid-template-columns:70px minmax(200px, 1fr) repeat(5, minmax(72px, .4fr)) 42px;
+  gap:8px;
+  align-items:center;
+  min-width:820px;
+}
+
+.new-project-sections-head{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  padding:0 2px;
+}
+
+.new-project-section-row .npm-section-hours{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
+.project-sections-modal .bd{
+  overflow:auto;
+}
+
+.project-edit-grid{
+  display:grid;
+  grid-template-columns:repeat(2, minmax(220px, 1fr));
+  gap:12px;
+  margin-bottom:16px;
+}
+
+.project-edit-grid label{
+  display:grid;
+  gap:5px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.project-edit-grid input{
+  color:var(--text);
+  font-weight:500;
+}
+
+.project-sections-toolbar{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin:4px 0 10px;
+}
+
+.project-sections-table{
+  display:grid;
+  gap:0;
+  min-width:860px;
+  border:1px solid var(--line);
+  border-radius:10px;
+  overflow:hidden;
+}
+
+.project-sections-head,
+.project-sections-row{
+  display:grid;
+  grid-template-columns:70px minmax(220px, 1.5fr) repeat(5, minmax(82px, .45fr));
+  align-items:center;
+}
+
+.project-sections-head{
+  background:#f8fafc;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+}
+
+.project-sections-head > div,
+.project-sections-row > div{
+  padding:8px;
+  border-right:1px solid var(--line);
+  border-bottom:1px solid var(--line);
+}
+
+.project-sections-head > div:last-child,
+.project-sections-row > div:last-child{
+  border-right:0;
+}
+
+.project-sections-row:last-child > div{
+  border-bottom:0;
+}
+
+.project-section-name{
+  font-weight:650;
+  color:#1f2937;
+}
+
+.project-section-hours{
+  width:100%;
+  min-height:34px;
+  padding:7px 8px;
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
+.project-section-para,
+.project-section-name-input{
+  width:100%;
+  min-height:34px;
+  padding:7px 8px;
+}
+
+.assign-modal .hd{
+  display:flex;
+  justify-content:space-between;
+  align-items:flex-start;
+  gap:12px;
+}
+.assign-title{ font-weight:400; }
+.assign-sub{ font-size:12px; opacity:.75; }
+.assign-tabs{ display:flex; gap:8px; flex-wrap:wrap; }
+.assign-list{
+  margin-top:8px;
+  max-height:50vh;
+  overflow:auto;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.assign-item{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:6px 8px;
+  border:1px solid rgba(0,0,0,.12);
+  border-radius:10px;
+}
+.assign-item input{ transform:scale(1.05); }
+
+.assign-item-concept{
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(34, 197, 94, .14),
+    rgba(34, 197, 94, .14) 5px,
+    rgba(34, 197, 94, .24) 5px,
+    rgba(34, 197, 94, .24) 10px
+  );
+  border-color: rgba(22, 163, 74, .28);
+}
+
+.assign-item-concept[data-type="montage"]{
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(245, 158, 11, .16),
+    rgba(245, 158, 11, .16) 5px,
+    rgba(245, 158, 11, .28) 5px,
+    rgba(245, 158, 11, .28) 10px
+  );
+  border-color: rgba(217, 119, 6, .34);
+}
+
+.assign-item-concept[data-type="wvb"]{
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(14, 165, 233, .16),
+    rgba(14, 165, 233, .16) 5px,
+    rgba(14, 165, 233, .28) 5px,
+    rgba(14, 165, 233, .28) 10px
+  );
+  border-color: rgba(2, 132, 199, .34);
+}
+
+.assign-grid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+@media (max-width:720px){
+  .assign-grid{ grid-template-columns:1fr; }
+}
+
+.assign-col-title{
+  font-weight:800;
+  font-size:13px;
+  color:var(--muted);
+  margin:0 0 8px;
+}
+
+/* =========================
+   SETTINGS MODAL (boven alles)
+========================= */
+#settingsBackdrop{
+  position:fixed !important;
+  inset:0 !important;
+  background:rgba(2,6,23,.45) !important;
+  z-index:5000 !important;
+}
+#settingsBackdrop[hidden]{ display:none !important; }
+
+#settingsModal{
+  position:fixed !important;
+  left:50% !important;
+  top:50% !important;
+  transform:translate(-50%, -50%) !important;
+  z-index:5001 !important;
+  width:min(1080px, calc(100vw - 24px)) !important;
+  max-height:calc(100vh - 24px) !important;
+  overflow:auto !important;
+}
+#settingsModal[hidden]{ display:none !important; }
+
+.settings-section{
+  margin-top:18px;
+  padding-top:16px;
+  border-top:1px solid var(--line);
+}
+
+.settings-section-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+
+.settings-weekbar{
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  gap:10px;
+  align-items:center;
+  margin:10px 0;
+}
+
+.settings-weeklabel{
+  text-align:center;
+  color:var(--muted);
+  font-weight:700;
+}
+
+.settings-applybar{
+  display:flex;
+  gap:8px;
+  flex-wrap:wrap;
+  margin:0 0 12px;
+}
+
+.settings-employees{
+  display:grid;
+  gap:6px;
+  overflow:auto;
+  padding-bottom:2px;
+}
+
+.settings-employee-head,
+.settings-employee-row{
+  display:grid;
+  grid-template-columns:minmax(220px, 1.3fr) repeat(7, minmax(88px, .45fr));
+  gap:8px;
+  align-items:center;
+  min-width:960px;
+}
+
+.settings-employee-head{
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  padding:0 2px;
+}
+
+.settings-employee-hours{
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+}
+
+.settings-employee-day{
+  display:grid;
+  gap:4px;
+}
+
+.settings-employee-discipline,
+.cap-discipline{
+  min-height:30px;
+  padding:4px 8px;
+  font-size:12px;
+}
+
+.cap-hourswrap{
+  display:grid;
+  gap:6px;
+}
+
+/* als prod+mont op dezelfde dag staan: kleur op de bar zelf (niet via td) */
+.plan-stack .bar.bar-prod{ background:#b7f0c2 !important; }
+.plan-stack .bar.bar-wvb{ background:#7dd3fc !important; }
+.plan-stack .bar.bar-mont{ background:#fde68a !important; }
+.plan-stack .bar.bar-prep{ background:#c7e0ff !important; }
+.plan-stack .bar.bar-generic{ background:#e5e7eb !important; }
+
+/* markers (lever/oplever) samen op 1 regel */
+.plan-stack .marker-row{
+  display:flex;
+  gap:6px;
+}
+
+.plan-stack .marker-row .marker{
+  flex:1;               /* beide nemen evenveel ruimte */
+  width:auto;           /* override oude 100% */
+  height:var(--stack-h);
+  line-height:var(--stack-h);
+  padding:0 8px;
+  border-radius:10px;
+  font-size:12px;
+  text-align:left;
+  box-sizing:border-box;
+}
+
+
+/* =========================
+   SECTION ORDERS (Bestellingen) – UI styling
+========================= */
+
+/* container naast uren */
+.orders-acc{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+/* kaartje per bestelnummer */
+.order-card{
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff;
+  overflow:hidden;
+  box-shadow:0 1px 0 rgba(2,6,23,.03);
+}
+
+/* button reset + layout */
+.order-head{
+  appearance:none;
+  -webkit-appearance:none;
+  width:100%;
+  border:0;
+  background:#f8fafc;
+  color:var(--text);
+  cursor:pointer;
+
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+
+  padding:10px 12px;
+  font:inherit;              /* belangrijk: gebruikt dezelfde font als rest */
+  text-align:left;
+}
+.order-head:hover{ background:#f1f5f9; }
+.order-head:focus{
+  outline:none;
+  box-shadow:0 0 0 4px rgba(147,197,253,.25);
+}
+
+/* links: bestelnummer */
+.order-bn{
+  font-weight:800;
+  font-size:13px;
+  letter-spacing:.2px;
+}
+
+/* rechts: leverdatum + pijltje */
+.order-head-right{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-shrink:0;
+}
+.order-ld{
+  color:var(--muted);
+  font-size:12px;
+  font-variant-numeric:tabular-nums;
+  white-space:nowrap;
+}
+.order-arrow{
+  width:22px;
+  height:22px;
+  display:grid;
+  place-items:center;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#fff;
+  font-size:12px;
+  line-height:1;
+}
+
+/* body (uitklap) */
+.order-body{
+  padding:10px 12px;
+  border-top:1px solid var(--line);
+  background:#fff;
+}
+.order-body[hidden]{ display:none !important; }
+
+/* regels in body */
+.order-line{
+  display:grid;
+  grid-template-columns:52px 1fr;
+  gap:6px 10px;
+  padding:8px 0;
+  border-top:1px dashed #e5e7eb;
+}
+.order-line:first-child{
+  border-top:0;
+  padding-top:0;
+}
+
+.ol-aantal{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  height:26px;
+  min-width:44px;
+
+  border:1px solid var(--line);
+  border-radius:10px;
+  background:#f8fafc;
+
+  font-weight:800;
+  font-size:12px;
+  font-variant-numeric:tabular-nums;
+}
+
+.ol-oms{
+  font-weight:400;
+  font-size:13px;
+  line-height:1.25;
+}
+
+.ol-meta{
+  grid-column:2 / -1;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.2;
+}
+
+/* kleine helper: titel "Bestellingen" zoals andere blokjes */
+.orders-title{
+  font-weight:800;
+  color:var(--muted);
+  margin:10px 0 6px;
+}
+
+/* mobiel: iets compacter */
+@media (max-width:720px){
+  .order-head{ padding:9px 10px; }
+  .order-body{ padding:9px 10px; }
+  .order-line{ grid-template-columns:46px 1fr; }
+}
+
+.order-type-list{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  max-height:220px;
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:12px;
+  padding:10px;
+  background:#fff;
+}
+.order-type-item{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:6px 8px;
+  border:1px solid rgba(0,0,0,.08);
+  border-radius:10px;
+}
+.order-type-item input{ transform:scale(1.05); }
+.order-type-item .muted{ font-size:12px; }
+
+.orders-acc{ display:flex; flex-direction:column; gap:10px; margin-top:8px; }
+.order-card{ border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff; }
+.order-head{
+  width:100%;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  background:#f8fafc;
+  border:0;
+  cursor:pointer;
+  font-weight:750;
+}
+.order-head-right{ display:flex; gap:10px; align-items:center; color:var(--muted); font-weight:400; }
+.order-body{ padding:10px 12px; border-top:1px solid var(--line); }
+.order-line{ padding:8px 0; border-top:1px dashed rgba(0,0,0,.08); }
+.order-line:first-child{ border-top:0; }
+.ol-meta{ color:var(--muted); font-size:12px; margin-top:2px; }
+
+/* Capaciteit: kleur aangeven als iemand ingepland is */
+.cap-cell.cap-assigned-prod{
+  background:#fff;   /* vulling zit in .cap-cell-fill */
+}
+
+.cap-cell.cap-assigned-mont{
+  background:#fff;  /* vulling zit in .cap-cell-fill */
+}
+
+/* Beide types op 1 dag (komt zelden voor, maar kan) */
+.cap-cell.cap-assigned-both{
+  background:#fff;
+}
+
+
+
+.planner-table td.cap-cell.cap-assigned-prod { background:#fff !important; }
+.planner-table td.cap-cell.cap-assigned-mont { background:#fff !important; }
+.planner-table td.cap-cell.cap-assigned-both {
+  background:#fff !important;
+}
+
+
+/* Gepland productie / montage: NIET standaard geel */
+.planner-table tr.planned-row td.sum-cell{
+  background:#fff !important;
+}
+
+/* Alleen kleur geven als er echt uren > 0 zijn */
+.planner-table tr.planned-prod td.sum-cell.has-val:not(.wknd){
+  background: rgba(34,197,94,.18) !important;   /* groen */
+}
+.planner-table tr.planned-wvb td.sum-cell.has-val:not(.wknd){
+  background: rgba(14,165,233,.22) !important;  /* blauw */
+}
+.planner-table tr.planned-mont td.sum-cell.has-val:not(.wknd){
+  background: rgba(250,204,21,.28) !important;  /* geel */
+}
+
+/* Weekend-kolom doortrekken in capaciteitblok (incl. saldo) */
+.planner-table tbody td.wknd{
+  background: var(--wknd-bg) !important;
+}
+
+/* Zorg dat saldo/prod/mont kleuren niet over weekend heen schilderen */
+.planner-table tbody td.wknd.cap-cell,
+.planner-table tbody td.wknd.sum-cell,
+.planner-table tbody td.wknd.balance-cell{
+  background: var(--wknd-bg) !important;
+}
+
+/* Als je zebra overlay gebruikt: weekend nooit “zebra overlay” geven */
+.planner-table tbody tr.zebra > td.wknd::after{
+  content:none !important;
+}
+
+
+.projtext{ display:flex; flex-direction:column; line-height:1.15; min-width:0; }
+.projline1{ font-weight:400; }
+.projline2{ font-weight:600; opacity:.9; margin-top:2px; }
+
+.project-date-summary{
+  margin-left:auto;
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:2px;
+  flex:0 0 auto;
+  max-width:118px;
+  font-size:11px;
+  line-height:1.1;
+  color:#475569;
+  white-space:nowrap;
+}
+
+
+
+
+
+
+
+
+/* Project (order): duidelijke lijnen boven + onder de projectregel, ook over kalender */
+tr.project-row > td,
+tr.project-row > th{
+  /* 2 lijnen via background zodat het niet botst met bestaande box-shadow highlights */
+  background-image:
+    linear-gradient(#626262,#626262),
+    linear-gradient(#626262,#626262);
+  background-size: 100% 2px, 100% 2px;
+  background-position: 0 0, 0 100%;
+  background-repeat: no-repeat;
+}
+
+/* project: onderlijn over de hele breedte */
+tr.project-bottomline > td,
+tr.project-bottomline > th{
+  box-shadow: inset 0 -3px 0 #626262 !important;
+}
+
+/* project: bovenlijn over de hele breedte */
+tr.project-topline > td,
+tr.project-topline > th{
+  box-shadow: inset 0 2px 0 #626262 !important;
+}
+
+.bar { font-size: 11px; font-weight: 400; }
+
+.bar.dummy-hatch{
+  background-image: none !important;
+  outline: 2px dashed rgba(0,0,0,.35);
+  outline-offset: -2px;
+  border-radius: 10px;
+}
+
+
+/* Cijfer exact in het midden van het blokje */
+.planner-table .bar{
+  display: flex;
+  align-items: center;      /* verticaal midden */
+  justify-content: center;  /* horizontaal midden */
+  line-height: 1;
+  text-align: center;
+  padding: 0 !important;    /* voorkomt “scheef” door padding */
+}
+
+td.is-drop-target { outline: 2px dashed #2563eb; outline-offset: -2px; }
+td.is-dragging { opacity: .55; }
+
+td.cap-cell-click { cursor: pointer; }
+td.cap-cell-click:hover { outline: 1px solid rgba(0,0,0,.15); }
+
+td.inhuur-cell-click { cursor:pointer; }
+td.inhuur-cell-click:hover { outline: 1px solid rgba(0,0,0,.15); }
+#hoverTip{
+  position: fixed;
+  z-index: 99999;
+  pointer-events: none;
+  display: none;
+  max-width: 320px;
+  white-space: pre-line;
+  background: rgba(15, 23, 42, 0.95);
+  color: #fff;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 10px 30px rgba(0,0,0,.25);
+}
+
+
+.secNo{
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+
+.hourscol { border-left: 2px solid #111 !important; }
+
+/* forceer sticky gedrag voor urenkolom; anders overschrijft td.cell position:relative dit */
+.planner-table th.hourscol.sticky-left2,
+.planner-table td.hourscol.sticky-left2{
+  position: sticky !important;
+  left: var(--left-w) !important;
+}
+.mini-hours {
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 2px 4px;
+}
+.mh-row{
+  display:grid;
+  grid-template-columns: 36px 1fr 8px 1fr;
+  align-items:center;
+  column-gap:2px;
+}
+.mh-l{ text-align:left; color:#6b7280; }
+.mh-v, .mh-v2{ text-align:right; }
+.mh-sep{ text-align:center; color:#94a3b8; }
+
+.rowhdr-flex{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.hourscol-toggle{
+  width:28px;
+  height:26px;
+  border:1px solid var(--line);
+  background:#fff;
+  border-radius:6px;
+  cursor:pointer;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+
+/* uren-kolom styling (respecteert JS toggle display none) */
+td.hourscol{
+  display: table-cell;
+  min-width: 96px !important;
+  width: 96px !important;
+  height: auto !important;
+  line-height: 1.25 !important;
+  vertical-align: top !important;
+  padding: 6px 8px !important;
+  font-size: 12px !important;
+  color: #0f172a !important;
+  background: #fff !important;
+  overflow: visible !important;
+  white-space: normal !important;
+  text-align: left !important;
+}
+
+td.hourscol *{
+  font-size: 12px !important;
+  line-height: 1.25 !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative;
+  z-index: 2;
+}
+
+td.hourscol{
+  border-left: 1px solid #cbd5e1 !important;
+}
+
+/* finale montage-kleur override (voorkomt resterend paars uit oudere regels/cache) */
+.planner-table td.plan-cell.bar-mont .bar,
+.planner-table .plan-stack .bar.bar-mont,
+.planner-table td.cap-cell.cap-assigned-mont,
+.planner-table tr.planned-mont td.sum-cell.has-val{
+  background: #fde68a !important;
+  background-image: none !important;
+  color:#111827 !important;
+}
+
+
+/* Projectpagina breed genoeg voor de planning */
+.page-project .container{
+  width: min(1880px, calc(100vw - 24px));
+  min-width: 1720px;
+  max-width: none;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.bar-subc{
+  border: 1px dashed #64748b;
+  background: #000000;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.plan-stack{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.bar.placeholder{
+  opacity:0;          /* neemt ruimte in, maar niet zichtbaar */
+  pointer-events:none;
+}
+/* Onderaanneming altijd paars, ongeacht cel-kleur */
+.bar.bar-subc{
+  background: #a955f767 !important;   /* paars */
+  color: #fff !important;
+  border: 1px dashed rgba(15,23,42,.35);
+}
+
+.bar-subc.subc-ph{
+  background: transparent;
+  border: 1px dashed rgba(168,85,247,.35);
+}
+
+/* Onderaanneming bar (paars) */
+.bar-subc{
+  background: #a955f767;       /* paars */
+  color: #0f172a !important;     /* zwart (zelfde als je --text) */
+  font-weight: 400 !important;   /* zelfde dikte als je andere bars */
+}
+
+/* Placeholder bars: wel ruimte, geen kleur */
+.bar-subc.subc-ph{
+  background: transparent !important;
+  border-color: transparent !important;
+  color: transparent !important;
+  visibility: hidden;         /* <- belangrijkste */
+}
+
+/* wrapper die de horizontale scrollbar onderaan toont */
+.planner-scroll{
+  width: 100%;
+  height: calc(100vh - 166px);
+  min-height: 360px;
+  max-height: calc(100vh - 166px);
+  overflow: auto;
+  border-top: 1px solid var(--line);
+  padding-bottom: 2px; /* zorgt dat scrollbar niet tegen content plakt */
+  position: relative;  /* helpt i.c.m. sticky */
+  background:#fff;
+  overscroll-behavior: contain;
+}
+
+.planner-scroll-sticky{
+  overflow:auto;
+}
+
+/* optioneel: mooie scrollbar */
+.planner-scroll::-webkit-scrollbar{ height: 10px; }
+.planner-scroll::-webkit-scrollbar-thumb{
+  background: #cbd5e1;
+  border-radius: 8px;
+}
+.planner-scroll::-webkit-scrollbar-thumb:hover{
+  background: #94a3b8;
+}
+
+.planning-topbar-period{
+  margin-left:18px;
+  gap:10px;
+  flex-wrap:nowrap;
+  align-items:center;
+}
+
+.planning-topbar-period #current-week-label{
+  margin:0;
+  font-size:18px;
+  line-height:1;
+  white-space:nowrap;
+}
+
+.planning-card{
+  margin-top:6px;
+}
+
+.planning-card .bd{
+  padding:0 10px 10px;
+}
+
+.planning-card #plannerStatus{
+  min-height:0;
+}
+
+.planning-card .planner-scroll{
+  height:calc(100vh - 84px);
+  max-height:calc(100vh - 84px);
+}
+
+/* Sticky linker planningkolommen volledig afdekken bij horizontaal scrollen */
+.planner-table td.rowhdr.sticky-left,
+.planner-table th.rowhdr.sticky-left{
+  z-index:90 !important;
+  background-color:#fff !important;
+  background-clip:border-box !important;
+}
+
+.planner-table tbody tr.zebra > td.rowhdr.sticky-left{
+  background-color:#f5f6f8 !important;
+}
+
+.planner-table th.hourscol.sticky-left2,
+.planner-table td.hourscol.sticky-left2{
+  z-index:91 !important;
+  background-color:#fff !important;
+  background-clip:border-box !important;
+}
+
+.planner-table tbody tr.zebra > td.hourscol.sticky-left2{
+  background-color:#f5f6f8 !important;
+}
+
+.planner-table td.rowhdr.sticky-left::after,
+.planner-table th.rowhdr.sticky-left::after{
+  content:"";
+  position:absolute;
+  top:0;
+  right:-2px;
+  bottom:0;
+  width:2px;
+  background:#cbd5e1;
+  pointer-events:none;
+  z-index:3;
+}
+
+.planner-table td.hourscol.sticky-left2::after,
+.planner-table th.hourscol.sticky-left2::after{
+  content:"";
+  position:absolute;
+  top:0;
+  right:-2px;
+  bottom:0;
+  width:2px;
+  background:#111827;
+  pointer-events:none;
+  z-index:3;
+}
+
+.planner-table tr.project-topline > td.rowhdr.sticky-left,
+.planner-table tr.project-topline > td.hourscol.sticky-left2{
+  box-shadow:inset 0 2px 0 #626262 !important;
+}
+
+.planner-table tr.project-bottomline > td.rowhdr.sticky-left,
+.planner-table tr.project-bottomline > td.hourscol.sticky-left2{
+  box-shadow:inset 0 -3px 0 #626262 !important;
+}
+
+
+
+/* capaciteit modal: week invoer met 'gepland' kolom */
+.cap-weekgrid{
+  display:grid;
+  grid-template-columns: 120px 84px 1fr; /* label | uren | gepland */
+  gap: 10px 12px;
+  align-items:start;
+}
+
+.cap-hourswrap{ display:flex; align-items:center; }
+.cap-left .cap-hourswrap{
+  display:grid;
+  gap:6px;
+  align-items:stretch;
+}
+.cap-hours{
+  width: 72px;           /* kleiner veld */
+  text-align: center;
+  padding: 8px 10px;
+}
+
+.cap-planwrap{
+  display:flex;
+  flex-direction:column;
+  gap: 8px;
+  min-height: 36px;
+}
+
+.cap-planchip{
+  border-radius: 14px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: normal;
+}
+
+.cap-planchip.prod{ background: var(--chip-green); }
+.cap-planchip.wvb{ background:#e0f2fe; }
+.cap-planchip.mont{ background: #fde68a; } /* geel (montage) */
+
+.cap-planempty{
+  color: var(--muted);
+  padding: 8px 0;
+}
+
+.cap-weekgrid{
+  display:grid;
+  grid-template-columns: 120px 84px 1fr; /* label | uren | gepland */
+  gap: 10px 12px;
+  align-items:start;
+}
+
+.cap-hours{ width:72px; text-align:center; padding:8px 10px; }
+
+.cap-planwrap{ display:flex; flex-direction:column; gap:8px; }
+.cap-planchip{ border-radius:14px; padding:8px 10px; font-size:12px; line-height:1.25; }
+.cap-planchip.prod{ background: var(--chip-green); }
+.cap-planchip.wvb{ background:#e0f2fe; }
+.cap-planchip.mont{ background: #fde68a; }
+.cap-planempty{ color: var(--muted); padding: 8px 0; }
+
+/* Nieuwe indeling modal (zoals afbeelding 2) */
+.cap-weekgrid{
+  display:grid;
+  grid-template-columns: 150px 1fr;   /* links smal, rechts breed */
+  gap: 10px 14px;
+  align-items:start;
+}
+
+.cap-daycol{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.cap-daycol .label{
+  margin:0;
+  font-weight:600;
+  color: var(--muted);
+}
+
+.cap-daycol .cap-hourswrap{
+  margin:0;
+}
+
+.cap-daycol .cap-hours{
+  width: 100%;
+}
+
+/* optioneel: planvlak iets “strakker” */
+.cap-planwrap{
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-height: 46px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+}
+
+/* =========================
+   CAPACITY MODAL – week layout (zoals afbeelding 2)
+========================= */
+.cap-weeklist{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.cap-dayrow{
+  display:grid;
+  grid-template-columns: 120px 1fr;
+  gap:12px;
+  align-items:start;
+}
+
+.cap-left{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.cap-daylabel{
+  color: var(--muted);
+  font-size: 14px;
+  padding-top: 4px;
+}
+
+.cap-hours{
+  width: 100%;
+  text-align: center;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
+.cap-right{
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  min-height: 56px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.cap-planempty{
+  color: var(--muted);
+  text-align:center;
+  padding: 10px 0;
+}
+
+.cap-planchip{
+  border-radius: 14px;
+  padding: 10px 12px;
+  line-height: 1.2;
+}
+
+.assign-grid{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 22px;
+  align-items:start;
+}
+
+.hr.span-2{
+  grid-column: 1 / -1;
+  margin: 2px 0;
+}
+
+/* Inhuur titel links, lege ruimte rechts */
+.inhuur-spacer{
+  height: 32px; /* match ongeveer hoogte titel */
+}
+
+/* rechterkolom leeg onder onderaanneming */
+.right-empty{
+  min-height: 140px; /* tweak naar smaak */
+}
+
+/* mobiel: alles onder elkaar */
+@media (max-width: 720px){
+  .assign-grid{ grid-template-columns: 1fr; }
+  .assign-grid-3{ grid-template-columns: 1fr; }
+  .inhuur-spacer,
+  .right-empty{ display:none; }
+  .hr.span-2{ grid-column:auto; }
+}
+
+.assign-grid-2{
+  display:grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px 22px;
+  align-items:start;
+}
+
+.assign-grid-3{
+  display:grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 18px 22px;
+  align-items:start;
+}
+
+.assign-stack{
+  display:flex;
+  flex-direction:column;
+  gap: 14px;
+}
+
+/* optioneel */
+.right-empty{
+  min-height: 120px;
+}
+
+
+/* CAPACITY MODAL – week layout (2 kolommen per dag) */
+.cap-weeklist{
+  display:flex;
+  flex-direction:column;
+  gap:12px;
+}
+
+.cap-dayrow{
+  display:grid;
+  grid-template-columns: 120px 1fr;
+  gap:12px;
+  align-items:start;
+}
+
+.cap-left{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+
+.cap-daylabel{
+  color: var(--muted);
+  font-size: 14px;
+  padding-top: 4px;
+}
+
+.cap-hours{
+  width: 100%;
+  text-align: center;
+  font-weight: 600;
+  border-radius: 12px;
+}
+
+.cap-right{
+  background: #f8fafc;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  min-height: 56px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.cap-planempty{
+  color: var(--muted);
+  text-align:center;
+  padding: 10px 0;
+}
+
+.cap-planchip{
+  border-radius: 14px;
+  padding: 10px 12px;
+  line-height: 1.2;
+}
+
+
+.day-modal{ width:min(920px, 96vw); max-height:80vh; overflow:hidden; }
+#dmBody{ max-height:calc(80vh - 90px); overflow:auto; }
+
+.dm-list{ display:flex; flex-direction:column; gap:14px; }
+.dm-row{ display:grid; grid-template-columns: 220px 1fr; gap:14px; align-items:start; }
+.dm-name{ font-weight:700; padding-top:10px; }
+
+.dm-items{ display:flex; flex-direction:column; gap:10px; }
+.dm-card{
+  border:1px solid #e2e8f0;
+  border-radius:14px;
+  padding:12px 14px;
+  background:#f8fafc;
+  line-height:1.25;
+}
+.dm-card.prod{ background:#dcfce7; border-color:#bbf7d0; }
+.dm-card.wvb{ background:#e0f2fe; border-color:#7dd3fc; }
+.dm-card.mont{ background:#fef9c3; border-color:#fde68a; }
+
+.dayhead-btn{
+  width:100%;
+  border:0;
+  background:transparent;
+  padding:6px 0;
+  cursor:pointer;
+  font:inherit;
+  color:inherit;
+}
+.dayhead-btn:hover{ text-decoration:underline; }
+
+
+@media (max-width: 720px){
+  .assign-grid-2,
+  .assign-grid-3{ grid-template-columns: 1fr; }
+}
+
+/* Projectpagina bewerkbare velden fix */
+.fieldgrid {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.fieldgrid .label {
+  font-size: 13px;
+  color: #64748b;
+  min-width: 0;
+}
+
+.fieldgrid input.value,
+.fieldgrid .project-edit {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  height: 36px;
+  padding: 5px 10px;
+  border: 1px solid #dbe3ef;
+  border-radius: 8px;
+  background: #f8fafc;
+  font: inherit;
+  color: #0f172a;
+}
+
+.fieldgrid input.value:focus,
+.fieldgrid .project-edit:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.25);
+  border-color: #2563eb;
+  background: #ffffff;
+}
+
+/* Voorkomt dat velden binnen blokken naast elkaar gaan zweven */
+.card-body .fieldgrid,
+.block .fieldgrid,
+#blkProject .fieldgrid,
+#blkCustomer .fieldgrid,
+#blkDelivery .fieldgrid,
+#blkOrder .fieldgrid,
+#blkTotals .fieldgrid {
+  grid-column: 1 / -1;
+}
+
+
+/* =========================
+   PROJECTPAGINA COMPACTER
+   Zet dit helemaal onderaan styles.css
+========================= */
+
+.page-project .card .bd{
+  padding: 12px 14px;
+}
+
+.page-project .card .hd{
+  padding: 10px 14px;
+}
+
+.page-project .grid{
+  gap: 12px;
+}
+
+.page-project .fieldgrid{
+  grid-template-columns: 170px 1fr;
+  gap: 6px 10px;
+  margin-bottom: 6px;
+}
+
+.page-project .fieldgrid .label{
+  font-size: 12px;
+}
+
+.page-project .fieldgrid input.value,
+.page-project .fieldgrid .project-edit,
+.page-project .fieldgrid .value{
+  height: 32px;
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.page-project #blkProject .fieldgrid,
+.page-project #blkCustomer .fieldgrid,
+.page-project #blkDelivery .fieldgrid,
+.page-project #blkOrder .fieldgrid,
+.page-project #blkTotals .fieldgrid{
+  margin-bottom: 6px;
+}
+
+/* Blokken minder hoog maken */
+.page-project #blkProject,
+.page-project #blkCustomer,
+.page-project #blkDelivery,
+.page-project #blkOrder,
+.page-project #blkTotals{
+  align-content: start;
+}
+
+/* Sectie iets dichter op formulier */
+.page-project #cardMain .bd{
+  padding-bottom: 10px;
+}
+
+.page-project h1,
+.page-project h2{
+  line-height: 1.15;
+}
+
+.project-detail-grid{
+  display:grid;
+  grid-template-columns:420px 420px minmax(760px, 1fr);
+  gap:28px;
+  align-items:start;
+}
+
+.project-detail-col,
+.project-side-col,
+.project-sections-panel{
+  min-width:0;
+}
+
+.project-detail-col,
+.project-side-col{
+  display:grid;
+  gap:14px;
+  align-content:start;
+}
+
+.project-sections-panel{
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#fff;
+  overflow:hidden;
+}
+
+.project-sections-panel .project-sections-head{
+  padding:12px 14px;
+  border-bottom:1px solid var(--line);
+}
+
+.project-sections-panel .project-sections-body{
+  padding:12px 14px;
+}
+
+.project-planning-panel{
+  margin-top:10px;
+  width:100%;
+}
+
+.project-planning-scroll{
+  margin-top:10px;
+  width:100%;
+  max-width:100%;
+  overflow:auto;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#fff;
+}
+
+@media (max-width: 720px){
+  .page-project .container{
+    margin-left:8px;
+    margin-right:8px;
+  }
+}
+
+.project-planning-empty{
+  padding:14px;
+}
+
+.project-planning-table{
+  border-collapse:separate;
+  border-spacing:0;
+  table-layout:fixed;
+  font-family:"Segoe UI", Arial, sans-serif;
+  font-size:12px;
+}
+
+.project-planning-table .pp-col-label{
+  width:300px;
+}
+
+.project-planning-table .pp-col-info{
+  width:120px;
+}
+
+.project-planning-table .pp-col-day{
+  width:30px;
+}
+
+.project-planning-table th,
+.project-planning-table td{
+  border-right:1px solid #e5e7eb;
+  border-bottom:1px solid #e5e7eb;
+  position:relative;
+  width:30px;
+  min-width:30px;
+  max-width:30px;
+  height:82px;
+  padding:2px;
+  vertical-align:middle;
+  background:#fff;
+}
+
+.project-planning-table thead th{
+  position:sticky;
+  z-index:2;
+  background:#f8fafc;
+  color:#0f172a;
+  font-weight:400;
+  text-align:center;
+  line-height:1.15;
+}
+
+.project-planning-table thead tr.pp-head-month th{
+  top:0;
+  height:28px;
+  font-size:13px;
+  border-bottom:1px solid #e5e7eb;
+}
+
+.project-planning-table thead tr.pp-head-week th{
+  top:28px;
+  height:26px;
+  font-size:12px;
+  border-bottom:1px solid #e5e7eb;
+}
+
+.project-planning-table thead tr.pp-head-day th{
+  top:54px;
+  height:34px;
+  font-size:12px;
+  border-bottom:3px solid #111827;
+}
+
+.project-planning-table .pp-label{
+  position:sticky;
+  left:0;
+  z-index:3;
+  min-width:300px;
+  width:300px;
+  max-width:300px;
+  text-align:left;
+  background:#fff;
+  box-shadow:1px 0 0 #e5e7eb;
+}
+
+.project-planning-table thead .pp-label{
+  background:#f8fafc;
+}
+
+.project-planning-table .pp-info{
+  position:sticky;
+  left:300px;
+  z-index:3;
+  min-width:120px;
+  width:120px;
+  max-width:120px;
+  text-align:left;
+  background:#fff;
+  box-shadow:1px 0 0 #e5e7eb;
+  color:#475569;
+  line-height:17px;
+}
+
+.project-planning-table thead .pp-info{
+  background:#f8fafc;
+  color:#0f172a;
+  font-weight:400;
+}
+
+.project-planning-table .wknd{
+  background:#dbeafe !important;
+}
+
+.project-planning-table tbody tr:nth-child(even) td:not(.wknd){
+  background:#f8fafc;
+}
+
+.project-planning-table tbody tr:nth-child(even) .pp-label{
+  background:#f8fafc;
+}
+
+.project-planning-table tbody tr:nth-child(even) .pp-info{
+  background:#f8fafc;
+}
+
+.project-planning-table .pp-project-main td,
+.project-planning-table .pp-project-main .pp-label{
+  border-top:2px solid #111827;
+}
+
+.project-planning-table .pp-summary .pp-label{
+  color:#334155;
+}
+
+.project-planning-table td.pp-delivery-col,
+.project-planning-table td.pp-completion-col{
+  --pp-date-line-delivery:transparent;
+  --pp-date-line-completion:transparent;
+}
+
+.project-planning-table td.pp-delivery-col{
+  --pp-date-line-delivery:#facc15;
+}
+
+.project-planning-table td.pp-completion-col{
+  --pp-date-line-completion:#f59e0b;
+}
+
+.project-planning-table td.pp-delivery-col::before,
+.project-planning-table td.pp-completion-col::before{
+  content:"";
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:0;
+  width:8px;
+  background:
+    linear-gradient(
+      to right,
+      var(--pp-date-line-delivery) 0 3px,
+      transparent 3px 4px,
+      var(--pp-date-line-completion) 4px 7px,
+      transparent 7px 8px
+    );
+  pointer-events:none;
+  z-index:4;
+}
+
+.pp-title{
+  font-weight:500;
+  color:#1f2937;
+  font-size:14px;
+  line-height:1.2;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+.pp-project-main .pp-title{
+  font-size:15px;
+  font-weight:500;
+}
+
+.pp-day{
+  text-align:center;
+}
+
+.pp-stack{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  align-items:stretch;
+}
+
+.pp-chip{
+  display:block;
+  position:relative;
+  min-height:17px;
+  margin:1px 0;
+  padding:0 3px;
+  border-radius:0;
+  font-size:10px;
+  line-height:17px;
+  font-weight:700;
+  color:#0f172a;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:clip;
+  box-shadow:inset 0 0 0 1px rgba(15,23,42,.08);
+}
+
+.pp-chip.placeholder{
+  visibility:hidden;
+}
+
+.pp-chip.wvb{ background:#7dd3fc; }
+.pp-chip.prod{ background:#b7f0c2; }
+.pp-chip.mont{ background:#fde68a; }
+.pp-chip.subc{ background:#f5d0fe; }
+
+.pp-chip.bar-start{
+  border-top-left-radius:5px;
+  border-bottom-left-radius:5px;
+}
+
+.pp-chip.bar-end{
+  border-top-right-radius:5px;
+  border-bottom-right-radius:5px;
+}
+
+.pp-chip.bar-concept{
+  outline:1px dashed rgba(0,0,0,.38);
+  outline-offset:-1px;
+}
+
+.pp-chip.bar-concept::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0) 0,
+    rgba(0,0,0,0) 3px,
+    rgba(0,0,0,.16) 3px,
+    rgba(0,0,0,.16) 5px
+  );
+}
+
+.pp-chip.bar-mixed{
+  display:flex;
+  padding:0;
+}
+
+.pp-part{
+  flex:1 1 0;
+  display:block;
+  min-width:0;
+  padding:0 2px;
+  overflow:hidden;
+}
+
+.pp-part-concept{
+  position:relative;
+  outline:1px dashed rgba(0,0,0,.38);
+  outline-offset:-1px;
+}
+
+.pp-part-concept::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0) 0,
+    rgba(0,0,0,0) 3px,
+    rgba(0,0,0,.16) 3px,
+    rgba(0,0,0,.16) 5px
+  );
+}
+.section-action-btn{
+  width: 28px;
+  height: 28px;
+  border: 1px solid #d9e2ec;
+  background: #fff;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  margin-left: 6px;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.section-action-btn:hover{
+  background: #f6f8fb;
+}
+
+.cap-left-info {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.assign-item {
+  min-height: 34px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  z-index: 1000;
+}
+
+.modal {
+  position: fixed;
+  z-index: 1001;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(520px, calc(100vw - 32px));
+  background: #fff;
+  border-radius: 18px;
+  box-shadow: 0 24px 80px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+}
+
+.modal-head,
+.modal-foot {
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-head {
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-foot {
+  border-top: 1px solid #e5e7eb;
+}
+
+.modal-head h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.modal-body {
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field span {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.input {
+  height: 38px;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  padding: 0 12px;
+  font: inherit;
+}
+
+.btn.primary {
+  background: #2563eb;
+  color: #fff;
+  border-color: #2563eb;
+}
+/* Gemengde sectiebalk: echte geplande uren + concepturen in één sectieregel */
+.planner-table .bar.bar-mixed{
+  display:flex;
+  align-items:stretch;
+  justify-content:stretch;
+  gap:0;
+  padding:0 !important;
+  overflow:hidden;
+}
+.planner-table .bar.bar-mixed .bar-part{
+  min-width:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  height:100%;
+  line-height:1;
+  font-size:11px;
+}
+.planner-table .bar.bar-mixed .bar-part-concept{
+  position:relative;
+  outline:2px dashed rgba(0,0,0,.35);
+  outline-offset:-2px;
+}
+.planner-table .bar.bar-mixed .bar-part-concept::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0.00) 0px,
+    rgba(0,0,0,0.00) 2px,
+    rgba(0,0,0,0.18) 2px,
+    rgba(0,0,0,0.18) 3px
+  );
+}
+.bar-resize-handle{
+  position:absolute;
+  right:0;
+  top:0;
+  width:6px;
+  height:100%;
+  cursor:ew-resize;
+  z-index:5;
+}
+
+
+/* =========================
+   SECTION ROWS – compact 2-line layout
+========================= */
+td.section-click.section-two-line .plan-stack.plan-stack-section{
+  gap:2px;
+}
+
+td.section-click.section-two-line .bar{
+  height:14px !important;
+  min-height:14px;
+  font-size:10px !important;
+  border-radius:5px !important;
+}
+
+td.section-click.section-two-line .bar.placeholder{
+  opacity:0;
+  visibility:hidden;
+}
+
+td.section-click.section-two-line .bar.bar-subc,
+td.section-click.section-two-line .bar-subc.subc-ph{
+  height:12px !important;
+  min-height:12px;
+  font-size:9px !important;
+}
+
+td.section-click.section-two-line .bar.bar-mixed{
+  background: transparent !important;
+  justify-content:stretch !important;
+  gap:2px;
+  padding:0 !important;
+}
+
+td.section-click.section-two-line .bar.bar-mixed .bar-part{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-width:0;
+  height:100%;
+  border-radius:5px;
+  overflow:hidden;
+  font-size:10px !important;
+  line-height:1;
+}
+
+td.section-click.section-two-line .bar.bar-prod.bar-mixed .bar-part-real{
+  background:#b7f0c2;
+  color:#0f172a;
+}
+
+td.section-click.section-two-line .bar.bar-prod.bar-mixed .bar-part-concept{
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(0,0,0,0.00) 0px,
+      rgba(0,0,0,0.00) 2px,
+      rgba(0,0,0,0.18) 2px,
+      rgba(0,0,0,0.18) 3px
+    ),
+    #b7f0c2;
+  color:#0f172a;
+}
+
+td.section-click.section-two-line .bar.bar-mont.bar-mixed .bar-part-real{
+  background:#fde68a;
+  color:#111827;
+}
+
+td.section-click.section-two-line .bar.bar-mont.bar-mixed .bar-part-concept{
+  background:
+    repeating-linear-gradient(
+      45deg,
+      rgba(0,0,0,0.00) 0px,
+      rgba(0,0,0,0.00) 2px,
+      rgba(0,0,0,0.18) 2px,
+      rgba(0,0,0,0.18) 3px
+    ),
+    #fde68a;
+  color:#111827;
+}
+
+/* =========================
+   SECTION ROWS – real planning and concept separated
+========================= */
+td.section-click.section-two-line .plan-stack.plan-stack-section{
+  gap:1px !important;
+}
+
+td.section-click.section-two-line .bar.bar-real,
+td.section-click.section-two-line .bar.bar-concept{
+  height:11px !important;
+  min-height:11px !important;
+  font-size:9px !important;
+  line-height:1 !important;
+  border-radius:4px !important;
+}
+
+td.section-click.section-two-line .bar.bar-concept{
+  outline:1px dashed rgba(0,0,0,.38) !important;
+  outline-offset:-1px !important;
+}
+
+td.section-click.section-two-line .bar.bar-concept::after{
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0.00) 0px,
+    rgba(0,0,0,0.00) 2px,
+    rgba(0,0,0,0.16) 2px,
+    rgba(0,0,0,0.16) 3px
+  ) !important;
+}
+
+td.section-click.section-two-line .bar.placeholder{
+  opacity:0 !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+
+td.section-click.section-two-line .bar-resize-handle{
+  width:5px;
+  right:0;
+}
+
+/* =========================
+   SECTION ROWS – connected compact bars, 1.5x height
+========================= */
+td.section-click.section-two-line .plan-stack.plan-stack-section{
+  gap:2px !important;
+}
+
+td.section-click.section-two-line .bar.bar-real,
+td.section-click.section-two-line .bar.bar-concept{
+  height:17px !important;
+  min-height:17px !important;
+  font-size:10px !important;
+  line-height:1 !important;
+  border-radius:0 !important;       /* naast elkaar weer strak aansluiten */
+}
+
+td.section-click.section-two-line .bar.bar-real.bar-start,
+td.section-click.section-two-line .bar.bar-concept.bar-start{
+  border-top-left-radius:5px !important;
+  border-bottom-left-radius:5px !important;
+}
+
+td.section-click.section-two-line .bar.bar-real.bar-end,
+td.section-click.section-two-line .bar.bar-concept.bar-end{
+  border-top-right-radius:5px !important;
+  border-bottom-right-radius:5px !important;
+}
+
+td.section-click.section-two-line .bar.bar-concept{
+  outline:1px dashed rgba(0,0,0,.38) !important;
+  outline-offset:-1px !important;
+}
+
+td.section-click.section-two-line .bar.bar-subc,
+td.section-click.section-two-line .bar-subc.subc-ph{
+  height:15px !important;
+  min-height:15px !important;
+  font-size:10px !important;
+  border-radius:0 !important;
+}
+
+td.section-click.section-two-line .bar.bar-subc.bar-start{
+  border-top-left-radius:5px !important;
+  border-bottom-left-radius:5px !important;
+}
+
+td.section-click.section-two-line .bar.bar-subc.bar-end{
+  border-top-right-radius:5px !important;
+  border-bottom-right-radius:5px !important;
+}
+
+/* =========================
+   PROJECT ROW – compact separated planning lines
+========================= */
+td.project-two-line .plan-stack.plan-stack-project{
+  gap:2px !important;
+}
+
+td.project-two-line .marker-row{
+  height:14px;
+}
+
+td.project-two-line .marker-row .marker{
+  height:14px !important;
+  line-height:14px !important;
+  font-size:9px !important;
+  border-radius:7px !important;
+}
+
+td.project-two-line .bar.bar-real,
+td.project-two-line .bar.bar-concept{
+  height:17px !important;
+  min-height:17px !important;
+  font-size:10px !important;
+  line-height:1 !important;
+  border-radius:0 !important;
+}
+
+td.project-two-line .bar.bar-real.bar-start,
+td.project-two-line .bar.bar-concept.bar-start{
+  border-top-left-radius:5px !important;
+  border-bottom-left-radius:5px !important;
+}
+
+td.project-two-line .bar.bar-real.bar-end,
+td.project-two-line .bar.bar-concept.bar-end{
+  border-top-right-radius:5px !important;
+  border-bottom-right-radius:5px !important;
+}
+
+td.project-two-line .bar.bar-concept{
+  outline:1px dashed rgba(0,0,0,.38) !important;
+  outline-offset:-1px !important;
+}
+
+td.project-two-line .bar.placeholder{
+  opacity:0 !important;
+  visibility:hidden !important;
+  pointer-events:none !important;
+}
+
+/* Urenkolom: gecombineerde regels WVB / Prod+CNC / Mont+Reis */
+.mini-hours.mini-hours-combined .mh-row{
+  grid-template-columns: 58px 1fr 8px 1fr;
+}
+.mini-hours.mini-hours-combined .mh-l{
+  font-size:10.5px;
+}
+
+
+/* Opruimen: geen functieloze pijlen meer bij secties / productie / montage */
+.sect-indent{
+  display:inline-block;
+  width:18px;
+}
+
+.sectext.no-expander{
+  display:inline-block;
+}
+
+.expander-sec{
+  display:none !important;
+}
+
+#btnHoursCol,
+.hourscol-toggle{
+  display:none !important;
+}
+
+/* Beschikbaarheidsmodal: taken als proportionele dagbalk */
+.cap-right .cap-planbar{
+  width:100%;
+  min-height:44px;
+  display:flex;
+  align-items:stretch;
+  gap:4px;
+  overflow:hidden;
+}
+
+.cap-right .cap-planseg{
+  flex:0 0 auto;
+  min-width:42px;
+  max-width:100%;
+  min-height:44px;
+  padding:8px 10px;
+  border-radius:14px;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  overflow:hidden;
+  white-space:normal;
+}
+
+.cap-right .cap-planseg-title{
+  font-size:12px;
+  line-height:1.2;
+  overflow:hidden;
+  display:-webkit-box;
+  -webkit-line-clamp:2;
+  -webkit-box-orient:vertical;
+}
+
+.cap-right .cap-planseg-hours{
+  margin-top:3px;
+  font-size:11px;
+  font-weight:700;
+  opacity:.75;
+}
+
+.cap-right .cap-planseg.prod{ background: var(--chip-green); }
+.cap-right .cap-planseg.wvb{ background:#e0f2fe; }
+.cap-right .cap-planseg.mont{ background: #fde68a; }
+
+
+.cap-right.cap-absence-target{ cursor:pointer; }
+.cap-right.cap-absence-target:hover{ outline:1px solid rgba(0,0,0,.12); }
+.cap-right .cap-planseg.absence{ background:#fed7aa; }
+
+.planner-table tr.planned-absence td.sum-cell.has-val:not(.wknd){
+  background:#fed7aa !important;
+}
+.planner-table td.day-absence-summary-click{
+  cursor:pointer;
+}
+.planner-table td.day-absence-summary-click:hover{
+  outline:1px solid rgba(0,0,0,.18);
+  outline-offset:-1px;
+}
+
+.planner-table td.cap-total-day-click{
+  cursor:pointer;
+}
+.planner-table td.cap-total-day-click:hover{
+  outline:1px solid rgba(0,0,0,.18);
+  outline-offset:-1px;
+}
+
+.day-absence-box{
+  border-bottom:1px solid var(--line);
+  padding:0 0 14px;
+  margin:0 0 14px;
+}
+.day-absence-title{
+  font-weight:700;
+  margin:0 0 8px;
+}
+.day-absence-form{
+  display:grid;
+  grid-template-columns:1fr 90px auto auto;
+  gap:8px;
+  align-items:center;
+}
+.day-absence-check{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  white-space:nowrap;
+  color:var(--muted);
+  font-size:13px;
+}
+.day-absence-hint{
+  margin-top:6px;
+  font-size:12px;
+}
+.day-absence-list{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  margin-top:10px;
+}
+.day-absence-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:6px 8px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#fff7ed;
+}
+.dm-card.absence{
+  background:#fed7aa !important;
+  border-color:#f59e0b !important;
+}
+
+.absence-modal{ width:min(620px, calc(100vw - 24px)); }
+.absence-existing{ display:flex; flex-direction:column; gap:8px; }
+.absence-existing-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:10px 12px;
+  border:1px solid var(--line);
+  border-radius:12px;
+  background:#fff7ed;
+}
+
+
+/* Verlof bewerken in beschikbaarheidsmodal */
+.absence-existing-row{ cursor:pointer; }
+.cap-planseg.absence{ cursor:pointer; }
+
+.planner-table td.cap-cell.cap-absence{
+  background:rgba(245,158,11,.28) !important;
+}
+
+.planner-table th.general-absence-col,
+.planner-table td.general-absence-col{
+  background:rgba(245,158,11,.18) !important;
+}
+
+.planner-table td.general-absence-col.cap-cell,
+.planner-table td.general-absence-col.sum-cell,
+.planner-table td.general-absence-col.balance-cell{
+  background:rgba(245,158,11,.24) !important;
+}
