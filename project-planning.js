@@ -57,7 +57,7 @@ async function loadProjectPlanning(projectId){
 
   const projectAssignPromise = sb
     .from("project_assignments")
-    .select("project_id, work_date, work_type, hours, werknemer_id, note")
+    .select("project_id, work_date, work_type, werknemer_id, note")
     .eq("project_id", projectId)
     .order("work_date", { ascending: true });
 
