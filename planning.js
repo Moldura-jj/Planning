@@ -761,7 +761,6 @@ function buildPlannedSetsByDay(planningItems){
       try {
         await saveSettingsEmployees(applyMode);
         saveSettings(settings);
-        closeSettingsModal();
         refreshAfterSettingsChange();
       } catch (e) {
         alert(String(e?.message || e));
@@ -1215,7 +1214,7 @@ function asISODate(v){
             if (column) payload[column] = parseHoursInput(inp.value);
           });
           if (sid) bySection.set(sid, payload);
-          else if (payload[nameKey] || payload[paraKey]) newSections.push(payload);
+          else if (payload[nameKey] || payload[paraKey]) newSections.push({ row, payload });
         });
 
         saveBtn.disabled = true;
@@ -1247,15 +1246,18 @@ function asISODate(v){
             if (res.error) throw res.error;
           }
           if (newSections.length) {
-            const rows = newSections.map(payload => ({
-              ...payload,
+            const rows = newSections.map(item => ({
+              ...item.payload,
               [sectProjKeyForInsert]: project.id,
               ...(includePlanningColForInsert ? { [includePlanningColForInsert]: true } : {})
             }));
-            const ins = await sb.from("secties").insert(rows);
+            const ins = await sb.from("secties").insert(rows).select(sectionIdKeyForUpdate);
             if (ins.error) throw ins.error;
+            (ins.data || []).forEach((inserted, idx) => {
+              const newId = String(inserted?.[sectionIdKeyForUpdate] || "").trim();
+              if (newId && newSections[idx]?.row) newSections[idx].row.dataset.sectionId = newId;
+            });
           }
-          modal.close();
           await loadAndRender();
         } catch (e) {
           alert("Fout opslaan projectgegevens: " + (e?.message || e));
@@ -1835,9 +1837,8 @@ async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0, a
         const id = String(btn.dataset.id || "");
         const del = await sb.from("employee_absences").delete().eq("id", id);
         if (del.error) { alert("Fout verwijderen: " + del.error.message); return; }
-        modal.close();
-        if (capModal) capModal.close();
         await loadAndRender();
+        await refreshExisting();
       };
     });
   }
@@ -1861,9 +1862,8 @@ async function openAbsenceModal({ empId, empName, dateISO, availableHours = 0, a
       : await sb.from("employee_absences").insert(row);
     if (res.error) { alert("Fout opslaan verlof: " + res.error.message); return; }
 
-    modal.close();
-    if (capModal) capModal.close();
     await loadAndRender();
+    await refreshExisting();
   };
 
   await refreshExisting();
@@ -2168,7 +2168,7 @@ function getPlannedForInhuurDate(inhuurIdStr, dateISO) {
       }
 
       await loadAndRender();   // ✅ dit maakt het direct zichtbaar.
-      modal.close();           // ✅ sluit modal automatisch
+      await renderWeek();
     } catch (e) {
       console.warn("Inhuur save error:", e);
       alert(String(e.message || e));
@@ -3032,7 +3032,6 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
               .eq("id", a.id);
             if (upd.error) { alert("Fout bijwerken vrije dag: " + upd.error.message); return; }
           }
-          modal.close();
           await loadAndRender();
           return;
         }
@@ -3059,7 +3058,6 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
         const ins = await sb.from("employee_absences").insert(rowsToInsert);
         if (ins.error) { alert("Fout opslaan vrije dag: " + ins.error.message); return; }
 
-        modal.close();
         await loadAndRender();
       };
     }
@@ -3071,7 +3069,6 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
         if (!confirm("Deze vrije dag verwijderen?")) return;
         const del = await sb.from("employee_absences").delete().in("id", ids);
         if (del.error) { alert("Fout verwijderen vrije dag: " + del.error.message); return; }
-        modal.close();
         await loadAndRender();
       };
     });
@@ -5981,7 +5978,6 @@ formEl.innerHTML = `
       if (ins.error) { alert("Fout opslaan: " + ins.error.message); return; }
     }
 
-    //modal.close();
     loadAndRender();
   };
 
@@ -6024,7 +6020,6 @@ console.log("CAP SAVE", {
       if (ins.error) { alert("Fout opslaan: " + ins.error.message); return; }
     }
 
-    modal.close();
     loadAndRender();
   };
 
@@ -6311,8 +6306,6 @@ const countM = rowConcept.querySelector(".concept-count");
     // ✅ onderaanneming-snelkeuze meteen updaten (cache weggooien voor dit project)
     _subcSuggestCache.delete(String(projectId));
 
-    
-    modal.close();
     await loadAndRender();
   };
 
@@ -6484,7 +6477,6 @@ if (sectionConceptTd && Number(sectionConceptTd.dataset.plannedHours || 0) > 0) 
             alert("Fout automatisch plannen: " + (res.message || "Onbekende fout"));
             return;
           }
-          modal.close();
           loadAndRender();
         };
       };
@@ -7501,7 +7493,6 @@ await dbgProjectDummyMontageCount(projectId, dateISO);
 
 
 
-modal.close();
 loadAndRender();
 
 
