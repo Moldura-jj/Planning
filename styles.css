@@ -2333,13 +2333,33 @@ td.hourscol{
 
 .project-planning-table thead th{
   position:sticky;
-  top:0;
   z-index:2;
   background:#f8fafc;
-  color:#64748b;
-  font-weight:700;
+  color:#0f172a;
+  font-weight:400;
   text-align:center;
   line-height:1.15;
+}
+
+.project-planning-table thead tr.pp-head-month th{
+  top:0;
+  height:28px;
+  font-size:13px;
+  border-bottom:1px solid #e5e7eb;
+}
+
+.project-planning-table thead tr.pp-head-week th{
+  top:28px;
+  height:26px;
+  font-size:12px;
+  border-bottom:1px solid #e5e7eb;
+}
+
+.project-planning-table thead tr.pp-head-day th{
+  top:54px;
+  height:34px;
+  font-size:12px;
+  border-bottom:3px solid #111827;
 }
 
 .project-planning-table .pp-label{
@@ -2374,8 +2394,8 @@ td.hourscol{
 
 .project-planning-table thead .pp-info{
   background:#f8fafc;
-  color:#64748b;
-  font-weight:700;
+  color:#0f172a;
+  font-weight:400;
 }
 
 .project-planning-table .wknd{

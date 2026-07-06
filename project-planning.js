@@ -150,17 +150,58 @@ function renderProjectPlanning(root, meta, data){
         ${dates.map(() => `<col class="pp-col-day" />`).join("")}
       </colgroup>
       <thead>
-        <tr>
-          <th class="pp-label">Regel</th>
-          <th class="pp-info">Uren</th>
-          ${dates.map(d => `<th>${dayHead(d)}</th>`).join("")}
-        </tr>
+        ${renderHeaderRows(dates)}
       </thead>
       <tbody>
         ${rows.map(row => renderPlanningRow(row, dates, deliveryISO, completionISO)).join("")}
       </tbody>
     </table>
   `;
+}
+
+function renderHeaderRows(dates){
+  return `
+    <tr class="pp-head-month">
+      <th class="pp-label"></th>
+      <th class="pp-info"></th>
+      ${monthSpans(dates).map(m => `<th colspan="${m.span}">${escapeHtml(m.label)}</th>`).join("")}
+    </tr>
+    <tr class="pp-head-week">
+      <th class="pp-label"></th>
+      <th class="pp-info"></th>
+      ${weekSpans(dates).map(w => `<th colspan="${w.span}">Wk ${w.week}</th>`).join("")}
+    </tr>
+    <tr class="pp-head-day">
+      <th class="pp-label"></th>
+      <th class="pp-info"></th>
+      ${dates.map(d => `<th>${dayHead(d)}</th>`).join("")}
+    </tr>
+  `;
+}
+
+function monthSpans(dates){
+  const out = [];
+  for (let i = 0; i < dates.length;) {
+    const m = dates[i].getMonth();
+    const y = dates[i].getFullYear();
+    let span = 1;
+    while (i + span < dates.length && dates[i + span].getMonth() === m && dates[i + span].getFullYear() === y) span++;
+    out.push({ label: `${monthNameNL(m)} ${y}`, span });
+    i += span;
+  }
+  return out;
+}
+
+function weekSpans(dates){
+  const out = [];
+  for (let i = 0; i < dates.length;) {
+    const week = weekNumberISO(dates[i]);
+    let span = 1;
+    while (i + span < dates.length && weekNumberISO(dates[i + span]) === week) span++;
+    out.push({ week, span });
+    i += span;
+  }
+  return out;
 }
 
 function renderPlanningRow(row, dates, deliveryISO, completionISO){
@@ -460,6 +501,21 @@ function isWeekend(date){
 function dayHead(date){
   const names = ["zo", "ma", "di", "wo", "do", "vr", "za"];
   return `${names[date.getDay()]}<br>${date.getDate()}-${date.getMonth() + 1}`;
+}
+
+function monthNameNL(monthIndex){
+  return [
+    "januari", "februari", "maart", "april", "mei", "juni",
+    "juli", "augustus", "september", "oktober", "november", "december"
+  ][monthIndex] || "";
+}
+
+function weekNumberISO(date){
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
 }
 
 function formatDateNL(value){
