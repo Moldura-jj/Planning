@@ -33,9 +33,8 @@
       </div>
 
       <div class="bd">
-        <div class="grid cols-2">
-          <!-- LEFT COLUMN -->
-          <div class="grid" style="gap:14px">
+        <div class="project-detail-grid">
+          <div class="project-detail-col">
             <div class="card" style="box-shadow:none">
               <div class="hd"><h2>Project</h2></div>
               <div class="bd"><div id="blkProject" class="fieldgrid"></div></div>
@@ -52,8 +51,7 @@
             </div>
           </div>
 
-          <!-- RIGHT COLUMN -->
-          <div class="grid" style="gap:14px">
+          <div class="project-detail-col">
             <div class="card" style="box-shadow:none">
               <div class="hd"><h2>Order</h2></div>
               <div class="bd"><div id="blkOrder" class="fieldgrid"></div></div>
@@ -68,30 +66,30 @@
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="project-lower-grid">
-          <div class="project-sections-panel">
-            <div class="row" style="justify-content:space-between; align-items:flex-end; gap:12px">
-              <div>
-                <h2 style="margin:0 0 6px">Secties</h2>
-                <button class="btn primary" id="btnAddSection" type="button">+ Sectie</button>
-                <div class="muted" id="secMeta"></div>
+          <div class="project-side-col">
+            <div class="project-sections-panel">
+              <div class="row" style="justify-content:space-between; align-items:flex-end; gap:12px">
+                <div>
+                  <h2 style="margin:0 0 6px">Secties</h2>
+                  <button class="btn primary" id="btnAddSection" type="button">+ Sectie</button>
+                  <div class="muted" id="secMeta"></div>
+                </div>
+              </div>
+
+              <div style="margin-top:10px">
+                <table class="table" id="secTable">
+                  <thead>
+                    <tr id="secHead"></tr>
+                  </thead>
+                  <tbody id="secBody"></tbody>
+                </table>
               </div>
             </div>
 
-            <div style="margin-top:10px">
-              <table class="table" id="secTable">
-                <thead>
-                  <tr id="secHead"></tr>
-                </thead>
-                <tbody id="secBody"></tbody>
-              </table>
+            <div class="project-settings-space">
+              <h2>Instellingen</h2>
             </div>
-          </div>
-
-          <div class="project-settings-space">
-            <h2>Instellingen</h2>
           </div>
         </div>
 
