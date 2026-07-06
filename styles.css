@@ -2305,22 +2305,23 @@ td.hourscol{
 }
 
 .project-planning-table .pp-col-label{
-  width:320px;
+  width:360px;
 }
 
 .project-planning-table .pp-col-day{
-  width:46px;
+  width:30px;
 }
 
 .project-planning-table th,
 .project-planning-table td{
   border-right:1px solid #e5e7eb;
   border-bottom:1px solid #e5e7eb;
-  width:46px;
-  min-width:46px;
-  max-width:46px;
-  height:38px;
-  padding:4px;
+  position:relative;
+  width:30px;
+  min-width:30px;
+  max-width:30px;
+  height:42px;
+  padding:2px;
   vertical-align:middle;
   background:#fff;
 }
@@ -2340,9 +2341,9 @@ td.hourscol{
   position:sticky;
   left:0;
   z-index:3;
-  min-width:320px;
-  width:320px;
-  max-width:320px;
+  min-width:360px;
+  width:360px;
+  max-width:360px;
   text-align:left;
   background:#fff;
   box-shadow:1px 0 0 #e5e7eb;
@@ -2353,7 +2354,7 @@ td.hourscol{
 }
 
 .project-planning-table .wknd{
-  background:#dbeafe;
+  background:#dbeafe !important;
 }
 
 .project-planning-table tbody tr:nth-child(even) td:not(.wknd){
@@ -2371,6 +2372,40 @@ td.hourscol{
 
 .project-planning-table .pp-summary .pp-label{
   color:#334155;
+}
+
+.project-planning-table td.pp-delivery-col,
+.project-planning-table td.pp-completion-col{
+  --pp-date-line-delivery:transparent;
+  --pp-date-line-completion:transparent;
+}
+
+.project-planning-table td.pp-delivery-col{
+  --pp-date-line-delivery:#facc15;
+}
+
+.project-planning-table td.pp-completion-col{
+  --pp-date-line-completion:#f59e0b;
+}
+
+.project-planning-table td.pp-delivery-col::before,
+.project-planning-table td.pp-completion-col::before{
+  content:"";
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:0;
+  width:8px;
+  background:
+    linear-gradient(
+      to right,
+      var(--pp-date-line-delivery) 0 3px,
+      transparent 3px 4px,
+      var(--pp-date-line-completion) 4px 7px,
+      transparent 7px 8px
+    );
+  pointer-events:none;
+  z-index:4;
 }
 
 .pp-title{
@@ -2397,11 +2432,11 @@ td.hourscol{
 
 .pp-chip{
   display:block;
-  min-height:16px;
-  margin:2px 0;
-  padding:2px 4px;
+  min-height:14px;
+  margin:1px 0;
+  padding:1px 2px;
   border-radius:5px;
-  font-size:10.5px;
+  font-size:9.5px;
   line-height:1.15;
   font-weight:700;
   color:#0f172a;
