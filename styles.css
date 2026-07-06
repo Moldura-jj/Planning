@@ -1780,11 +1780,12 @@ td.hourscol{
 }
 
 
-/* Projectpagina weer “normale” breedte, planning blijft full width */
+/* Projectpagina breed genoeg voor de planning */
 .page-project .container{
-  max-width: 1200px;   /* kies 1100/1200/1300 wat je fijn vindt */
+  width: min(1880px, calc(100vw - 24px));
+  max-width: none;
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0;
 }
 
 .bar-subc{
@@ -2280,17 +2281,53 @@ td.hourscol{
   line-height: 1.15;
 }
 
+.project-lower-grid{
+  display:grid;
+  grid-template-columns:minmax(680px, 1.15fr) minmax(360px, .85fr);
+  gap:14px;
+  align-items:start;
+}
+
+.project-sections-panel,
+.project-settings-space{
+  min-width:0;
+}
+
+.project-settings-space{
+  min-height:220px;
+  border:1px solid var(--line);
+  border-radius:8px;
+  background:#fff;
+  padding:12px 14px;
+}
+
+.project-settings-space h2{
+  margin:0;
+}
+
 .project-planning-panel{
   margin-top:10px;
+  width:100%;
 }
 
 .project-planning-scroll{
   margin-top:10px;
   width:100%;
+  max-width:100%;
   overflow:auto;
   border:1px solid var(--line);
   border-radius:8px;
   background:#fff;
+}
+
+@media (max-width: 1100px){
+  .page-project .container{
+    width:calc(100vw - 16px);
+  }
+
+  .project-lower-grid{
+    grid-template-columns:1fr;
+  }
 }
 
 .project-planning-empty{

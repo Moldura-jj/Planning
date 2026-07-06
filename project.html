@@ -70,23 +70,29 @@
           </div>
         </div>
 
-        <div class="hr"></div>
+        <div class="project-lower-grid">
+          <div class="project-sections-panel">
+            <div class="row" style="justify-content:space-between; align-items:flex-end; gap:12px">
+              <div>
+                <h2 style="margin:0 0 6px">Secties</h2>
+                <button class="btn primary" id="btnAddSection" type="button">+ Sectie</button>
+                <div class="muted" id="secMeta"></div>
+              </div>
+            </div>
 
-        <div class="row" style="justify-content:space-between; align-items:flex-end; gap:12px">
-          <div>
-            <h2 style="margin:0 0 6px">Secties</h2>
-            <button class="btn primary" id="btnAddSection" type="button">+ Sectie</button>
-            <div class="muted" id="secMeta"></div>
+            <div style="margin-top:10px">
+              <table class="table" id="secTable">
+                <thead>
+                  <tr id="secHead"></tr>
+                </thead>
+                <tbody id="secBody"></tbody>
+              </table>
+            </div>
           </div>
-        </div>
 
-        <div style="margin-top:10px">
-          <table class="table" id="secTable">
-            <thead>
-              <tr id="secHead"></tr>
-            </thead>
-            <tbody id="secBody"></tbody>
-          </table>
+          <div class="project-settings-space">
+            <h2>Instellingen</h2>
+          </div>
         </div>
 
         <div class="hr"></div>
