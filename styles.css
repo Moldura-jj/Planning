@@ -2301,11 +2301,16 @@ td.hourscol{
   border-collapse:separate;
   border-spacing:0;
   table-layout:fixed;
+  font-family:"Segoe UI", Arial, sans-serif;
   font-size:12px;
 }
 
 .project-planning-table .pp-col-label{
-  width:360px;
+  width:300px;
+}
+
+.project-planning-table .pp-col-info{
+  width:120px;
 }
 
 .project-planning-table .pp-col-day{
@@ -2320,7 +2325,7 @@ td.hourscol{
   width:30px;
   min-width:30px;
   max-width:30px;
-  height:54px;
+  height:82px;
   padding:2px;
   vertical-align:middle;
   background:#fff;
@@ -2341,9 +2346,9 @@ td.hourscol{
   position:sticky;
   left:0;
   z-index:3;
-  min-width:360px;
-  width:360px;
-  max-width:360px;
+  min-width:300px;
+  width:300px;
+  max-width:300px;
   text-align:left;
   background:#fff;
   box-shadow:1px 0 0 #e5e7eb;
@@ -2351,6 +2356,26 @@ td.hourscol{
 
 .project-planning-table thead .pp-label{
   background:#f8fafc;
+}
+
+.project-planning-table .pp-info{
+  position:sticky;
+  left:300px;
+  z-index:3;
+  min-width:120px;
+  width:120px;
+  max-width:120px;
+  text-align:left;
+  background:#fff;
+  box-shadow:1px 0 0 #e5e7eb;
+  color:#475569;
+  line-height:17px;
+}
+
+.project-planning-table thead .pp-info{
+  background:#f8fafc;
+  color:#64748b;
+  font-weight:700;
 }
 
 .project-planning-table .wknd{
@@ -2362,6 +2387,10 @@ td.hourscol{
 }
 
 .project-planning-table tbody tr:nth-child(even) .pp-label{
+  background:#f8fafc;
+}
+
+.project-planning-table tbody tr:nth-child(even) .pp-info{
   background:#f8fafc;
 }
 
@@ -2409,21 +2438,18 @@ td.hourscol{
 }
 
 .pp-title{
-  font-weight:700;
-  color:#111827;
+  font-weight:500;
+  color:#1f2937;
+  font-size:14px;
+  line-height:1.2;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
 }
 
-.pp-sub{
-  margin-top:2px;
-  font-size:11px;
-  line-height:1.2;
-  color:#64748b;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+.pp-project-main .pp-title{
+  font-size:15px;
+  font-weight:500;
 }
 
 .pp-day{
@@ -2454,6 +2480,10 @@ td.hourscol{
   box-shadow:inset 0 0 0 1px rgba(15,23,42,.08);
 }
 
+.pp-chip.placeholder{
+  visibility:hidden;
+}
+
 .pp-chip.wvb{ background:#7dd3fc; }
 .pp-chip.prod{ background:#b7f0c2; }
 .pp-chip.mont{ background:#fde68a; }
@@ -2475,6 +2505,39 @@ td.hourscol{
 }
 
 .pp-chip.bar-concept::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0) 0,
+    rgba(0,0,0,0) 3px,
+    rgba(0,0,0,.16) 3px,
+    rgba(0,0,0,.16) 5px
+  );
+}
+
+.pp-chip.bar-mixed{
+  display:flex;
+  padding:0;
+}
+
+.pp-part{
+  flex:1 1 0;
+  display:block;
+  min-width:0;
+  padding:0 2px;
+  overflow:hidden;
+}
+
+.pp-part-concept{
+  position:relative;
+  outline:1px dashed rgba(0,0,0,.38);
+  outline-offset:-1px;
+}
+
+.pp-part-concept::after{
   content:"";
   position:absolute;
   inset:0;

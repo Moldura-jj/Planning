@@ -117,7 +117,7 @@ function renderProjectPlanning(root, meta, data){
   rows.push({
     cls: "project-main",
     title: projectTitle(project),
-    sub: projectDates(project),
+    info: projectDates(project),
     agg: totalAgg.get("project") || new Map(),
   });
 
@@ -127,30 +127,32 @@ function renderProjectPlanning(root, meta, data){
     rows.push({
       cls: "section",
       title: sectionTitle(s),
-      sub: sectionTotals(s),
+      info: sectionTotals(s),
       agg: sectionAgg.get(sid) || new Map(),
     });
   }
 
-  const projectProductie = filterAggTypes(projectLevelAgg.get("project"), ["productie", "cnc"]);
-  const projectMontage = filterAggTypes(projectLevelAgg.get("project"), ["montage", "reis"]);
-  if (hasAggValues(projectProductie)) rows.push({ cls: "summary", title: "Project - Productie", sub: "", agg: projectProductie });
-  if (hasAggValues(projectMontage)) rows.push({ cls: "summary", title: "Project - Montage", sub: "", agg: projectMontage });
+  const projectProductie = filterAggTypes(projectLevelAgg.get("project"), ["productie"]);
+  const projectMontage = filterAggTypes(projectLevelAgg.get("project"), ["montage"]);
+  if (hasAggValues(projectProductie)) rows.push({ cls: "summary", title: "Productie", info: "", agg: projectProductie });
+  if (hasAggValues(projectMontage)) rows.push({ cls: "summary", title: "Montage", info: "", agg: projectMontage });
 
   const deliveryISO = asISODate(project?.deliverydate || project?.deliverydate_d);
   const completionISO = asISODate(project?.completiondate || project?.completiondate_d);
-  const tableWidth = 360 + (dates.length * 30);
+  const tableWidth = 420 + (dates.length * 30);
   meta.textContent = `${rows.length} regels • ${formatDateNL(toISODate(dates[0]))} t/m ${formatDateNL(toISODate(dates[dates.length - 1]))}`;
 
   root.innerHTML = `
     <table class="project-planning-table" style="width:${tableWidth}px; min-width:${tableWidth}px;">
       <colgroup>
         <col class="pp-col-label" />
+        <col class="pp-col-info" />
         ${dates.map(() => `<col class="pp-col-day" />`).join("")}
       </colgroup>
       <thead>
         <tr>
           <th class="pp-label">Regel</th>
+          <th class="pp-info">Uren</th>
           ${dates.map(d => `<th>${dayHead(d)}</th>`).join("")}
         </tr>
       </thead>
@@ -166,8 +168,8 @@ function renderPlanningRow(row, dates, deliveryISO, completionISO){
     <tr class="pp-row pp-${escapeAttr(row.cls)}">
       <td class="pp-label">
         <div class="pp-title">${escapeHtml(row.title)}</div>
-        ${row.sub ? `<div class="pp-sub">${escapeHtml(row.sub)}</div>` : ""}
       </td>
+      <td class="pp-info">${renderInfo(row.info)}</td>
       ${dates.map(d => {
         const iso = toISODate(d);
         const day = row.agg?.get(iso);
@@ -186,16 +188,30 @@ function renderPlanningRow(row, dates, deliveryISO, completionISO){
 }
 
 function renderDayChips(day, prevDay, nextDay){
-  if (!day) return "";
+  day = day || {};
   const bars = [];
-  for (const type of ["wvb", "productie", "cnc", "montage", "reis", "onderaanneming"]) {
+  for (const type of ["wvb", "productie", "montage", "onderaanneming"]) {
     const item = day[type];
-    if (!item) continue;
+    if (!item) {
+      bars.push(`<span class="pp-chip placeholder">&nbsp;</span>`);
+      continue;
+    }
     const cls = type === "wvb" ? "wvb" : (type === "montage" || type === "reis" ? "mont" : type === "onderaanneming" ? "subc" : "prod");
     const realHours = Number(item.realHours || 0);
     const conceptHours = Number(item.conceptHours || 0);
 
-    if (realHours > 0) {
+    if (realHours > 0 && conceptHours > 0) {
+      bars.push(renderPlanningBar({
+        type,
+        cls,
+        kind: "mixed",
+        hours: realHours + conceptHours,
+        realHours,
+        conceptHours,
+        prev: hasLaneHours(prevDay?.[type]),
+        next: hasLaneHours(nextDay?.[type]),
+      }));
+    } else if (realHours > 0) {
       bars.push(renderPlanningBar({
         type,
         cls,
@@ -204,9 +220,7 @@ function renderDayChips(day, prevDay, nextDay){
         prev: Number(prevDay?.[type]?.realHours || 0) > 0,
         next: Number(nextDay?.[type]?.realHours || 0) > 0,
       }));
-    }
-
-    if (conceptHours > 0) {
+    } else if (conceptHours > 0) {
       bars.push(renderPlanningBar({
         type,
         cls,
@@ -215,19 +229,36 @@ function renderDayChips(day, prevDay, nextDay){
         prev: Number(prevDay?.[type]?.conceptHours || 0) > 0,
         next: Number(nextDay?.[type]?.conceptHours || 0) > 0,
       }));
+    } else {
+      bars.push(`<span class="pp-chip placeholder">&nbsp;</span>`);
     }
   }
   return bars.join("");
 }
 
-function renderPlanningBar({ type, cls, kind, hours, prev, next }){
+function renderInfo(value){
+  const parts = String(value || "").split(" • ").filter(Boolean);
+  if (!parts.length) return "";
+  return parts.map(part => `<div>${escapeHtml(part)}</div>`).join("");
+}
+
+function renderPlanningBar({ type, cls, kind, hours, realHours = 0, conceptHours = 0, prev, next }){
   const label = type === "onderaanneming" ? "OA" : fmtHours(hours);
   const edgeCls = `${prev ? "" : " bar-start"}${next ? "" : " bar-end"}`;
   const titleKind = kind === "concept" ? "concept" : "medewerker";
+  if (kind === "mixed") {
+    return `
+      <span class="pp-chip ${cls} bar-mixed${edgeCls}" title="${escapeAttr(type + " - medewerker + concept")}">
+        <span class="pp-part pp-part-real">${escapeHtml(fmtHours(realHours))}</span>
+        <span class="pp-part pp-part-concept">${escapeHtml(fmtHours(conceptHours))}</span>
+      </span>
+    `;
+  }
   return `<span class="pp-chip ${cls} bar-${kind}${edgeCls}" title="${escapeAttr(type + " - " + titleKind)}">${escapeHtml(label)}</span>`;
 }
 
 function addAgg(map, rowKey, dateISO, type, hours, concept){
+  type = visualType(type);
   const iso = String(dateISO || "").slice(0, 10);
   if (!rowKey || !iso || !type || !(hours > 0)) return;
   if (!map.has(rowKey)) map.set(rowKey, new Map());
@@ -237,6 +268,18 @@ function addAgg(map, rowKey, dateISO, type, hours, concept){
   if (!day[type]) day[type] = { realHours: 0, conceptHours: 0 };
   if (concept) day[type].conceptHours = roundHours(day[type].conceptHours + hours);
   else day[type].realHours = roundHours(day[type].realHours + hours);
+}
+
+function hasLaneHours(item){
+  return !!item && (Number(item.realHours || 0) + Number(item.conceptHours || 0)) > 0;
+}
+
+function visualType(type){
+  const t = String(type || "").toLowerCase().trim();
+  if (t === "cnc") return "productie";
+  if (t === "reis") return "montage";
+  if (t === "subc" || t === "onderaannemer") return "onderaanneming";
+  return t;
 }
 
 function filterAggTypes(agg, types){
@@ -268,13 +311,20 @@ function assignmentType(row){
 
 function assignmentHours(row){
   const explicit = Number(row?.hours || 0);
-  if (explicit > 0) return roundHours(explicit);
+  const type = visualType(assignmentType(row));
+  if (explicit > 0) {
+    if (explicit <= 1 && (type === "productie" || type === "montage")) return HOURS_PER_DAY;
+    return roundHours(explicit);
+  }
 
   const note = String(row?.note || "");
   const concept = note.match(/(?:^|[;\s])concept-hours:([0-9]+(?:[.,][0-9]+)?)/i);
   if (concept) {
     const n = Number(String(concept[1]).replace(",", "."));
-    if (Number.isFinite(n) && n > 0) return roundHours(n);
+    if (Number.isFinite(n) && n > 0) {
+      if (n <= 1 && (type === "productie" || type === "montage")) return HOURS_PER_DAY;
+      return roundHours(n);
+    }
   }
 
   return HOURS_PER_DAY;
