@@ -3,13 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>LOVD Planning — Projecten</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Moldura Planning — Projecten</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="stylesheet" href="styles.css?v=projects-list-2" />
+  <style>
+    .projects-row{ cursor:pointer; }
+    .projects-row:hover td{ background:#f8fafc; }
+    .projects-sort{
+      border:0;
+      background:transparent;
+      color:inherit;
+      font:inherit;
+      padding:0;
+      cursor:pointer;
+    }
+    .projects-sort::after{
+      content:"";
+      display:inline-block;
+      width:1.1em;
+      color:var(--muted);
+    }
+    .projects-sort.is-active.asc::after{ content:" ▲"; }
+    .projects-sort.is-active.desc::after{ content:" ▼"; }
+  </style>
 </head>
 <body class="page-project">
   <div class="container">
     <div class="topbar">
-      <div class="row" style="gap:12px">
+      <div class="topbar-left">
+        <a class="app-logo" href="index.html" aria-label="Moldura">
+          <img class="app-logo-img" src="Logo.png" alt="Moldura" />
+        </a>
         <a class="btn ghost" href="index.html">← Menu</a>
         <div class="brand"><span class="dot"></span> Projecten</div>
       </div>
@@ -31,10 +55,11 @@
         <table class="table" id="tbl">
           <thead>
             <tr>
-              <th style="width:160px">Projectnr</th>
-              <th style="width:320px">Klant</th>
+              <th style="width:160px"><button class="projects-sort" type="button" data-sort="projectNo">Projectnr</button></th>
+              <th style="width:320px"><button class="projects-sort" type="button" data-sort="customer">Klant</button></th>
               <th>Project</th>
-              <th style="width:140px">Status</th>
+              <th style="width:160px"><button class="projects-sort" type="button" data-sort="deliverydate">Leverdatum</button></th>
+              <th style="width:140px"><button class="projects-sort" type="button" data-sort="status">Status</button></th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>

@@ -6,6 +6,7 @@ import { el, escapeHtml, setStatus } from "./utils.js";
 const sb = makeSupabaseClient();
 
 let rows = [];
+let sortState = { key: "projectNo", dir: "desc" };
 
 document.addEventListener("DOMContentLoaded", init);
 
@@ -16,6 +17,17 @@ async function init(){
   el("btnLogout").addEventListener("click", ()=>signOut(sb));
   el("btnReload").addEventListener("click", load);
   el("q").addEventListener("input", render);
+  document.querySelectorAll(".projects-sort").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.sort;
+      if (sortState.key === key) {
+        sortState.dir = sortState.dir === "asc" ? "desc" : "asc";
+      } else {
+        sortState = { key, dir: key === "projectNo" ? "desc" : "asc" };
+      }
+      render();
+    });
+  });
 
   // Nieuw project modal
   el("btnAddProject")?.addEventListener("click", openProjectModal);
@@ -39,7 +51,9 @@ async function load(){
       id:${DB.projectPkCol},
       ${DB.projectNoCol},
       ${DB.projectNameCol},
+      name_kl,
       deliveryname,
+      deliverydate,
       salesstatus
     `)
     .order(DB.projectNoCol, { ascending: false })
@@ -62,29 +76,104 @@ function render(){
   const filtered = !q ? rows : rows.filter(r=>{
     const no = (r[DB.projectNoCol] ?? "").toString().toLowerCase();
     const pr = (r[DB.projectNameCol] ?? "").toString().toLowerCase();
-    const kn = (r.deliveryname ?? "").toString().toLowerCase();
+    const kn = (r.name_kl ?? "").toString().toLowerCase();
 
     return no.includes(q) || pr.includes(q) || kn.includes(q);
   });
 
-  el("meta").textContent = `${filtered.length} / ${rows.length}`;
+  const sorted = filtered.slice().sort(compareProjects);
 
-  el("tbody").innerHTML = filtered.map(r=>{
+  el("meta").textContent = `${sorted.length} / ${rows.length}`;
+  updateSortHeaders();
+
+  el("tbody").innerHTML = sorted.map(r=>{
     const id = r.id;
     const projectNo = escapeHtml(r[DB.projectNoCol] ?? "");
     const projectName = escapeHtml(r[DB.projectNameCol] ?? "");
-    const klant = escapeHtml(r.deliveryname ?? "");
+    const klant = escapeHtml(r.name_kl ?? "");
+    const deliverydate = escapeHtml(formatDateNL(r.deliverydate));
     const status = escapeHtml(r.salesstatus ?? "");
+    const href = `project.html?id=${encodeURIComponent(id)}`;
 
     return `
-      <tr>
-        <td><a class="pill" href="project.html?id=${encodeURIComponent(id)}">${projectNo}</a></td>
+      <tr class="projects-row" data-href="${href}">
+        <td><a class="pill" href="${href}">${projectNo}</a></td>
         <td>${klant}</td>
         <td>${projectName}</td>
+        <td>${deliverydate}</td>
         <td>${status}</td>
       </tr>
     `;
   }).join("");
+
+  el("tbody").querySelectorAll(".projects-row").forEach(row => {
+    row.addEventListener("click", (ev) => {
+      if (ev.target.closest("a, button, input, select, textarea")) return;
+      window.location.href = row.dataset.href;
+    });
+  });
+}
+
+function compareProjects(a, b){
+  const dir = sortState.dir === "desc" ? -1 : 1;
+  const key = sortState.key;
+
+  let av;
+  let bv;
+
+  if (key === "projectNo") {
+    av = numericOrText(a[DB.projectNoCol]);
+    bv = numericOrText(b[DB.projectNoCol]);
+  } else if (key === "customer") {
+    av = String(a.name_kl ?? "").toLowerCase();
+    bv = String(b.name_kl ?? "").toLowerCase();
+  } else if (key === "deliverydate") {
+    av = dateValue(a.deliverydate);
+    bv = dateValue(b.deliverydate);
+  } else if (key === "status") {
+    av = Number(a.salesstatus ?? 0);
+    bv = Number(b.salesstatus ?? 0);
+  } else {
+    av = "";
+    bv = "";
+  }
+
+  if (typeof av === "number" && typeof bv === "number") {
+    return (av - bv) * dir;
+  }
+
+  return String(av).localeCompare(String(bv), "nl", { numeric:true, sensitivity:"base" }) * dir;
+}
+
+function numericOrText(value){
+  const text = String(value ?? "").trim();
+  const num = Number(text);
+  return Number.isFinite(num) && text !== "" ? num : text.toLowerCase();
+}
+
+function dateValue(value){
+  if (!value) return Number.MAX_SAFE_INTEGER;
+  const time = new Date(value).getTime();
+  return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
+}
+
+function formatDateNL(value){
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+  return `${dd}-${mm}-${yyyy}`;
+}
+
+function updateSortHeaders(){
+  document.querySelectorAll(".projects-sort").forEach(btn => {
+    const active = btn.dataset.sort === sortState.key;
+    btn.classList.toggle("is-active", active);
+    btn.classList.toggle("asc", active && sortState.dir === "asc");
+    btn.classList.toggle("desc", active && sortState.dir === "desc");
+  });
 }
 
 function openProjectModal(){
@@ -136,7 +225,7 @@ async function saveNewProject(){
     const projectRow = {
       [DB.projectNoCol]: projectNo,
       [DB.projectNameCol]: projectName,
-      deliveryname: klantNaam,
+      name_kl: klantNaam,
       salesstatus: salesstatus
     };
 
