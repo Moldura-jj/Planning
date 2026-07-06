@@ -2320,7 +2320,7 @@ td.hourscol{
   width:30px;
   min-width:30px;
   max-width:30px;
-  height:42px;
+  height:54px;
   padding:2px;
   vertical-align:middle;
   background:#fff;
@@ -2430,17 +2430,27 @@ td.hourscol{
   text-align:center;
 }
 
+.pp-stack{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  align-items:stretch;
+}
+
 .pp-chip{
   display:block;
-  min-height:14px;
+  position:relative;
+  min-height:17px;
   margin:1px 0;
-  padding:1px 2px;
-  border-radius:5px;
-  font-size:9.5px;
-  line-height:1.15;
+  padding:0 3px;
+  border-radius:0;
+  font-size:10px;
+  line-height:17px;
   font-weight:700;
   color:#0f172a;
   white-space:nowrap;
+  overflow:hidden;
+  text-overflow:clip;
   box-shadow:inset 0 0 0 1px rgba(15,23,42,.08);
 }
 
@@ -2449,13 +2459,32 @@ td.hourscol{
 .pp-chip.mont{ background:#fde68a; }
 .pp-chip.subc{ background:#f5d0fe; }
 
-.pp-chip.concept{
-  background-image:repeating-linear-gradient(
-    135deg,
-    rgba(255,255,255,.45) 0,
-    rgba(255,255,255,.45) 4px,
-    rgba(15,23,42,.08) 4px,
-    rgba(15,23,42,.08) 8px
+.pp-chip.bar-start{
+  border-top-left-radius:5px;
+  border-bottom-left-radius:5px;
+}
+
+.pp-chip.bar-end{
+  border-top-right-radius:5px;
+  border-bottom-right-radius:5px;
+}
+
+.pp-chip.bar-concept{
+  outline:1px dashed rgba(0,0,0,.38);
+  outline-offset:-1px;
+}
+
+.pp-chip.bar-concept::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:repeating-linear-gradient(
+    45deg,
+    rgba(0,0,0,0) 0,
+    rgba(0,0,0,0) 3px,
+    rgba(0,0,0,.16) 3px,
+    rgba(0,0,0,.16) 5px
   );
 }
 .section-action-btn{

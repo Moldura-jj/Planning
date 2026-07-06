@@ -171,29 +171,60 @@ function renderPlanningRow(row, dates, deliveryISO, completionISO){
       ${dates.map(d => {
         const iso = toISODate(d);
         const day = row.agg?.get(iso);
+        const prevDay = row.agg?.get(toISODate(addDays(d, -1)));
+        const nextDay = row.agg?.get(toISODate(addDays(d, 1)));
         const cls = [
           "pp-day",
           isWeekend(d) ? "wknd" : "",
           deliveryISO && iso === deliveryISO ? "pp-delivery-col" : "",
           completionISO && iso === completionISO ? "pp-completion-col" : "",
         ].filter(Boolean).join(" ");
-        return `<td class="${cls}">${renderDayChips(day)}</td>`;
+        return `<td class="${cls}"><div class="pp-stack">${renderDayChips(day, prevDay, nextDay)}</div></td>`;
       }).join("")}
     </tr>
   `;
 }
 
-function renderDayChips(day){
+function renderDayChips(day, prevDay, nextDay){
   if (!day) return "";
-  const chips = [];
+  const bars = [];
   for (const type of ["wvb", "productie", "cnc", "montage", "reis", "onderaanneming"]) {
     const item = day[type];
-    if (!item || !(item.hours > 0)) continue;
+    if (!item) continue;
     const cls = type === "wvb" ? "wvb" : (type === "montage" || type === "reis" ? "mont" : type === "onderaanneming" ? "subc" : "prod");
-    const label = type === "onderaanneming" ? "OA" : fmtHours(item.hours);
-    chips.push(`<span class="pp-chip ${cls}${item.concept ? " concept" : ""}" title="${escapeAttr(type)}">${escapeHtml(label)}</span>`);
+    const realHours = Number(item.realHours || 0);
+    const conceptHours = Number(item.conceptHours || 0);
+
+    if (realHours > 0) {
+      bars.push(renderPlanningBar({
+        type,
+        cls,
+        kind: "real",
+        hours: realHours,
+        prev: Number(prevDay?.[type]?.realHours || 0) > 0,
+        next: Number(nextDay?.[type]?.realHours || 0) > 0,
+      }));
+    }
+
+    if (conceptHours > 0) {
+      bars.push(renderPlanningBar({
+        type,
+        cls,
+        kind: "concept",
+        hours: conceptHours,
+        prev: Number(prevDay?.[type]?.conceptHours || 0) > 0,
+        next: Number(nextDay?.[type]?.conceptHours || 0) > 0,
+      }));
+    }
   }
-  return chips.join("");
+  return bars.join("");
+}
+
+function renderPlanningBar({ type, cls, kind, hours, prev, next }){
+  const label = type === "onderaanneming" ? "OA" : fmtHours(hours);
+  const edgeCls = `${prev ? "" : " bar-start"}${next ? "" : " bar-end"}`;
+  const titleKind = kind === "concept" ? "concept" : "medewerker";
+  return `<span class="pp-chip ${cls} bar-${kind}${edgeCls}" title="${escapeAttr(type + " - " + titleKind)}">${escapeHtml(label)}</span>`;
 }
 
 function addAgg(map, rowKey, dateISO, type, hours, concept){
@@ -203,9 +234,9 @@ function addAgg(map, rowKey, dateISO, type, hours, concept){
   const byDate = map.get(rowKey);
   if (!byDate.has(iso)) byDate.set(iso, {});
   const day = byDate.get(iso);
-  if (!day[type]) day[type] = { hours: 0, concept: false };
-  day[type].hours = roundHours(day[type].hours + hours);
-  day[type].concept = day[type].concept || concept;
+  if (!day[type]) day[type] = { realHours: 0, conceptHours: 0 };
+  if (concept) day[type].conceptHours = roundHours(day[type].conceptHours + hours);
+  else day[type].realHours = roundHours(day[type].realHours + hours);
 }
 
 function filterAggTypes(agg, types){
@@ -222,7 +253,9 @@ function filterAggTypes(agg, types){
 }
 
 function hasAggValues(agg){
-  return !!agg && Array.from(agg.values()).some(day => Object.values(day).some(v => Number(v.hours || 0) > 0));
+  return !!agg && Array.from(agg.values()).some(day =>
+    Object.values(day).some(v => (Number(v.realHours || 0) + Number(v.conceptHours || 0)) > 0)
+  );
 }
 
 function assignmentType(row){
