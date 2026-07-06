@@ -2842,19 +2842,16 @@ async function autoPlanSectionConcept(sectionId, projectId, dateISO, workType, h
       for (const iid of (entry.inhuurMontIds || [])) addEmpItem(`inhuur:${String(iid).trim()}`, "montage", txt);
     }
 
-    // ✅ ook tonen: iedereen met beschikbaarheid (uren > 0) op deze dag
+    // ✅ vaste medewerkers altijd tonen, ook zonder planning of beschikbare uren op deze dag
     const capByEmp = ctx.capByEmp || new Map();
     const inhuurByEmp = ctx.inhuurByEmp || new Map();
 
-    // vaste medewerkers met capaciteit > 0
     for (const w of (werknemers || [])) {
-      const eid = String(w?.id ?? "").trim();
+      const eid = String(w?.id ?? w?.werknemer_id ?? w?.employee_id ?? "").trim();
       if (!eid) continue;
+      if (eid === String(DUMMY_EMP_ID)) continue;
 
-      const h = Number(capByEmp.get(eid)?.get(dateISO) || 0);
-      if (h > 0) {
-        if (!byEmp.has(eid)) byEmp.set(eid, []); // leeg = beschikbaar maar niets ingepland
-      }
+      if (!byEmp.has(eid)) byEmp.set(eid, []);
     }
 
     // inhuur met uren > 0
