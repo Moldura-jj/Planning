@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Moldura Planning — Project</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
   <link rel="stylesheet" href="styles.css?v=project-layout-3" />
   <style>
     .page-project{ overflow-x:auto; }
@@ -19,6 +20,12 @@
       grid-template-columns:420px 420px minmax(760px, 1fr);
       gap:28px;
       align-items:start;
+    }
+    .project-topbar-nav{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      min-width:0;
     }
     .project-detail-col,
     .project-side-col{
@@ -37,6 +44,7 @@
     .project-sections-panel .project-sections-head{
       padding:12px 14px;
       border-bottom:1px solid var(--line);
+      align-items:flex-start !important;
     }
     .project-sections-panel .project-sections-body{
       padding:12px 14px;
@@ -46,8 +54,12 @@
 <body class="page-project">
   <div class="container">
     <div class="topbar">
-      <div class="row" style="gap:12px">
-        <a class="btn ghost" href="projects.html">← Projecten</a>
+      <div class="project-topbar-nav">
+        <a class="app-logo" href="index.html" aria-label="Moldura">
+          <img class="app-logo-img" src="Logo.png" alt="Moldura" />
+        </a>
+        <a class="btn ghost nav-projects" href="projects.html">Projecten</a>
+        <a class="btn ghost nav-projects" href="planning.html">Planning</a>
         <div class="brand"><span class="dot"></span> <span id="title">Project</span></div>
       </div>
       <div class="row">
@@ -63,7 +75,7 @@
           <span class="chip blue" id="chipHead"></span>
         </div>
         <div class="row" style="gap:10px; flex-wrap:wrap">
-          <button class="btn primary" id="btnSaveProject" type="button">Opslaan</button>
+          <button class="btn ghost nav-projects" id="btnSaveProject" type="button">Opslaan</button>
           <span class="pill" id="pillStatus"></span>
           <span class="muted" id="pillMeta"></span>
         </div>
@@ -109,9 +121,9 @@
               <div class="project-sections-head row" style="justify-content:space-between; align-items:flex-end; gap:12px">
                 <div>
                   <h2 style="margin:0 0 6px">Secties</h2>
-                  <button class="btn primary" id="btnAddSection" type="button">+ Sectie</button>
                   <div class="muted" id="secMeta"></div>
                 </div>
+                <button class="btn ghost nav-projects" id="btnAddSection" type="button">+ Sectie</button>
               </div>
 
               <div class="project-sections-body">
