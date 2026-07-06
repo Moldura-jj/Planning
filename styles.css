@@ -1896,6 +1896,65 @@ td.hourscol{
   max-height:calc(100vh - 84px);
 }
 
+/* Sticky linker planningkolommen volledig afdekken bij horizontaal scrollen */
+.planner-table td.rowhdr.sticky-left,
+.planner-table th.rowhdr.sticky-left{
+  z-index:90 !important;
+  background-color:#fff !important;
+  background-clip:border-box !important;
+}
+
+.planner-table tbody tr.zebra > td.rowhdr.sticky-left{
+  background-color:#f5f6f8 !important;
+}
+
+.planner-table th.hourscol.sticky-left2,
+.planner-table td.hourscol.sticky-left2{
+  z-index:91 !important;
+  background-color:#fff !important;
+  background-clip:border-box !important;
+}
+
+.planner-table tbody tr.zebra > td.hourscol.sticky-left2{
+  background-color:#f5f6f8 !important;
+}
+
+.planner-table td.rowhdr.sticky-left::after,
+.planner-table th.rowhdr.sticky-left::after{
+  content:"";
+  position:absolute;
+  top:0;
+  right:-2px;
+  bottom:0;
+  width:2px;
+  background:#cbd5e1;
+  pointer-events:none;
+  z-index:3;
+}
+
+.planner-table td.hourscol.sticky-left2::after,
+.planner-table th.hourscol.sticky-left2::after{
+  content:"";
+  position:absolute;
+  top:0;
+  right:-2px;
+  bottom:0;
+  width:2px;
+  background:#111827;
+  pointer-events:none;
+  z-index:3;
+}
+
+.planner-table tr.project-topline > td.rowhdr.sticky-left,
+.planner-table tr.project-topline > td.hourscol.sticky-left2{
+  box-shadow:inset 0 2px 0 #626262 !important;
+}
+
+.planner-table tr.project-bottomline > td.rowhdr.sticky-left,
+.planner-table tr.project-bottomline > td.hourscol.sticky-left2{
+  box-shadow:inset 0 -3px 0 #626262 !important;
+}
+
 
 
 /* capaciteit modal: week invoer met 'gepland' kolom */
