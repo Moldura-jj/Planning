@@ -990,6 +990,22 @@ td.section-click{
   line-height:1.2;
 }
 
+.project-header-actions{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+
+.btn-collapse-projects{
+  min-height:22px;
+  padding:2px 9px;
+  border-radius:7px;
+  font-size:12px;
+  line-height:1.2;
+  white-space:nowrap;
+}
+
 .new-project-grid{
   display:grid;
   grid-template-columns:1fr 1fr;

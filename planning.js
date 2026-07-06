@@ -4171,7 +4171,10 @@ trMonth.appendChild(hdrCell("", `hdr-cell hourscol sticky-top sticky-left2 ${hou
     const trWeek = document.createElement("tr");
     trWeek.className = "hdr hdr-week";
     trWeek.appendChild(hdrCell(
-      `<button type="button" class="btn small btn-new-project" id="btnNewProject" title="Nieuw project toevoegen">+ Project</button>`,
+      `<div class="project-header-actions">
+        <button type="button" class="btn small btn-new-project" id="btnNewProject" title="Nieuw project toevoegen">+ Project</button>
+        <button type="button" class="btn small ghost btn-collapse-projects" id="btnCollapseProjects" title="Alle projecten dichtklappen">Alles dicht</button>
+      </div>`,
       "rowhdr sticky-left sticky-top2"
     ));
     trWeek.appendChild(hdrCell("", `hdr-cell hourscol sticky-top2 sticky-left2 ${hoursColOpen ? "" : "hourscol-collapsed"}`.trim()));
@@ -5356,6 +5359,13 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
   }
     // click on section cell -> assignments modal
     gridEl.onclick = async (ev) => {
+
+    const collapseProjectsBtn = ev.target.closest("#btnCollapseProjects");
+    if (collapseProjectsBtn) {
+      ev.stopPropagation();
+      closeAllProjects();
+      return;
+    }
 
     const newProjectBtn = ev.target.closest("#btnNewProject");
     if (newProjectBtn) {
@@ -7541,6 +7551,13 @@ loadAndRender();
     }
 
     applyZebraVisible();
+  }
+
+  function closeAllProjects(){
+    gridEl.querySelectorAll('.expander[data-proj].open').forEach(btn => {
+      const pid = String(btn.dataset.proj || "");
+      if (pid) toggleProject(pid, false);
+    });
   }
 
 
