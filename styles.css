@@ -1865,6 +1865,37 @@ td.hourscol{
   background: #94a3b8;
 }
 
+.planning-topbar-period{
+  margin-left:18px;
+  gap:10px;
+  flex-wrap:nowrap;
+  align-items:center;
+}
+
+.planning-topbar-period #current-week-label{
+  margin:0;
+  font-size:18px;
+  line-height:1;
+  white-space:nowrap;
+}
+
+.planning-card{
+  margin-top:6px;
+}
+
+.planning-card .bd{
+  padding:0 10px 10px;
+}
+
+.planning-card #plannerStatus{
+  min-height:0;
+}
+
+.planning-card .planner-scroll{
+  height:calc(100vh - 84px);
+  max-height:calc(100vh - 84px);
+}
+
 
 
 /* capaciteit modal: week invoer met 'gepland' kolom */
