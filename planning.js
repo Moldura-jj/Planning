@@ -5572,18 +5572,6 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
       return;
     }
 
-    const projectRowHit = ev.target.closest("tr.project-row");
-    if (projectRowHit && !ev.target.closest("button, a, input, select, textarea, .project-date-marker")) {
-      ev.stopPropagation();
-
-      const pid = String(projectRowHit.querySelector(".expander[data-proj]")?.dataset?.proj || "");
-      if (pid) {
-        toggleProject(pid);
-        applyZebraVisible();
-      }
-      return;
-    }
-
     const projHit = ev.target.closest(".projtext[data-proj]");
     if (projHit) {
       const pid = String(projHit.dataset.proj || "");
@@ -5618,6 +5606,18 @@ const empName = w?.[empNameKey] ?? w?.naam ?? w?.name ?? String(empId ?? "");
           includePlanningCol: getIncludePlanningColumn(secties || []),
         }
       });
+      return;
+    }
+
+    const projectRowHit = ev.target.closest("tr.project-row");
+    if (projectRowHit && !ev.target.closest("button, a, input, select, textarea, .project-date-marker, .projtext[data-proj]")) {
+      ev.stopPropagation();
+
+      const pid = String(projectRowHit.querySelector(".expander[data-proj]")?.dataset?.proj || "");
+      if (pid) {
+        toggleProject(pid);
+        applyZebraVisible();
+      }
       return;
     }
 
