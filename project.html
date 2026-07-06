@@ -27,16 +27,20 @@
       align-content:start;
       min-width:0;
     }
-    .project-sections-panel,
-    .project-settings-space{ min-width:0; }
-    .project-settings-space{
-      min-height:520px;
+    .project-sections-panel{ min-width:0; }
+    .project-sections-panel{
       border:1px solid var(--line);
       border-radius:8px;
       background:#fff;
+      overflow:hidden;
+    }
+    .project-sections-panel .project-sections-head{
+      padding:12px 14px;
+      border-bottom:1px solid var(--line);
+    }
+    .project-sections-panel .project-sections-body{
       padding:12px 14px;
     }
-    .project-settings-space h2{ margin:0; }
   </style>
 </head>
 <body class="page-project">
@@ -102,7 +106,7 @@
 
           <div class="project-side-col">
             <div class="project-sections-panel">
-              <div class="row" style="justify-content:space-between; align-items:flex-end; gap:12px">
+              <div class="project-sections-head row" style="justify-content:space-between; align-items:flex-end; gap:12px">
                 <div>
                   <h2 style="margin:0 0 6px">Secties</h2>
                   <button class="btn primary" id="btnAddSection" type="button">+ Sectie</button>
@@ -110,7 +114,7 @@
                 </div>
               </div>
 
-              <div style="margin-top:10px">
+              <div class="project-sections-body">
                 <table class="table" id="secTable">
                   <thead>
                     <tr id="secHead"></tr>
@@ -118,10 +122,6 @@
                   <tbody id="secBody"></tbody>
                 </table>
               </div>
-            </div>
-
-            <div class="project-settings-space">
-              <h2>Instellingen</h2>
             </div>
           </div>
         </div>
