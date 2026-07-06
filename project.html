@@ -4,7 +4,40 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Moldura Planning — Project</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=project-layout-3" />
+  <style>
+    .page-project{ overflow-x:auto; }
+    .page-project .container{
+      width:min(1880px, calc(100vw - 24px));
+      min-width:1720px;
+      max-width:none;
+      margin:0 auto;
+      padding:0;
+    }
+    .project-detail-grid{
+      display:grid !important;
+      grid-template-columns:420px 420px minmax(760px, 1fr);
+      gap:28px;
+      align-items:start;
+    }
+    .project-detail-col,
+    .project-side-col{
+      display:grid;
+      gap:14px;
+      align-content:start;
+      min-width:0;
+    }
+    .project-sections-panel,
+    .project-settings-space{ min-width:0; }
+    .project-settings-space{
+      min-height:520px;
+      border:1px solid var(--line);
+      border-radius:8px;
+      background:#fff;
+      padding:12px 14px;
+    }
+    .project-settings-space h2{ margin:0; }
+  </style>
 </head>
 <body class="page-project">
   <div class="container">
