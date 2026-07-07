@@ -623,7 +623,9 @@ const defaultSettings = {
           if (insCap.error) throw new Error("Capaciteit opslaan: " + insCap.error.message);
         }
         }
-        await syncGeneralAbsencesForEmployeeVisibleRange(empId);
+        // Verlof niet automatisch synchroniseren bij beschikbaarheid wijzigen.
+        // Verlof mag alleen wijzigen via het verlofmodal.
+        // await syncGeneralAbsencesForEmployeeVisibleRange(empId);
       }
     }
 
