@@ -104,25 +104,23 @@ function stretchProjectDetails(projectRow){
   if (!leftCell) return;
 
   leftCell.classList.add("project-details-fullheight");
-  Array.from(leftCell.children || []).forEach(child => {
-    child.classList.add("project-details-fullheight-child");
-  });
+  leftCell.querySelector(".projtext")?.classList.add("project-details-fullheight-child");
+  leftCell.querySelector(".project-date-summary")?.classList.add("project-details-fullheight-child");
 }
 
 function moveAndStyleStatus2Projects(){
-  if (!status2ProjectIds.size) return;
-
   const tbody = document.querySelector(".planner-table tbody");
   if (!tbody) return;
 
   removeOldConceptRows(tbody);
+  if (!status2ProjectIds.size) return;
 
   const insertBefore = findCapacityStart(tbody);
   if (!insertBefore) return;
 
   const fragment = document.createDocumentFragment();
 
-  Array.from(tbody.querySelectorAll("tr.project-row")).forEach(projectRow => {
+  Array.from(tbody.querySelectorAll("tr.project-row:not(.concept-status2-row)")).forEach(projectRow => {
     stretchProjectDetails(projectRow);
 
     const pid = getProjectId(projectRow);
@@ -136,7 +134,7 @@ function moveAndStyleStatus2Projects(){
 
     fragment.appendChild(projectRow);
 
-    Array.from(tbody.querySelectorAll(`tr[data-parent="${CSS.escape(pid)}"]`)).forEach(childRow => {
+    Array.from(tbody.querySelectorAll(`tr[data-parent="${CSS.escape(pid)}"]:not(.concept-status2-row)`)).forEach(childRow => {
       childRow.style.display = "";
       childRow.classList.remove("planning-status-hidden");
       childRow.classList.add("status2-child-row");
@@ -185,32 +183,50 @@ function ensureStyle(){
       background-color:#fffbeb !important;
     }
 
-    /* Projectonderlijn niet meer dubbel/dik: gelijk aan de planninglijn rechts. */
+    /* Projectonderlijn gelijk aan de normale dunne planninglijn. */
     .planner-table tbody tr.project-row > td,
     .planner-table tbody tr.project-row > th,
     .planner-table tbody tr.project-bottomline > td,
     .planner-table tbody tr.project-bottomline > th,
     .planner-table tbody tr.project-row.project-bottomline > td,
     .planner-table tbody tr.project-row.project-bottomline > th{
-      border-bottom:1px solid #626262 !important;
+      border-bottom:1px solid #e6e8ef !important;
       box-shadow:none !important;
     }
 
     .planner-table tbody tr.project-row > td.project-cell,
     .planner-table tbody tr.project-row > td.rowhdr,
     .planner-table tbody tr.project-row > td.sticky-left{
-      height:100% !important;
       padding-top:0 !important;
       padding-bottom:0 !important;
-      vertical-align:stretch !important;
+      height:100% !important;
       background-clip:border-box !important;
     }
 
-    .planner-table tbody tr.project-row > td.project-cell > *,
-    .planner-table tbody tr.project-row > td.rowhdr > *,
-    .planner-table tbody tr.project-row > td.sticky-left > *{
+    .planner-table tbody tr.project-row > td.project-cell .projtext,
+    .planner-table tbody tr.project-row > td.rowhdr .projtext,
+    .planner-table tbody tr.project-row > td.sticky-left .projtext{
       min-height:100% !important;
+      display:inline-flex !important;
+      flex-direction:column !important;
+      justify-content:center !important;
+      padding-top:6px !important;
+      padding-bottom:6px !important;
       box-sizing:border-box !important;
+      vertical-align:middle !important;
+    }
+
+    .planner-table tbody tr.project-row > td.project-cell .project-date-summary,
+    .planner-table tbody tr.project-row > td.rowhdr .project-date-summary,
+    .planner-table tbody tr.project-row > td.sticky-left .project-date-summary{
+      min-height:100% !important;
+      display:inline-flex !important;
+      flex-direction:column !important;
+      justify-content:center !important;
+      padding-top:6px !important;
+      padding-bottom:6px !important;
+      box-sizing:border-box !important;
+      vertical-align:middle !important;
     }
 
     .project-details-fullheight{
