@@ -158,7 +158,7 @@ function ensureStyle(){
       z-index:1;
     }
 
-    .planner-table tbody td.rowhdr.sticky-left,
+    /* Alleen project- en sectiecellen krijgen de extra maskerlaag. Niet generieke rowhdr/capaciteitcellen, anders verdwijnen namen. */
     .planner-table tbody td.project-cell.sticky-left,
     .planner-table tbody td.section-cell.sticky-left{
       position:sticky !important;
@@ -172,7 +172,6 @@ function ensureStyle(){
       overflow:hidden !important;
     }
 
-    .planner-table tbody td.rowhdr.sticky-left::before,
     .planner-table tbody td.project-cell.sticky-left::before,
     .planner-table tbody td.section-cell.sticky-left::before{
       content:"" !important;
@@ -183,11 +182,30 @@ function ensureStyle(){
       pointer-events:none !important;
     }
 
-    .planner-table tbody td.rowhdr.sticky-left > *,
     .planner-table tbody td.project-cell.sticky-left > *,
     .planner-table tbody td.section-cell.sticky-left > *{
       position:relative !important;
       z-index:2 !important;
+    }
+
+    /* Generieke linkerkolom/capaciteitnamen altijd zichtbaar houden. */
+    .planner-table tbody td.rowhdr.sticky-left,
+    .planner-table tbody td.cap-name.sticky-left,
+    .planner-table tbody td.sum-label.sticky-left,
+    .planner-table tbody td.balance-label.sticky-left{
+      position:sticky !important;
+      left:0 !important;
+      z-index:900 !important;
+      background-clip:border-box !important;
+      overflow:visible !important;
+    }
+
+    .planner-table tbody td.rowhdr.sticky-left::before,
+    .planner-table tbody td.cap-name.sticky-left::before,
+    .planner-table tbody td.sum-label.sticky-left::before,
+    .planner-table tbody td.balance-label.sticky-left::before{
+      content:none !important;
+      display:none !important;
     }
 
     .planner-table tbody td.hourscol.sticky-left2,
