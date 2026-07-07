@@ -99,6 +99,16 @@ function addBadge(projectRow){
   target.appendChild(badge);
 }
 
+function stretchProjectDetails(projectRow){
+  const leftCell = projectRow.querySelector("td.project-cell, td.rowhdr.sticky-left, td.sticky-left");
+  if (!leftCell) return;
+
+  leftCell.classList.add("project-details-fullheight");
+  Array.from(leftCell.children || []).forEach(child => {
+    child.classList.add("project-details-fullheight-child");
+  });
+}
+
 function moveAndStyleStatus2Projects(){
   if (!status2ProjectIds.size) return;
 
@@ -113,6 +123,8 @@ function moveAndStyleStatus2Projects(){
   const fragment = document.createDocumentFragment();
 
   Array.from(tbody.querySelectorAll("tr.project-row")).forEach(projectRow => {
+    stretchProjectDetails(projectRow);
+
     const pid = getProjectId(projectRow);
     if (!status2ProjectIds.has(pid)) return;
 
@@ -171,6 +183,43 @@ function ensureStyle(){
     .planner-table tbody tr.status2-child-row > td,
     .planner-table tbody tr.status2-child-row > th{
       background-color:#fffbeb !important;
+    }
+
+    /* Projectonderlijn niet meer dubbel/dik: gelijk aan de planninglijn rechts. */
+    .planner-table tbody tr.project-row > td,
+    .planner-table tbody tr.project-row > th,
+    .planner-table tbody tr.project-bottomline > td,
+    .planner-table tbody tr.project-bottomline > th,
+    .planner-table tbody tr.project-row.project-bottomline > td,
+    .planner-table tbody tr.project-row.project-bottomline > th{
+      border-bottom:1px solid #626262 !important;
+      box-shadow:none !important;
+    }
+
+    .planner-table tbody tr.project-row > td.project-cell,
+    .planner-table tbody tr.project-row > td.rowhdr,
+    .planner-table tbody tr.project-row > td.sticky-left{
+      height:100% !important;
+      padding-top:0 !important;
+      padding-bottom:0 !important;
+      vertical-align:stretch !important;
+      background-clip:border-box !important;
+    }
+
+    .planner-table tbody tr.project-row > td.project-cell > *,
+    .planner-table tbody tr.project-row > td.rowhdr > *,
+    .planner-table tbody tr.project-row > td.sticky-left > *{
+      min-height:100% !important;
+      box-sizing:border-box !important;
+    }
+
+    .project-details-fullheight{
+      height:100% !important;
+      min-height:100% !important;
+    }
+
+    .project-details-fullheight-child{
+      box-sizing:border-box !important;
     }
   `;
   document.head.appendChild(style);
