@@ -1,8 +1,7 @@
 import { makeSupabaseClient } from "./auth.js";
 
 // planning-status2-inline-fix.js
-// Nieuwe aanpak: status 2 projecten gewoon in de planner tonen,
-// maar onderaan plaatsen en visueel markeren. De oude onderste concepttabel wordt verwijderd.
+// Status 2 projecten blijven in de normale planner, staan onderaan en krijgen paarse markering.
 
 const sb = makeSupabaseClient();
 const status2ProjectIds = new Set();
@@ -157,9 +156,9 @@ function ensureStyle(){
       margin-left:6px;
       padding:1px 6px;
       border-radius:999px;
-      border:1px solid #b45309;
-      background:#fffbeb;
-      color:#92400e;
+      border:1px solid #8b5cf6;
+      background:#f5f3ff;
+      color:#5b21b6;
       font-size:10px;
       font-weight:700;
       line-height:1.35;
@@ -168,29 +167,33 @@ function ensureStyle(){
 
     .planner-table tbody tr.status2-project-row > td,
     .planner-table tbody tr.status2-project-row > th{
-      background-color:#fff7ed !important;
-      background-image:repeating-linear-gradient(135deg, rgba(251,146,60,.22) 0, rgba(251,146,60,.22) 6px, rgba(255,247,237,.95) 6px, rgba(255,247,237,.95) 14px) !important;
+      background-color:#f5f3ff !important;
+      background-image:none !important;
     }
 
     .planner-table tbody tr.status2-project-row > td.project-cell,
     .planner-table tbody tr.status2-project-row > td.rowhdr{
-      outline:2px solid rgba(245,158,11,.40);
-      outline-offset:-2px;
+      outline:1px solid rgba(139,92,246,.45);
+      outline-offset:-1px;
     }
 
     .planner-table tbody tr.status2-child-row > td,
     .planner-table tbody tr.status2-child-row > th{
-      background-color:#fffbeb !important;
+      background-color:#faf5ff !important;
+      background-image:none !important;
     }
 
-    /* Projectonderlijn gelijk aan de normale dunne planninglijn. */
+    /* Projectregels: geen dikke scheidingslijnen meer; gelijk aan de dunne planninglijnen. */
     .planner-table tbody tr.project-row > td,
     .planner-table tbody tr.project-row > th,
+    .planner-table tbody tr.project-topline > td,
+    .planner-table tbody tr.project-topline > th,
     .planner-table tbody tr.project-bottomline > td,
     .planner-table tbody tr.project-bottomline > th,
     .planner-table tbody tr.project-row.project-bottomline > td,
     .planner-table tbody tr.project-row.project-bottomline > th{
-      border-bottom:1px solid #e6e8ef !important;
+      border-top:1px solid #d7dde7 !important;
+      border-bottom:1px solid #d7dde7 !important;
       box-shadow:none !important;
     }
 
