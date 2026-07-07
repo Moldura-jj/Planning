@@ -163,21 +163,34 @@ function ensureStyle(){
       background-color:#eef4ff !important;
     }
 
-    /* Projectscheidingslijnen over de volledige breedte van links tot alle dagkolommen. */
+    /* Lijnen: oude background/box-shadow lijnen uitzetten, anders ontstaat een dubbele/dikke onderlijn. */
     .planner-table tbody tr.project-row > td,
-    .planner-table tbody tr.project-row > th{
-      border-top:2px solid #626262 !important;
-      border-bottom:2px solid #626262 !important;
+    .planner-table tbody tr.project-row > th,
+    .planner-table tbody tr.project-topline > td,
+    .planner-table tbody tr.project-topline > th,
+    .planner-table tbody tr.project-bottomline > td,
+    .planner-table tbody tr.project-bottomline > th{
+      background-image:none !important;
       box-shadow:none !important;
     }
 
+    /* Project-header krijgt alleen een bovenlijn. De onderlijn komt alleen op de laatste rij van het projectblok. */
+    .planner-table tbody tr.project-row > td,
+    .planner-table tbody tr.project-row > th,
     .planner-table tbody tr.project-topline > td,
     .planner-table tbody tr.project-topline > th{
       border-top:2px solid #626262 !important;
+      border-bottom:1px solid #e6e8ef !important;
     }
 
     .planner-table tbody tr.project-bottomline > td,
     .planner-table tbody tr.project-bottomline > th{
+      border-bottom:2px solid #626262 !important;
+    }
+
+    /* Als project-header tegelijk ook bottomline is, dan alsnog één normale onderlijn. */
+    .planner-table tbody tr.project-row.project-bottomline > td,
+    .planner-table tbody tr.project-row.project-bottomline > th{
       border-bottom:2px solid #626262 !important;
     }
 
