@@ -2,7 +2,7 @@ import { makeSupabaseClient } from "./auth.js";
 
 // planning-warning-dot.js
 // Extra planninggedrag:
-// - rood bolletje bij leverdatum zonder productie-uren
+// - rood bolletje bij productie-uren in secties, maar 0 productie gepland
 // - projectstatus-filter: status 2, 3, 4 en 5 worden in de normale planner getoond
 // - oude losse status-2/conceptblokken worden verwijderd
 
@@ -33,23 +33,20 @@ function pickObjectKey(sample, candidates){
   return "";
 }
 
-function hasFilledDeliveryDate(projectRow){
-  const summary = projectRow.querySelector(".project-date-summary");
-  const deliveryText = String(summary?.querySelector("span")?.textContent || "").trim();
-  if (!deliveryText) return false;
-
-  const value = deliveryText.replace(/^Lever\s*/i, "").trim();
-  return !!value && value !== "-";
-}
-
-function getRequiredProductionHours(projectRow){
+function getProjectProductionHours(projectRow){
   const rows = projectRow.querySelectorAll(".mini-hours .mh-row");
   for (const row of rows) {
     const label = String(row.querySelector(".mh-l")?.textContent || "").trim().toLowerCase();
     if (!label.includes("prod")) continue;
-    return parseNlNumber(row.querySelector(".mh-v")?.textContent || "");
+
+    const values = Array.from(row.querySelectorAll(".mh-v")).map(v => parseNlNumber(v.textContent || ""));
+    return {
+      required: values[0] || 0,
+      planned: values[1] || 0,
+      remaining: values[2] || 0
+    };
   }
-  return 0;
+  return { required: 0, planned: 0, remaining: 0 };
 }
 
 function getProjectIdFromRow(projectRow){
@@ -245,14 +242,15 @@ function applyProjectWarningDots(){
     const nameLine = projectRow.querySelector(".projline2");
     if (!nameLine) return;
 
-    const shouldShow = hasFilledDeliveryDate(projectRow) && getRequiredProductionHours(projectRow) <= 0;
+    const prod = getProjectProductionHours(projectRow);
+    const shouldShow = prod.required > 0 && prod.planned <= 0;
     const existing = nameLine.querySelector(".project-prod-hours-warning-dot");
 
     if (shouldShow && !existing) {
       const dot = document.createElement("span");
       dot.className = "project-prod-hours-warning-dot";
-      dot.title = "Leverdatum ingevuld, maar geen productie-uren ingevuld";
-      dot.setAttribute("aria-label", "Geen productie-uren ingevuld");
+      dot.title = "Productie-uren in secties aanwezig, maar nog 0 uur productie gepland";
+      dot.setAttribute("aria-label", "Geen productie gepland");
       nameLine.prepend(dot);
     }
 
