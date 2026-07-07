@@ -1,5 +1,6 @@
 // planning-concept-bottom-fix.js
 // Zet het status-2 conceptblok helemaal onderaan, ruim de oude placeholder 'Nieuwe order' op,
+// haalt status-2 concepturen uit de gewone capaciteitsregels,
 // en rekent de onderste regel uit als totaalcapaciteit - geplande uren - status-2 concepturen.
 
 let conceptBottomFixPending = false;
@@ -59,11 +60,20 @@ function findConceptRowByExactLabel(label){
   }) || null;
 }
 
-function readRowValues(row, dates){
+function getCellBaseValue(td){
+  if (!td) return 0;
+  if (td.dataset.status2BaseValue === undefined) {
+    td.dataset.status2BaseValue = String(parseHours(td.textContent || ""));
+  }
+  return Number(td.dataset.status2BaseValue || 0);
+}
+
+function readRowValues(row, dates, useBase = false){
   const out = makeZeroMap(dates);
   getDayCells(row).forEach(td => {
     const iso = String(td.dataset.workDate || "").trim();
-    if (iso && iso in out) out[iso] = parseHours(td.textContent || "");
+    if (!iso || !(iso in out)) return;
+    out[iso] = useBase ? getCellBaseValue(td) : parseHours(td.textContent || "");
   });
   return out;
 }
@@ -83,28 +93,84 @@ function applyValuesToRow(row, dates, values){
   });
 }
 
-function recalcTotalConceptBalance(){
+function addMaps(dates, ...maps){
+  const out = makeZeroMap(dates);
+  for (const iso of dates) {
+    out[iso] = Math.round(maps.reduce((sum, m) => sum + Number(m?.[iso] || 0), 0) * 100) / 100;
+  }
+  return out;
+}
+
+function subtractMaps(dates, base, ...subtracts){
+  const out = makeZeroMap(dates);
+  for (const iso of dates) {
+    out[iso] = Math.round((Number(base?.[iso] || 0) - subtracts.reduce((sum, m) => sum + Number(m?.[iso] || 0), 0)) * 100) / 100;
+  }
+  return out;
+}
+
+function readConceptValues(dates){
+  return {
+    wvb: readRowValues(findConceptRowByExactLabel("Concept WVB"), dates),
+    prod: readRowValues(findConceptRowByExactLabel("Concept productie"), dates),
+    mont: readRowValues(findConceptRowByExactLabel("Concept montage"), dates),
+  };
+}
+
+function correctMainCapacityRows(){
   const dates = getVisibleDates();
+  if (!dates.length) return null;
+
+  const concept = readConceptValues(dates);
+  const conceptProdMont = addMaps(dates, concept.prod, concept.mont);
+
+  const plannedProdRow = findRowByExactLabel("Gepland productie");
+  const plannedMontRow = findRowByExactLabel("Gepland montage");
+  const plannedWvbRow = findRowByExactLabel("Gepland WVB");
+  const saldoRow = findRowByExactLabel("Saldo");
+  const saldoWvbRow = findRowByExactLabel("Saldo WVB");
+
+  const plannedProdBase = readRowValues(plannedProdRow, dates, true);
+  const plannedMontBase = readRowValues(plannedMontRow, dates, true);
+  const plannedWvbBase = readRowValues(plannedWvbRow, dates, true);
+  const saldoBase = readRowValues(saldoRow, dates, true);
+  const saldoWvbBase = readRowValues(saldoWvbRow, dates, true);
+
+  // Status 2 zat nog in de normale geplande uren. Haal die daar uit.
+  applyValuesToRow(plannedProdRow, dates, subtractMaps(dates, plannedProdBase, concept.prod));
+  applyValuesToRow(plannedMontRow, dates, subtractMaps(dates, plannedMontBase, concept.mont));
+  applyValuesToRow(plannedWvbRow, dates, subtractMaps(dates, plannedWvbBase, concept.wvb));
+
+  // En geef die uren terug aan de normale saldi. Zo toont de hoofdplanning alleen status 3/4/5.
+  const correctedSaldo = addMaps(dates, saldoBase, conceptProdMont);
+  const correctedSaldoWvb = addMaps(dates, saldoWvbBase, concept.wvb);
+  applyValuesToRow(saldoRow, dates, correctedSaldo);
+  applyValuesToRow(saldoWvbRow, dates, correctedSaldoWvb);
+
+  return { dates, concept, correctedSaldo, correctedSaldoWvb };
+}
+
+function recalcTotalConceptBalance(){
+  const correction = correctMainCapacityRows();
+  const dates = correction?.dates || getVisibleDates();
   if (!dates.length) return;
 
-  const saldoProdMont = readRowValues(findRowByExactLabel("Saldo"), dates);
-  const saldoWvb = readRowValues(findRowByExactLabel("Saldo WVB"), dates);
-  const conceptProd = readRowValues(findConceptRowByExactLabel("Concept productie"), dates);
-  const conceptMont = readRowValues(findConceptRowByExactLabel("Concept montage"), dates);
-  const conceptWvb = readRowValues(findConceptRowByExactLabel("Concept WVB"), dates);
+  const concept = correction?.concept || readConceptValues(dates);
+  const saldoProdMont = correction?.correctedSaldo || readRowValues(findRowByExactLabel("Saldo"), dates);
+  const saldoWvb = correction?.correctedSaldoWvb || readRowValues(findRowByExactLabel("Saldo WVB"), dates);
 
   const total = makeZeroMap(dates);
   for (const iso of dates) {
     total[iso] = Math.round((
       Number(saldoProdMont[iso] || 0) +
       Number(saldoWvb[iso] || 0) -
-      Number(conceptProd[iso] || 0) -
-      Number(conceptMont[iso] || 0) -
-      Number(conceptWvb[iso] || 0)
+      Number(concept.prod[iso] || 0) -
+      Number(concept.mont[iso] || 0) -
+      Number(concept.wvb[iso] || 0)
     ) * 100) / 100;
   }
 
-  const oldProdMontRow = findConceptRowByExactLabel("Saldo prod./mont. na concept");
+  const oldProdMontRow = findConceptRowByExactLabel("Saldo prod./mont. na concept") || findConceptRowByExactLabel("Totaal saldo na status 2");
   if (oldProdMontRow) {
     const label = oldProdMontRow.querySelector("td.rowhdr");
     if (label) label.textContent = "Totaal saldo na status 2";
