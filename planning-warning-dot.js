@@ -1,6 +1,6 @@
 // planning-warning-dot.js
 // Toont een rood bolletje bij projecten met wel een leverdatum, maar zonder ingevulde productie-uren.
-// Bevat ook een kleine sticky-kolom fix zodat planningcellen niet door de projectregels heen zichtbaar zijn bij horizontaal scrollen.
+// Bevat ook een sticky-kolom fix zodat planningcellen niet door de projectregels heen zichtbaar zijn bij horizontaal scrollen.
 
 function parseNlNumber(value){
   const raw = String(value ?? "").trim();
@@ -53,60 +53,102 @@ function ensureStyle(){
       isolation:isolate;
     }
 
+    /* Kalendercellen bewust laag houden. */
     .planner-table tbody td.plan-cell,
     .planner-table tbody td.cell:not(.sticky-left):not(.sticky-left2):not(.hourscol){
+      position:relative !important;
+      z-index:1 !important;
+    }
+
+    .planner-table tbody td.plan-cell .bar,
+    .planner-table tbody td.plan-cell .plan-stack,
+    .planner-table tbody td.plan-cell .marker-row{
       position:relative;
       z-index:1;
     }
 
+    /* Linker projectkolom: echte ondoorzichtige maskerlaag boven de planning. */
     .planner-table tbody td.rowhdr.sticky-left,
     .planner-table tbody td.project-cell.sticky-left,
     .planner-table tbody td.section-cell.sticky-left{
       position:sticky !important;
       left:0 !important;
-      z-index:120 !important;
+      z-index:1000 !important;
+      isolation:isolate !important;
       background:#fff !important;
       background-color:#fff !important;
       background-image:none !important;
       background-clip:border-box !important;
-      box-shadow:1px 0 0 #d0d5dd !important;
-      overflow:hidden;
+      overflow:hidden !important;
     }
 
     .planner-table tbody td.rowhdr.sticky-left::before,
     .planner-table tbody td.project-cell.sticky-left::before,
     .planner-table tbody td.section-cell.sticky-left::before{
-      content:"";
-      position:absolute;
-      inset:-1px;
-      background:inherit;
-      z-index:-1;
-      pointer-events:none;
+      content:"" !important;
+      position:absolute !important;
+      inset:-4px !important;
+      background:inherit !important;
+      z-index:0 !important;
+      pointer-events:none !important;
     }
 
+    .planner-table tbody td.rowhdr.sticky-left > *,
+    .planner-table tbody td.project-cell.sticky-left > *,
+    .planner-table tbody td.section-cell.sticky-left > *{
+      position:relative !important;
+      z-index:2 !important;
+    }
+
+    /* Urenkolom ook als masker, maar zonder zwarte rechterlijn. */
     .planner-table tbody td.hourscol.sticky-left2,
     .planner-table tbody td.cell.hourscol.sticky-left2{
       position:sticky !important;
       left:380px !important;
-      z-index:115 !important;
+      z-index:990 !important;
+      isolation:isolate !important;
       background:#fff !important;
       background-color:#fff !important;
       background-image:none !important;
       background-clip:border-box !important;
-      box-shadow:1px 0 0 #d0d5dd !important;
-      overflow:hidden;
+      overflow:hidden !important;
+      border-left:1px solid #cbd5e1 !important;
+      border-right:1px solid #e6e8ef !important;
+      box-shadow:none !important;
     }
 
     .planner-table tbody td.hourscol.sticky-left2::before,
     .planner-table tbody td.cell.hourscol.sticky-left2::before{
-      content:"";
-      position:absolute;
-      inset:-1px;
-      background:inherit;
-      z-index:-1;
-      pointer-events:none;
+      content:"" !important;
+      position:absolute !important;
+      inset:-4px !important;
+      background:inherit !important;
+      z-index:0 !important;
+      pointer-events:none !important;
     }
 
+    .planner-table tbody td.hourscol.sticky-left2 > *,
+    .planner-table tbody td.cell.hourscol.sticky-left2 > *{
+      position:relative !important;
+      z-index:2 !important;
+    }
+
+    /* Oude zwarte lijn na de urenkolom uit styles.css uitschakelen. */
+    .planner-table td.hourscol.sticky-left2::after,
+    .planner-table th.hourscol.sticky-left2::after{
+      content:none !important;
+      display:none !important;
+      background:transparent !important;
+      width:0 !important;
+    }
+
+    .planner-table .hourscol{
+      border-left:1px solid #cbd5e1 !important;
+      border-right:1px solid #e6e8ef !important;
+      box-shadow:none !important;
+    }
+
+    /* Zebra/open achtergronden moeten ook ondoorzichtig blijven. */
     .planner-table tbody tr.zebra > td.rowhdr.sticky-left,
     .planner-table tbody tr.zebra > td.project-cell.sticky-left,
     .planner-table tbody tr.zebra > td.section-cell.sticky-left,
@@ -121,12 +163,31 @@ function ensureStyle(){
       background-color:#eef4ff !important;
     }
 
+    /* Projectscheidingslijnen over de volledige breedte van links tot alle dagkolommen. */
+    .planner-table tbody tr.project-row > td,
+    .planner-table tbody tr.project-row > th{
+      border-top:2px solid #626262 !important;
+      border-bottom:2px solid #626262 !important;
+      box-shadow:none !important;
+    }
+
+    .planner-table tbody tr.project-topline > td,
+    .planner-table tbody tr.project-topline > th{
+      border-top:2px solid #626262 !important;
+    }
+
+    .planner-table tbody tr.project-bottomline > td,
+    .planner-table tbody tr.project-bottomline > th{
+      border-bottom:2px solid #626262 !important;
+    }
+
+    /* Header blijft boven body. */
     .planner-table thead th.sticky-left,
     .planner-table thead th.sticky-left2,
     .planner-table thead th.sticky-top,
     .planner-table thead th.sticky-top2,
     .planner-table thead th.sticky-top3{
-      z-index:200 !important;
+      z-index:2000 !important;
     }
   `;
   document.head.appendChild(style);
