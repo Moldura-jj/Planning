@@ -1,0 +1,41 @@
+name: Disable automatic absence sync
+
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-disable-absence-sync.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Disable absence sync after capacity save
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('planning.js')
+          s = p.read_text(encoding='utf-8')
+          old = '        await syncGeneralAbsencesForEmployeeVisibleRange(empId);'
+          new = '        // Verlof niet automatisch synchroniseren bij beschikbaarheid wijzigen.\n        // Verlof mag alleen wijzigen via het verlofmodal.\n        // await syncGeneralAbsencesForEmployeeVisibleRange(empId);'
+          if old not in s and new not in s:
+              raise SystemExit('target line not found')
+          if old in s:
+              s = s.replace(old, new, 1)
+              p.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No changes"
+          else
+            git add planning.js
+            git commit -m "Disable automatic absence sync after capacity save"
+            git push
+          fi
