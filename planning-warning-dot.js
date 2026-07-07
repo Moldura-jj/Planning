@@ -33,19 +33,63 @@ function pickObjectKey(sample, candidates){
   return "";
 }
 
-function getProjectProductionHours(projectRow){
-  const rows = projectRow.querySelectorAll(".mini-hours .mh-row");
-  for (const row of rows) {
-    const label = String(row.querySelector(".mh-l")?.textContent || "").trim().toLowerCase();
-    if (!label.includes("prod")) continue;
+function numbersFromText(text){
+  return (String(text || "").match(/-?\d+(?:[,.]\d+)?/g) || []).map(parseNlNumber);
+}
 
-    const values = Array.from(row.querySelectorAll(".mh-v")).map(v => parseNlNumber(v.textContent || ""));
-    return {
-      required: values[0] || 0,
-      planned: values[1] || 0,
-      remaining: values[2] || 0
-    };
+function parseProdLineText(text){
+  const raw = String(text || "").replace(/\s+/g, " ").trim();
+  if (!/prod/i.test(raw)) return null;
+
+  // Eerst het stuk vanaf Prod pakken tot de volgende discipline, zodat WVB/Montage-cijfers niet meetellen.
+  const prodIndex = raw.search(/prod/i);
+  if (prodIndex < 0) return null;
+  let sub = raw.slice(prodIndex);
+  const next = sub.slice(4).search(/\b(wvb|mont|montage|reis)\b/i);
+  if (next >= 0) sub = sub.slice(0, next + 4);
+
+  const nums = numbersFromText(sub);
+  if (nums.length >= 2) {
+    return { required: nums[0] || 0, planned: nums[1] || 0, remaining: nums[2] || 0 };
   }
+  return null;
+}
+
+function getProjectProductionHours(projectRow){
+  const hoursCell = projectRow.querySelector("td.hourscol, .hourscol");
+  if (!hoursCell) return { required: 0, planned: 0, remaining: 0 };
+
+  // 1) Nieuwe/verwachte structuur: losse regels met labels en waardes.
+  const structuredRows = Array.from(hoursCell.querySelectorAll(".mh-row, .mini-hours-row, tr, div"));
+  for (const row of structuredRows) {
+    const txt = String(row.innerText || row.textContent || "").trim();
+    if (!/prod/i.test(txt)) continue;
+
+    const values = Array.from(row.querySelectorAll(".mh-v, .value, .hours-value, td, span"))
+      .map(v => String(v.innerText || v.textContent || "").trim())
+      .filter(Boolean)
+      .flatMap(numbersFromText);
+
+    if (values.length >= 2) {
+      return { required: values[0] || 0, planned: values[1] || 0, remaining: values[2] || 0 };
+    }
+
+    const parsed = parseProdLineText(txt);
+    if (parsed) return parsed;
+  }
+
+  // 2) Fallback: hele urenkolom als tekst lezen.
+  const fullText = String(hoursCell.innerText || hoursCell.textContent || "").trim();
+  const lines = fullText.split(/\n+/).map(x => x.trim()).filter(Boolean);
+  for (const line of lines) {
+    const parsed = parseProdLineText(line);
+    if (parsed) return parsed;
+  }
+
+  // 3) Laatste fallback: probeer de hele tekst vanaf Prod.+CNC te parsen.
+  const parsed = parseProdLineText(fullText);
+  if (parsed) return parsed;
+
   return { required: 0, planned: 0, remaining: 0 };
 }
 
@@ -243,7 +287,7 @@ function applyProjectWarningDots(){
     if (!nameLine) return;
 
     const prod = getProjectProductionHours(projectRow);
-    const shouldShow = prod.required > 0 && prod.planned <= 0;
+    const shouldShow = prod.required > 0 && prod.planned <= 0.0001;
     const existing = nameLine.querySelector(".project-prod-hours-warning-dot");
 
     if (shouldShow && !existing) {
