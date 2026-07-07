@@ -2,9 +2,9 @@ import { makeSupabaseClient } from "./auth.js";
 
 // planning-warning-dot.js
 // Extra planninggedrag:
-// - rood bolletje bij productie-uren in secties, maar 0 productie gepland
+// - rood bolletje alleen bij productie-uren in secties, maar 0 productie gepland
+// - WVB en montage tellen hiervoor niet mee
 // - projectstatus-filter: status 2, 3, 4 en 5 worden in de normale planner getoond
-// - oude losse status-2/conceptblokken worden verwijderd
 
 const sbStatusFilter = makeSupabaseClient();
 const allowedPlanningStatuses = new Set(["2", "3", "4", "5"]);
@@ -20,6 +20,10 @@ function parseNlNumber(value){
   return Number.isFinite(n) ? n : 0;
 }
 
+function numbersFromText(text){
+  return (String(text || "").match(/-?\d+(?:[,.]\d+)?/g) || []).map(parseNlNumber);
+}
+
 function pickObjectKey(sample, candidates){
   const keys = Object.keys(sample || {});
   const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -33,25 +37,39 @@ function pickObjectKey(sample, candidates){
   return "";
 }
 
-function numbersFromText(text){
-  return (String(text || "").match(/-?\d+(?:[,.]\d+)?/g) || []).map(parseNlNumber);
+function isProductionLabel(text){
+  const t = String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+  return /^prod\b/.test(t) || /^prod\s*[.+&/]*\s*cnc\b/.test(t) || t.startsWith("prod.+cnc") || t.startsWith("prod+cnc");
 }
 
-function parseProdLineText(text){
-  const raw = String(text || "").replace(/\s+/g, " ").trim();
-  if (!/prod/i.test(raw)) return null;
+function parseProductionRow(row){
+  const cells = Array.from(row.querySelectorAll(".mh-l, .mh-v, .value, .hours-value, td, span, div"));
+  const labelEl = row.querySelector(".mh-l") || cells.find(el => isProductionLabel(el.textContent || ""));
+  const label = String(labelEl?.textContent || "").trim();
 
-  // Eerst het stuk vanaf Prod pakken tot de volgende discipline, zodat WVB/Montage-cijfers niet meetellen.
-  const prodIndex = raw.search(/prod/i);
-  if (prodIndex < 0) return null;
-  let sub = raw.slice(prodIndex);
-  const next = sub.slice(4).search(/\b(wvb|mont|montage|reis)\b/i);
-  if (next >= 0) sub = sub.slice(0, next + 4);
+  // Alleen echte productieregels accepteren; niet een container waar ook WVB/Mont in staat.
+  const rowText = String(row.innerText || row.textContent || "").replace(/\s+/g, " ").trim();
+  if (!isProductionLabel(label) && !isProductionLabel(rowText)) return null;
 
-  const nums = numbersFromText(sub);
-  if (nums.length >= 2) {
-    return { required: nums[0] || 0, planned: nums[1] || 0, remaining: nums[2] || 0 };
+  let valueEls = Array.from(row.querySelectorAll(".mh-v, .value, .hours-value"));
+  if (!valueEls.length && labelEl) {
+    valueEls = cells.filter(el => el !== labelEl && !isProductionLabel(el.textContent || ""));
   }
+
+  const nums = valueEls.length
+    ? valueEls.map(el => String(el.textContent || "")).flatMap(numbersFromText)
+    : numbersFromText(rowText.replace(label, ""));
+
+  if (nums.length >= 2) return { required: nums[0] || 0, planned: nums[1] || 0, remaining: nums[2] || 0 };
+  return null;
+}
+
+function parseProductionLine(line){
+  const raw = String(line || "").replace(/\s+/g, " ").trim();
+  if (!isProductionLabel(raw)) return null;
+
+  const nums = numbersFromText(raw.replace(/^prod(?:\s*[.+&/]*\s*cnc)?/i, ""));
+  if (nums.length >= 2) return { required: nums[0] || 0, planned: nums[1] || 0, remaining: nums[2] || 0 };
   return null;
 }
 
@@ -59,36 +77,31 @@ function getProjectProductionHours(projectRow){
   const hoursCell = projectRow.querySelector("td.hourscol, .hourscol");
   if (!hoursCell) return { required: 0, planned: 0, remaining: 0 };
 
-  // 1) Nieuwe/verwachte structuur: losse regels met labels en waardes.
-  const structuredRows = Array.from(hoursCell.querySelectorAll(".mh-row, .mini-hours-row, tr, div"));
-  for (const row of structuredRows) {
-    const txt = String(row.innerText || row.textContent || "").trim();
-    if (!/prod/i.test(txt)) continue;
-
-    const values = Array.from(row.querySelectorAll(".mh-v, .value, .hours-value, td, span"))
-      .map(v => String(v.innerText || v.textContent || "").trim())
-      .filter(Boolean)
-      .flatMap(numbersFromText);
-
-    if (values.length >= 2) {
-      return { required: values[0] || 0, planned: values[1] || 0, remaining: values[2] || 0 };
-    }
-
-    const parsed = parseProdLineText(txt);
+  // 1) Alleen directe/logische rijen proberen. Geen hele container accepteren als productieregel.
+  const rows = Array.from(hoursCell.querySelectorAll(".mh-row, .mini-hours-row, tr"));
+  for (const row of rows) {
+    const parsed = parseProductionRow(row);
     if (parsed) return parsed;
   }
 
-  // 2) Fallback: hele urenkolom als tekst lezen.
+  // 2) Als de urenkolom tekstregels heeft: alleen regels die beginnen met Prod accepteren.
   const fullText = String(hoursCell.innerText || hoursCell.textContent || "").trim();
   const lines = fullText.split(/\n+/).map(x => x.trim()).filter(Boolean);
   for (const line of lines) {
-    const parsed = parseProdLineText(line);
+    const parsed = parseProductionLine(line);
     if (parsed) return parsed;
   }
 
-  // 3) Laatste fallback: probeer de hele tekst vanaf Prod.+CNC te parsen.
-  const parsed = parseProdLineText(fullText);
-  if (parsed) return parsed;
+  // 3) Fallback voor HTML zonder newlines: label + 3 getallen direct na Prod.+CNC, niet na WVB/Mont.
+  const compact = fullText.replace(/\s+/g, " ").trim();
+  const match = compact.match(/(?:^|\s)(prod\s*(?:[.+&/]\s*)?cnc|prod)\s+(-?\d+(?:[,.]\d+)?)\s+(-?\d+(?:[,.]\d+)?)(?:\s+(-?\d+(?:[,.]\d+)?))?/i);
+  if (match) {
+    return {
+      required: parseNlNumber(match[2]),
+      planned: parseNlNumber(match[3]),
+      remaining: parseNlNumber(match[4] || "0")
+    };
+  }
 
   return { required: 0, planned: 0, remaining: 0 };
 }
@@ -112,9 +125,7 @@ function removeOldConceptRows(){
       (txt.includes("concept opdrachten") && txt.includes("status 2")) ||
       (txt.includes("nieuwe order") && txt.includes("koppelen")) ||
       txt === "capaciteit met nieuwe order"
-    ) {
-      row.remove();
-    }
+    ) row.remove();
   });
 }
 
@@ -123,11 +134,7 @@ async function loadAllowedPlanningProjectIds(){
   statusFilterLoading = true;
 
   try {
-    const { data, error } = await sbStatusFilter
-      .from("projecten")
-      .select("*")
-      .limit(10000);
-
+    const { data, error } = await sbStatusFilter.from("projecten").select("*").limit(10000);
     if (error) {
       console.warn("Projectstatus-filter laden mislukt:", error.message || error);
       allowedPlanningProjectIds = null;
@@ -137,14 +144,7 @@ async function loadAllowedPlanningProjectIds(){
     const rows = data || [];
     const sample = rows[0] || {};
     const idKey = pickObjectKey(sample, ["project_id", "id"]);
-    const statusKey = pickObjectKey(sample, [
-      "salesstatus",
-      "projectstatus",
-      "project_status",
-      "status",
-      "status_id",
-      "sales_status"
-    ]);
+    const statusKey = pickObjectKey(sample, ["salesstatus", "projectstatus", "project_status", "status", "status_id", "sales_status"]);
 
     if (!idKey || !statusKey) {
       console.warn("Projectstatus-filter: id/status kolom niet gevonden", { idKey, statusKey, sample });
@@ -153,8 +153,7 @@ async function loadAllowedPlanningProjectIds(){
     }
 
     allowedPlanningProjectIds = new Set(
-      rows
-        .filter(p => allowedPlanningStatuses.has(String(p?.[statusKey] ?? "").trim()))
+      rows.filter(p => allowedPlanningStatuses.has(String(p?.[statusKey] ?? "").trim()))
         .map(p => String(p?.[idKey] ?? "").trim())
         .filter(Boolean)
     );
@@ -174,37 +173,27 @@ function applyProjectStatusFilter(){
 
     const hide = !allowedPlanningProjectIds.has(pid);
     setRowHidden(projectRow, hide);
-
-    document.querySelectorAll(`tr[data-parent="${CSS.escape(pid)}"]:not(.concept-status2-row)`).forEach(childRow => {
-      setRowHidden(childRow, hide);
-    });
+    document.querySelectorAll(`tr[data-parent="${CSS.escape(pid)}"]:not(.concept-status2-row)`).forEach(childRow => setRowHidden(childRow, hide));
   });
 }
 
 function ensureStyle(){
   if (document.getElementById("planningWarningDotStyle")) return;
-
   const style = document.createElement("style");
   style.id = "planningWarningDotStyle";
   style.textContent = `
     .planning-status-hidden{ display:none !important; }
-
     .project-prod-hours-warning-dot{
       display:inline-block; width:9px; height:9px; margin-right:6px; border-radius:999px;
       background:#ef4444; box-shadow:0 0 0 2px rgba(239,68,68,.18);
       vertical-align:middle; transform:translateY(-1px);
     }
-
     .planner-scroll, .planner-scroll-sticky, .planner-table{ isolation:isolate; }
-
     .planner-table tbody td.plan-cell,
-    .planner-table tbody td.cell:not(.sticky-left):not(.sticky-left2):not(.hourscol){
-      position:relative !important; z-index:1 !important;
-    }
+    .planner-table tbody td.cell:not(.sticky-left):not(.sticky-left2):not(.hourscol){ position:relative !important; z-index:1 !important; }
     .planner-table tbody td.plan-cell .bar,
     .planner-table tbody td.plan-cell .plan-stack,
     .planner-table tbody td.plan-cell .marker-row{ position:relative; z-index:1; }
-
     .planner-table tbody td.project-cell.sticky-left,
     .planner-table tbody td.section-cell.sticky-left{
       position:sticky !important; left:0 !important; z-index:1000 !important; isolation:isolate !important;
@@ -218,7 +207,6 @@ function ensureStyle(){
     }
     .planner-table tbody td.project-cell.sticky-left > *,
     .planner-table tbody td.section-cell.sticky-left > *{ position:relative !important; z-index:2 !important; }
-
     .planner-table tbody td.rowhdr.sticky-left,
     .planner-table tbody td.cap-name.sticky-left,
     .planner-table tbody td.sum-label.sticky-left,
@@ -230,7 +218,6 @@ function ensureStyle(){
     .planner-table tbody td.cap-name.sticky-left::before,
     .planner-table tbody td.sum-label.sticky-left::before,
     .planner-table tbody td.balance-label.sticky-left::before{ content:none !important; display:none !important; }
-
     .planner-table tbody td.hourscol.sticky-left2,
     .planner-table tbody td.cell.hourscol.sticky-left2{
       position:sticky !important; left:380px !important; z-index:990 !important; isolation:isolate !important;
@@ -245,31 +232,25 @@ function ensureStyle(){
     }
     .planner-table tbody td.hourscol.sticky-left2 > *,
     .planner-table tbody td.cell.hourscol.sticky-left2 > *{ position:relative !important; z-index:2 !important; }
-
     .planner-table td.hourscol.sticky-left2::after,
     .planner-table th.hourscol.sticky-left2::after{ content:none !important; display:none !important; background:transparent !important; width:0 !important; }
     .planner-table .hourscol{ border-left:1px solid #cbd5e1 !important; border-right:1px solid #e6e8ef !important; box-shadow:none !important; }
-
     .planner-table tbody tr.zebra > td.rowhdr.sticky-left,
     .planner-table tbody tr.zebra > td.project-cell.sticky-left,
     .planner-table tbody tr.zebra > td.section-cell.sticky-left,
     .planner-table tbody tr.zebra > td.hourscol.sticky-left2{ background:#f5f6f8 !important; background-color:#f5f6f8 !important; }
-
     .planner-table tbody tr.project-row.is-open > td.rowhdr.sticky-left,
     .planner-table tbody tr.project-row.is-open > td.hourscol.sticky-left2{ background:#eef4ff !important; background-color:#eef4ff !important; }
-
     .planner-table tbody tr.project-row > td,
     .planner-table tbody tr.project-row > th,
     .planner-table tbody tr.project-topline > td,
     .planner-table tbody tr.project-topline > th,
     .planner-table tbody tr.project-bottomline > td,
     .planner-table tbody tr.project-bottomline > th{ background-image:none !important; box-shadow:none !important; }
-
     .planner-table tbody tr.project-row > td,
     .planner-table tbody tr.project-row > th,
     .planner-table tbody tr.project-topline > td,
     .planner-table tbody tr.project-topline > th{ border-top:2px solid #626262 !important; border-bottom:1px solid #e6e8ef !important; }
-
     .planner-table thead th.sticky-left,
     .planner-table thead th.sticky-left2,
     .planner-table thead th.sticky-top,
@@ -297,7 +278,6 @@ function applyProjectWarningDots(){
       dot.setAttribute("aria-label", "Geen productie gepland");
       nameLine.prepend(dot);
     }
-
     if (!shouldShow && existing) existing.remove();
   });
 
