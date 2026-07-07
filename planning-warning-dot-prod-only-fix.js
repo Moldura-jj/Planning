@@ -4,6 +4,9 @@
 // WVB en Montage mogen dit bolletje nooit triggeren.
 // Gebruikt een eigen class, zodat oude warning-logica dit bolletje niet kan verwijderen.
 
+// Extra module: weekoverzicht openen via klik op weeknummer.
+import("./planning-week-overview.js?v=week-overview-1").catch(err => console.warn("Weekoverzicht laden mislukt:", err));
+
 function parseNlNumber(value){
   const raw = String(value ?? "").trim();
   if (!raw) return 0;
@@ -39,12 +42,6 @@ function getProdCncFromHoursCell(projectRow){
     .replace(/\s+/g, " ")
     .trim();
 
-  // Accepteer o.a.:
-  // Wvb 0 | 0 Prod.+CNC 8 | 0 Mont.+Reis 0 | 0
-  // Prod.+CNC 8 0
-  // Prod + CNC 8 0
-  // Prod. + CNC 8 0
-  // Productie 8 0
   const match = text.match(/(?:^|\s)(?:prod(?:uctie)?\s*\.?\s*(?:\+\s*cnc)?|prod\s*\+\s*cnc)\D*(-?\d+(?:[,.]\d+)?)\D+(-?\d+(?:[,.]\d+)?)/i);
 
   if (!match) return { required: 0, planned: 0 };
