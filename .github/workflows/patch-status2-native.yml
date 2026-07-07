@@ -1,0 +1,85 @@
+name: Patch status2 native planning behavior
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/patch-status2-native.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch planning.js
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('planning.js')
+          s = path.read_text(encoding='utf-8')
+
+          marker = 'const deliveryKey   = pickKey(projecten[0], ["deliverydate_d","deliverydate","delivery_date","leverdatum"]);'
+          insert = '''const deliveryKey   = pickKey(projecten[0], ["deliverydate_d","deliverydate","delivery_date","leverdatum"]);
+    const projectStatusKey = firstProjectKey(["salesstatus", "projectstatus", "project_status", "status", "status_id", "sales_status"], { preferFilled: false });
+    const projectStatusValue = (projectRow) => String(projectStatusKey ? (projectRow?.[projectStatusKey] ?? "") : "").trim();
+    const isStatus2Project = (projectRow) => projectStatusValue(projectRow) === "2";'''
+          if insert not in s:
+              if marker not in s:
+                  raise SystemExit('deliveryKey marker not found')
+              s = s.replace(marker, insert, 1)
+
+          old = '''const sortedProjecten = (projecten || []).slice().sort((a, b) => {
+  const aISO = asISODate(a?.[deliveryKey] ?? "");'''
+          new = '''const sortedProjecten = (projecten || []).slice().sort((a, b) => {
+  const aStatus2 = isStatus2Project(a);
+  const bStatus2 = isStatus2Project(b);
+  if (aStatus2 !== bStatus2) return aStatus2 ? 1 : -1;
+
+  const aISO = asISODate(a?.[deliveryKey] ?? "");'''
+          if new not in s:
+              if old not in s:
+                  raise SystemExit('sortedProjecten marker not found')
+              s = s.replace(old, new, 1)
+
+          old = '''      projRow.className = "project-row";
+      projRow.classList.add("project-topline"); // ✅ altijd een bovenlijn voor de order/project'''
+          new = '''      projRow.className = "project-row";
+      projRow.classList.add("project-topline"); // ✅ altijd een bovenlijn voor de order/project
+      if (isStatus2Project(p)) {
+        projRow.classList.add("status2-project-row");
+        projRow.dataset.projectStatus = "2";
+      }'''
+          if new not in s:
+              if old not in s:
+                  raise SystemExit('project row marker not found')
+              s = s.replace(old, new, 1)
+
+          old = '''        const secRow = document.createElement("tr");
+        secRow.className = "section-row hidden";'''
+          new = '''        const secRow = document.createElement("tr");
+        secRow.className = "section-row hidden";
+        if (isStatus2Project(p)) {
+          secRow.classList.add("status2-child-row");
+          secRow.dataset.projectStatus = "2";
+        }'''
+          if new not in s:
+              if old not in s:
+                  raise SystemExit('section row marker not found')
+              s = s.replace(old, new, 1)
+
+          path.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No changes"
+          else
+            git add planning.js
+            git commit -m "Integrate status 2 behavior in planning.js"
+            git push
+          fi
