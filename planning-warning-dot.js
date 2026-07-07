@@ -1,6 +1,13 @@
+import { makeSupabaseClient } from "./auth.js";
+
 // planning-warning-dot.js
 // Toont een rood bolletje bij projecten met wel een leverdatum, maar zonder ingevulde productie-uren.
-// Bevat ook een sticky-kolom fix zodat planningcellen niet door de projectregels heen zichtbaar zijn bij horizontaal scrollen.
+// Bevat ook sticky-kolom fixes en filtert de planning op projectstatus 3, 4 en 5.
+
+const sbStatusFilter = makeSupabaseClient();
+const allowedPlanningStatuses = new Set(["3", "4", "5"]);
+let allowedPlanningProjectIds = null;
+let statusFilterLoading = false;
 
 function parseNlNumber(value){
   const raw = String(value ?? "").trim();
@@ -8,6 +15,19 @@ function parseNlNumber(value){
   const normalized = raw.replace(/\./g, "").replace(",", ".");
   const n = Number(normalized);
   return Number.isFinite(n) ? n : 0;
+}
+
+function pickObjectKey(sample, candidates){
+  const keys = Object.keys(sample || {});
+  const norm = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  for (const wanted of candidates) {
+    const exact = keys.find(k => k === wanted);
+    if (exact) return exact;
+    const wantedNorm = norm(wanted);
+    const loose = keys.find(k => norm(k) === wantedNorm);
+    if (loose) return loose;
+  }
+  return "";
 }
 
 function hasFilledDeliveryDate(projectRow){
@@ -29,12 +49,84 @@ function getRequiredProductionHours(projectRow){
   return 0;
 }
 
+async function loadAllowedPlanningProjectIds(){
+  if (allowedPlanningProjectIds || statusFilterLoading) return;
+  statusFilterLoading = true;
+
+  try {
+    const { data, error } = await sbStatusFilter
+      .from("projecten")
+      .select("*")
+      .limit(10000);
+
+    if (error) {
+      console.warn("Projectstatus-filter laden mislukt:", error.message || error);
+      allowedPlanningProjectIds = null;
+      return;
+    }
+
+    const rows = data || [];
+    const sample = rows[0] || {};
+    const idKey = pickObjectKey(sample, ["project_id", "id"]);
+    const statusKey = pickObjectKey(sample, [
+      "salesstatus",
+      "projectstatus",
+      "project_status",
+      "status",
+      "status_id",
+      "sales_status"
+    ]);
+
+    if (!idKey || !statusKey) {
+      console.warn("Projectstatus-filter: id/status kolom niet gevonden", { idKey, statusKey, sample });
+      allowedPlanningProjectIds = null;
+      return;
+    }
+
+    allowedPlanningProjectIds = new Set(
+      rows
+        .filter(p => allowedPlanningStatuses.has(String(p?.[statusKey] ?? "").trim()))
+        .map(p => String(p?.[idKey] ?? "").trim())
+        .filter(Boolean)
+    );
+  } finally {
+    statusFilterLoading = false;
+    applyProjectStatusFilter();
+  }
+}
+
+function setRowHidden(row, hidden){
+  if (!row) return;
+  row.classList.toggle("planning-status-hidden", hidden);
+  row.style.display = hidden ? "none" : "";
+}
+
+function applyProjectStatusFilter(){
+  if (!allowedPlanningProjectIds) return;
+
+  document.querySelectorAll("tr.project-row").forEach(projectRow => {
+    const pid = String(projectRow.querySelector(".expander[data-proj]")?.dataset?.proj || "").trim();
+    if (!pid) return;
+
+    const hide = !allowedPlanningProjectIds.has(pid);
+    setRowHidden(projectRow, hide);
+
+    document.querySelectorAll(`tr[data-parent="${CSS.escape(pid)}"]`).forEach(childRow => {
+      setRowHidden(childRow, hide);
+    });
+  });
+}
+
 function ensureStyle(){
   if (document.getElementById("planningWarningDotStyle")) return;
 
   const style = document.createElement("style");
   style.id = "planningWarningDotStyle";
   style.textContent = `
+    .planning-status-hidden{
+      display:none !important;
+    }
+
     .project-prod-hours-warning-dot{
       display:inline-block;
       width:9px;
@@ -53,7 +145,6 @@ function ensureStyle(){
       isolation:isolate;
     }
 
-    /* Kalendercellen bewust laag houden. */
     .planner-table tbody td.plan-cell,
     .planner-table tbody td.cell:not(.sticky-left):not(.sticky-left2):not(.hourscol){
       position:relative !important;
@@ -67,7 +158,6 @@ function ensureStyle(){
       z-index:1;
     }
 
-    /* Linker projectkolom: echte ondoorzichtige maskerlaag boven de planning. */
     .planner-table tbody td.rowhdr.sticky-left,
     .planner-table tbody td.project-cell.sticky-left,
     .planner-table tbody td.section-cell.sticky-left{
@@ -100,7 +190,6 @@ function ensureStyle(){
       z-index:2 !important;
     }
 
-    /* Urenkolom ook als masker, maar zonder zwarte rechterlijn. */
     .planner-table tbody td.hourscol.sticky-left2,
     .planner-table tbody td.cell.hourscol.sticky-left2{
       position:sticky !important;
@@ -133,7 +222,6 @@ function ensureStyle(){
       z-index:2 !important;
     }
 
-    /* Oude zwarte lijn na de urenkolom uit styles.css uitschakelen. */
     .planner-table td.hourscol.sticky-left2::after,
     .planner-table th.hourscol.sticky-left2::after{
       content:none !important;
@@ -148,7 +236,6 @@ function ensureStyle(){
       box-shadow:none !important;
     }
 
-    /* Zebra/open achtergronden moeten ook ondoorzichtig blijven. */
     .planner-table tbody tr.zebra > td.rowhdr.sticky-left,
     .planner-table tbody tr.zebra > td.project-cell.sticky-left,
     .planner-table tbody tr.zebra > td.section-cell.sticky-left,
@@ -163,7 +250,6 @@ function ensureStyle(){
       background-color:#eef4ff !important;
     }
 
-    /* Lijnen: oude background/box-shadow lijnen uitzetten, anders ontstaat een dubbele/dikke onderlijn. */
     .planner-table tbody tr.project-row > td,
     .planner-table tbody tr.project-row > th,
     .planner-table tbody tr.project-topline > td,
@@ -174,7 +260,6 @@ function ensureStyle(){
       box-shadow:none !important;
     }
 
-    /* Project-header krijgt alleen een bovenlijn. De onderlijn komt alleen op de laatste rij van het projectblok. */
     .planner-table tbody tr.project-row > td,
     .planner-table tbody tr.project-row > th,
     .planner-table tbody tr.project-topline > td,
@@ -188,13 +273,11 @@ function ensureStyle(){
       border-bottom:2px solid #626262 !important;
     }
 
-    /* Als project-header tegelijk ook bottomline is, dan alsnog één normale onderlijn. */
     .planner-table tbody tr.project-row.project-bottomline > td,
     .planner-table tbody tr.project-row.project-bottomline > th{
       border-bottom:2px solid #626262 !important;
     }
 
-    /* Header blijft boven body. */
     .planner-table thead th.sticky-left,
     .planner-table thead th.sticky-left2,
     .planner-table thead th.sticky-top,
@@ -226,6 +309,8 @@ function applyProjectWarningDots(){
 
     if (!shouldShow && existing) existing.remove();
   });
+
+  applyProjectStatusFilter();
 }
 
 let pending = false;
@@ -238,7 +323,10 @@ function scheduleApply(){
   });
 }
 
-window.addEventListener("DOMContentLoaded", scheduleApply);
+window.addEventListener("DOMContentLoaded", () => {
+  scheduleApply();
+  loadAllowedPlanningProjectIds();
+});
 window.addEventListener("load", scheduleApply);
 
 const observer = new MutationObserver(scheduleApply);
