@@ -5,12 +5,15 @@ import { makeSupabaseClient } from "./auth.js";
 // - blijft in de normale plannerlogica
 // - wordt onderaan geplaatst en paars gekleurd
 // - in status-2 secties mag alleen Concept worden ingevuld, geen medewerkers
+// - wordt na een planning-rerender opnieuw toegepast, zonder klikgedrag te overrulen
 
 const sb = makeSupabaseClient();
 const status2ProjectIds = new Set();
 let loaded = false;
 let running = false;
 let status2ModalModeUntil = 0;
+let applyTimer = null;
+let observerPaused = false;
 
 function normKey(s){
   return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -27,8 +30,8 @@ function pickKey(sample, candidates){
   return "";
 }
 
-async function loadStatus2Ids(){
-  if (loaded) return;
+async function loadStatus2Ids(force = false){
+  if (loaded && !force) return;
   loaded = true;
 
   const { data, error } = await sb.from("projecten").select("*").limit(10000);
@@ -150,12 +153,14 @@ function ensureStyle(){
   document.head.appendChild(style);
 }
 
-async function applyStatus2PositionAndStyle(){
+async function applyStatus2PositionAndStyle({ refreshIds = false } = {}){
   if (running) return;
   running = true;
+  observerPaused = true;
+
   try {
     ensureStyle();
-    await loadStatus2Ids();
+    await loadStatus2Ids(refreshIds);
     if (!status2ProjectIds.size) return;
 
     const tbody = document.querySelector(".planner-table tbody");
@@ -167,6 +172,7 @@ async function applyStatus2PositionAndStyle(){
     if (!insertBefore) return;
 
     const fragment = document.createDocumentFragment();
+    let moved = false;
 
     Array.from(tbody.querySelectorAll("tr.project-row:not(.concept-status2-row)")).forEach(projectRow => {
       const pid = getProjectId(projectRow);
@@ -176,6 +182,7 @@ async function applyStatus2PositionAndStyle(){
       projectRow.dataset.projectStatus = "2";
       addBadge(projectRow);
       fragment.appendChild(projectRow);
+      moved = true;
 
       Array.from(tbody.querySelectorAll(`tr[data-parent="${CSS.escape(pid)}"]:not(.concept-status2-row)`)).forEach(childRow => {
         childRow.classList.add("status2-child-row");
@@ -184,14 +191,16 @@ async function applyStatus2PositionAndStyle(){
       });
     });
 
-    if (fragment.childNodes.length) tbody.insertBefore(fragment, insertBefore);
+    if (moved) tbody.insertBefore(fragment, insertBefore);
   } finally {
     running = false;
+    window.setTimeout(() => { observerPaused = false; }, 300);
   }
 }
 
-function scheduleApply(delay = 350){
-  window.setTimeout(applyStatus2PositionAndStyle, delay);
+function scheduleApply(delay = 350, opts = {}){
+  window.clearTimeout(applyTimer);
+  applyTimer = window.setTimeout(() => applyStatus2PositionAndStyle(opts), delay);
 }
 
 function modalIsOpen(){
@@ -258,6 +267,23 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 window.addEventListener("load", () => scheduleApply(250));
 
+// Na een volledige tabel-rerender opnieuw toepassen, maar gedebounced.
+const status2Observer = new MutationObserver((mutations) => {
+  if (observerPaused || running) return;
+
+  const relevant = mutations.some(m =>
+    Array.from(m.addedNodes || []).some(n =>
+      n.nodeType === 1 && (
+        n.matches?.(".planner-table, tbody, tr.project-row") ||
+        n.querySelector?.(".planner-table, tr.project-row")
+      )
+    )
+  );
+
+  if (relevant) scheduleApply(900);
+});
+status2Observer.observe(document.body, { childList:true, subtree:true });
+
 // Bij status-2 sectiecellen: modal direct in concept-only zetten.
 document.addEventListener("click", (ev) => {
   const status2Cell = ev.target.closest("tr.status2-child-row td.section-click, tr.status2-child-row td.section-concept-click");
@@ -267,15 +293,16 @@ document.addEventListener("click", (ev) => {
   }
 
   if (ev.target.closest("#btnPrev, #btnNext")) {
-    scheduleApply(700);
-    scheduleApply(1500);
+    scheduleApply(900);
+    scheduleApply(1800);
   }
 
   if (ev.target.closest("#amSave")) {
     // Na opslaan rendert planning.js opnieuw; daarna status 2 opnieuw onderaan/paars zetten.
-    scheduleApply(700);
-    scheduleApply(1500);
-    scheduleApply(2500);
+    loaded = false;
+    scheduleApply(1000, { refreshIds:true });
+    scheduleApply(2200, { refreshIds:true });
+    scheduleApply(4000, { refreshIds:true });
     leaveStatus2ConceptMode();
   }
 
