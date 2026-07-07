@@ -1,13 +1,16 @@
 import { makeSupabaseClient } from "./auth.js";
 
 // planning-status2-inline-fix.js
-// Niet-invasief: alleen status-2 projectgroepen onderaan zetten en paars kleuren.
-// Geen MutationObserver en geen klikhandlers, zodat de normale plannerlogica blijft werken.
+// Status 2:
+// - blijft in de normale plannerlogica
+// - wordt onderaan geplaatst en paars gekleurd
+// - in status-2 secties mag alleen Concept worden ingevuld, geen medewerkers
 
 const sb = makeSupabaseClient();
 const status2ProjectIds = new Set();
 let loaded = false;
 let running = false;
+let status2ModalModeUntil = 0;
 
 function normKey(s){
   return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -40,6 +43,7 @@ async function loadStatus2Ids(){
   const statusKey = pickKey(sample, ["salesstatus", "projectstatus", "project_status", "status", "status_id", "sales_status"]);
   if (!idKey || !statusKey) return;
 
+  status2ProjectIds.clear();
   rows.forEach(row => {
     if (String(row?.[statusKey] ?? "").trim() === "2") {
       const id = String(row?.[idKey] ?? "").trim();
@@ -124,6 +128,24 @@ function ensureStyle(){
       border-bottom:1px solid #d7dde7 !important;
       box-shadow:none !important;
     }
+
+    body.status2-concept-modal-active #amListWvb .assign-item:not(.assign-item-concept),
+    body.status2-concept-modal-active #amListProd .assign-item:not(.assign-item-concept),
+    body.status2-concept-modal-active #amListMont .assign-item:not(.assign-item-concept),
+    body.status2-concept-modal-active #amListSubc{
+      display:none !important;
+    }
+
+    .status2-concept-note{
+      margin:6px 0 10px;
+      padding:8px 10px;
+      border:1px solid rgba(139,92,246,.35);
+      border-radius:8px;
+      background:#f5f3ff;
+      color:#5b21b6;
+      font-size:12px;
+      font-weight:600;
+    }
   `;
   document.head.appendChild(style);
 }
@@ -139,7 +161,6 @@ async function applyStatus2PositionAndStyle(){
     const tbody = document.querySelector(".planner-table tbody");
     if (!tbody) return;
 
-    // Oude conceptblok-rijen opruimen, maar verder geen normale plannerlogica aanpassen.
     tbody.querySelectorAll("tr.concept-status2-row").forEach(row => row.remove());
 
     const insertBefore = findCapacityStart(tbody);
@@ -173,16 +194,97 @@ function scheduleApply(delay = 350){
   window.setTimeout(applyStatus2PositionAndStyle, delay);
 }
 
+function modalIsOpen(){
+  const saveBtn = document.getElementById("amSave");
+  return !!(saveBtn && saveBtn.offsetParent !== null);
+}
+
+function enterStatus2ConceptMode(){
+  status2ModalModeUntil = Date.now() + 30000;
+  document.body.classList.add("status2-concept-modal-active");
+  enforceStatus2ConceptOnly();
+  window.setTimeout(enforceStatus2ConceptOnly, 100);
+  window.setTimeout(enforceStatus2ConceptOnly, 300);
+  window.setTimeout(enforceStatus2ConceptOnly, 800);
+}
+
+function leaveStatus2ConceptMode(){
+  status2ModalModeUntil = 0;
+  document.body.classList.remove("status2-concept-modal-active");
+  document.querySelectorAll(".status2-concept-note").forEach(n => n.remove());
+}
+
+function enforceStatus2ConceptOnly(){
+  if (Date.now() > status2ModalModeUntil) {
+    if (!modalIsOpen()) leaveStatus2ConceptMode();
+    return;
+  }
+
+  document.body.classList.add("status2-concept-modal-active");
+
+  const lists = ["amListWvb", "amListProd", "amListMont"]
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+
+  const firstList = lists[0] || document.getElementById("amListProd") || document.getElementById("amListMont");
+  if (firstList && !document.querySelector(".status2-concept-note")) {
+    const note = document.createElement("div");
+    note.className = "status2-concept-note";
+    note.textContent = "Status 2: alleen concepturen invullen. Medewerkers kunnen pas gepland worden zodra het project geen status 2 meer heeft.";
+    firstList.parentElement?.insertBefore(note, firstList);
+  }
+
+  for (const list of lists) {
+    list.querySelectorAll(".assign-item:not(.assign-item-concept)").forEach(row => {
+      row.style.display = "none";
+      row.querySelectorAll("input").forEach(inp => {
+        if (inp.type === "checkbox" && inp.checked) {
+          inp.checked = false;
+          inp.dispatchEvent(new Event("change", { bubbles:true }));
+        }
+        inp.disabled = true;
+      });
+    });
+
+    list.querySelectorAll(".assign-item-concept input").forEach(inp => {
+      inp.disabled = false;
+    });
+  }
+}
+
 window.addEventListener("DOMContentLoaded", () => {
   scheduleApply(250);
   scheduleApply(1000);
 });
 window.addEventListener("load", () => scheduleApply(250));
 
-// Na maandwissel opnieuw toepassen, maar alleen éénmalig na de klik.
+// Bij status-2 sectiecellen: modal direct in concept-only zetten.
 document.addEventListener("click", (ev) => {
+  const status2Cell = ev.target.closest("tr.status2-child-row td.section-click, tr.status2-child-row td.section-concept-click");
+  if (status2Cell) {
+    enterStatus2ConceptMode();
+    return;
+  }
+
   if (ev.target.closest("#btnPrev, #btnNext")) {
     scheduleApply(700);
     scheduleApply(1500);
   }
-});
+
+  if (ev.target.closest("#amSave")) {
+    // Na opslaan rendert planning.js opnieuw; daarna status 2 opnieuw onderaan/paars zetten.
+    scheduleApply(700);
+    scheduleApply(1500);
+    scheduleApply(2500);
+    leaveStatus2ConceptMode();
+  }
+
+  if (ev.target.closest("#amCancel, #amClose, .modal-backdrop")) {
+    leaveStatus2ConceptMode();
+  }
+}, true);
+
+// Korte, lichte controle zolang het status-2 modal open is.
+window.setInterval(() => {
+  if (Date.now() <= status2ModalModeUntil) enforceStatus2ConceptOnly();
+}, 500);
