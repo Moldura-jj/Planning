@@ -2,8 +2,7 @@ import { makeSupabaseClient } from "./auth.js";
 
 // planning-all-time-hours-column.js
 // Corrigeert de urenkolom zodat 'gepland' niet afhankelijk is van de zichtbare maand.
-// Belangrijk: projectniveau-tabellen zijn optioneel. Als die tabel niet bestaat,
-// blijft de correctie voor sectieplanning gewoon werken.
+// Compacte weergave zodat de smalle urenkolom leesbaar blijft.
 
 const sbAllTimeHours = makeSupabaseClient();
 const DEFAULT_HOURS = 7.5;
@@ -40,8 +39,6 @@ function requiredFromSection(s){
 }
 
 function getPlanFactor(){
-  // planning.js rekent in de urenkolom ook terug naar ingeplande capaciteit.
-  // Als de factor niet vindbaar is, gebruiken we 1 zodat de helper niet crasht.
   const pf = Number(window.__plannerCtx?.settings?.planFactor || window.settings?.planFactor || 1);
   return Number.isFinite(pf) && pf > 0 ? pf : 1;
 }
@@ -75,11 +72,15 @@ function plannedFromRows(rows){
 }
 
 function miniHoursHtml(req, planned){
+  const reqProd = num(req.prod) + num(req.cnc);
+  const planProd = num(planned.prod) + num(planned.cnc);
+  const reqMont = num(req.mont) + num(req.reis);
+  const planMont = num(planned.mont) + num(planned.reis);
   return `
     <div class="alltime-hours-mini" title="Gepland = totaal uit alle planningregels, niet alleen zichtbare periode">
-      <div class="alltime-hours-row"><span>Wvb</span><b>${esc(fmt(req.prep))}</b><i>|</i><strong>${esc(fmt(planned.prep))}</strong></div>
-      <div class="alltime-hours-row"><span>Prod.+CNC</span><b>${esc(fmt(num(req.prod) + num(req.cnc)))}</b><i>|</i><strong>${esc(fmt(num(planned.prod) + num(planned.cnc)))}</strong></div>
-      <div class="alltime-hours-row"><span>Mont.+Reis</span><b>${esc(fmt(num(req.mont) + num(req.reis)))}</b><i>|</i><strong>${esc(fmt(num(planned.mont) + num(planned.reis)))}</strong></div>
+      <div class="alltime-hours-row" title="WVB"><span>Wvb</span><b>${esc(fmt(req.prep))}</b><i>|</i><strong>${esc(fmt(planned.prep))}</strong></div>
+      <div class="alltime-hours-row" title="Productie + CNC"><span>Prod</span><b>${esc(fmt(reqProd))}</b><i>|</i><strong>${esc(fmt(planProd))}</strong></div>
+      <div class="alltime-hours-row" title="Montage + Reis"><span>Mont</span><b>${esc(fmt(reqMont))}</b><i>|</i><strong>${esc(fmt(planMont))}</strong></div>
     </div>
   `;
 }
@@ -89,11 +90,12 @@ function ensureStyle(){
   const style = document.createElement("style");
   style.id = "allTimeHoursColumnStyle";
   style.textContent = `
-    .alltime-hours-mini{width:100%;font-size:11px;line-height:1.15;color:#0f172a;padding:1px 2px;box-sizing:border-box;}
-    .alltime-hours-row{display:grid;grid-template-columns:minmax(48px,1fr) 28px 7px 30px;gap:2px;align-items:center;white-space:nowrap;}
-    .alltime-hours-row span{overflow:hidden;text-overflow:ellipsis;color:#334155;}
-    .alltime-hours-row b,.alltime-hours-row strong{font-weight:500;text-align:right;}
-    .alltime-hours-row i{font-style:normal;color:#94a3b8;text-align:center;}
+    td.hourscol{overflow:hidden!important;}
+    .alltime-hours-mini{width:100%;max-width:100%;font-size:10px;line-height:1.08;color:#0f172a;padding:0 1px;box-sizing:border-box;overflow:hidden;}
+    .alltime-hours-row{display:grid;grid-template-columns:minmax(28px,1fr) 20px 4px 22px;gap:1px;align-items:center;white-space:nowrap;min-width:0;}
+    .alltime-hours-row span{overflow:hidden;text-overflow:clip;color:#334155;min-width:0;}
+    .alltime-hours-row b,.alltime-hours-row strong{font-weight:500;text-align:right;overflow:hidden;text-overflow:clip;min-width:0;}
+    .alltime-hours-row i{font-style:normal;color:#94a3b8;text-align:center;overflow:hidden;}
   `;
   document.head.appendChild(style);
 }
@@ -120,7 +122,6 @@ async function loadAllTimeData(force = false){
     .limit(200000);
   if (sectionAssignRes.error) throw sectionAssignRes.error;
 
-  // Projectniveau kan in verschillende versies anders heten. Niet laten crashen.
   let projectAssigns = [];
   for (const table of ["project_assignments", "projecten_planner", "project_assignments_planner"]) {
     const rows = await fetchOptionalTable(table, "project_id, work_date, werknemer_id, work_type, hours, note");
