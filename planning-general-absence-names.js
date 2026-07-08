@@ -61,14 +61,18 @@ function parseGeneralRow(row){
 }
 
 function findGeneralRows(modal){
-  const all = Array.from(modal.querySelectorAll("*"));
-  return all.filter(el => {
-    const txt = textOf(el);
-    if (!/\(.+?[x×]\s*\d+\)/i.test(txt)) return false;
-    if (!/Bewerken/i.test(txt) || !/Verwijderen/i.test(txt)) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 150 && r.height > 20;
-  }).filter((el, idx, arr) => !arr.some(other => other !== el && other.contains(el)));
+  const matches = Array.from(modal.querySelectorAll("*"))
+    .filter(isVisible)
+    .filter(el => {
+      const txt = textOf(el);
+      if (!/\(.+?[x×]\s*\d+\)/i.test(txt)) return false;
+      if (!/Bewerken/i.test(txt) || !/Verwijderen/i.test(txt)) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 150 && r.height > 20 && r.height < 180;
+    });
+
+  // Houd juist de kleinste/meest specifieke rij over, niet de grote modal/container.
+  return matches.filter(el => !matches.some(other => other !== el && el.contains(other)));
 }
 
 function ensureStyle(){
@@ -126,31 +130,17 @@ function namesFromLines(modal, parsed){
   return names;
 }
 
-function namesFromCompactText(modal, parsed){
-  const txt = String(modal.innerText || modal.textContent || "").replace(/\s+/g, " ").trim();
-  const title = String(parsed.title || "Verlof").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const h1 = fmtHours(parsed.hours).replace(",", "[,.]");
-  const h2 = String(parsed.hours).replace(".", "[,.]");
-
-  const re = new RegExp(`([A-ZÀ-Ý][A-Za-zÀ-ÿ.' -]{2,40}?)\\s+${title}\\s+(?:${h1}|${h2})\\s*uur`, "g");
-  const names = [];
-  let m;
-  while ((m = re.exec(txt))) {
-    const raw = String(m[1] || "").trim();
-    const parts = raw.split(/\s+/);
-    const name = parts.slice(Math.max(0, parts.length - 4)).join(" ").trim();
-    if (lineLooksLikeEmployeeName(name) && !names.includes(name)) names.push(name);
-  }
-  return names;
-}
-
 function namesFromVisibleCards(modal, parsed){
+  const title = String(parsed.title || "Verlof").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const hour1 = fmtHours(parsed.hours).replace(",", "[,.]");
+  const hour2 = String(parsed.hours).replace(".", "[,.]");
+
   const cardCandidates = Array.from(modal.querySelectorAll("div, span"))
     .filter(isVisible)
     .filter(el => {
       const t = textOf(el);
-      return new RegExp(`\\b${String(parsed.title || "Verlof").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t) &&
-        new RegExp(`\\b${fmtHours(parsed.hours).replace(",", "[,.]")}\\s*uur\\b|\\b${String(parsed.hours).replace(".", "[,.]")}\\s*uur\\b`, "i").test(t) &&
+      return new RegExp(`\\b${title}\\b`, "i").test(t) &&
+        new RegExp(`\\b(?:${hour1}|${hour2})\\s*uur\\b`, "i").test(t) &&
         !/\(.+?[x×]\s*\d+\)/i.test(t);
     });
 
@@ -184,14 +174,14 @@ function insertNames(rowEl, names){
   nameLine.className = "general-absence-names";
   nameLine.innerHTML = `<b>Medewerkers:</b> ${escapeHtml(names.join(", "))}`;
 
-  const buttons = Array.from(rowEl.querySelectorAll("button"));
-  const firstButton = buttons[0];
-  if (firstButton?.parentElement && firstButton.parentElement !== rowEl) {
-    rowEl.insertBefore(nameLine, firstButton.parentElement);
-    return;
-  }
+  const button = rowEl.querySelector("button");
+  const textHolder = Array.from(rowEl.children).find(ch => ch !== button?.parentElement && textOf(ch).match(/\(.+?[x×]\s*\d+\)/i));
 
-  rowEl.appendChild(nameLine);
+  if (textHolder) {
+    textHolder.appendChild(nameLine);
+  } else {
+    rowEl.insertBefore(nameLine, rowEl.querySelector("button") || null);
+  }
 }
 
 function applyGeneralAbsenceNames(){
@@ -208,7 +198,6 @@ function applyGeneralAbsenceNames(){
 
     let names = namesFromLines(modal, parsed);
     if (!names.length) names = namesFromVisibleCards(modal, parsed);
-    if (!names.length) names = namesFromCompactText(modal, parsed);
 
     names = [...new Set(names)].slice(0, parsed.count || undefined).sort((a,b) => a.localeCompare(b, "nl"));
     insertNames(rowEl, names);
