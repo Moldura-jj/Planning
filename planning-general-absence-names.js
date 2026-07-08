@@ -1,13 +1,8 @@
-import { makeSupabaseClient } from "./auth.js";
-
 // planning-general-absence-names.js
 // Toont bij "Algemene vrije dag" welke medewerkers onder een gegroepeerde verlofregel vallen.
-// Leest de namen primair uit het geopende modal zelf, zodat dit ook werkt als de databasekoppeling
-// of datum-parsing niet exact genoeg is.
+// Werkt op basis van de zichtbare inhoud van het geopende modal.
 
-const sbGeneralAbsNames = makeSupabaseClient();
 let generalAbsPending = false;
-let employeesByIdCache = null;
 
 function isVisible(el){
   if (!el || !(el instanceof HTMLElement)) return false;
@@ -17,10 +12,6 @@ function isVisible(el){
 
 function textOf(el){
   return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
-}
-
-function norm(s){
-  return String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
 function parseNlNumber(value){
@@ -45,14 +36,6 @@ function escapeHtml(s){
     .replaceAll("'", "&#039;");
 }
 
-function employeeName(row){
-  return String(row?.naam ?? row?.name ?? row?.fullname ?? row?.display_name ?? "").replace(/\s+/g, " ").trim();
-}
-
-function employeeId(row){
-  return String(row?.id ?? row?.werknemer_id ?? row?.employee_id ?? row?.user_id ?? "").trim();
-}
-
 function findGeneralAbsenceModal(){
   const candidates = Array.from(document.querySelectorAll(".modal, [role='dialog'], .modal-card, .modal-backdrop"))
     .filter(isVisible)
@@ -65,71 +48,9 @@ function findGeneralAbsenceModal(){
   })[0] || null;
 }
 
-function parseCurrentYearForMonth(monthNr){
-  const label = textOf(document.querySelector("#current-week-label"));
-  const yearMatches = Array.from(label.matchAll(/\b(20\d{2})\b/g)).map(m => Number(m[1]));
-  if (yearMatches.length) return yearMatches[0];
-  return new Date().getFullYear();
-}
-
-function parseModalDateISO(modal){
-  const txt = textOf(modal);
-  const m = txt.match(/(?:^|\s)(\d{1,2})-(\d{1,2})(?:\s|$)/);
-  if (!m) return "";
-
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  if (!(day >= 1 && day <= 31 && month >= 1 && month <= 12)) return "";
-
-  const year = parseCurrentYearForMonth(month);
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-async function loadEmployeesById(){
-  if (employeesByIdCache) return employeesByIdCache;
-
-  const { data, error } = await sbGeneralAbsNames
-    .from("werknemers")
-    .select("*")
-    .limit(5000);
-
-  if (error) {
-    console.warn("Algemene vrije dag namen: werknemers laden mislukt", error.message || error);
-    employeesByIdCache = new Map();
-    return employeesByIdCache;
-  }
-
-  const map = new Map();
-  for (const row of data || []) {
-    const id = employeeId(row);
-    const name = employeeName(row);
-    if (id && name) map.set(id, name);
-  }
-
-  employeesByIdCache = map;
-  return map;
-}
-
-async function loadAbsencesForDate(dateISO){
-  if (!dateISO) return [];
-
-  const { data, error } = await sbGeneralAbsNames
-    .from("employee_absences")
-    .select("id, werknemer_id, work_date, title, hours, all_day, note")
-    .eq("work_date", dateISO)
-    .limit(200000);
-
-  if (error) {
-    console.warn("Algemene vrije dag namen: verlof laden mislukt", error.message || error);
-    return [];
-  }
-
-  return data || [];
-}
-
 function parseGeneralRow(row){
   const txt = textOf(row);
-  const m = txt.match(/^(.+?)\s*\(\s*(-?\d+(?:[,.]\d+)?)\s*u\s*[x×]\s*(\d+)\s*\)/i);
+  const m = txt.match(/(.+?)\s*\(\s*(-?\d+(?:[,.]\d+)?)\s*u\s*[x×]\s*(\d+)\s*\)/i);
   if (!m) return null;
 
   return {
@@ -140,24 +61,14 @@ function parseGeneralRow(row){
 }
 
 function findGeneralRows(modal){
-  const buttons = Array.from(modal.querySelectorAll("button"))
-    .filter(btn => /Bewerken/i.test(textOf(btn)));
-
-  const rows = [];
-  for (const btn of buttons) {
-    let cur = btn.parentElement;
-    let best = null;
-
-    for (let i = 0; i < 6 && cur && cur !== modal; i++, cur = cur.parentElement) {
-      if (/\(.+?[x×]\s*\d+\)/i.test(textOf(cur)) && /Verwijderen/i.test(textOf(cur))) {
-        best = cur;
-      }
-    }
-
-    if (best && !rows.includes(best)) rows.push(best);
-  }
-
-  return rows;
+  const all = Array.from(modal.querySelectorAll("*"));
+  return all.filter(el => {
+    const txt = textOf(el);
+    if (!/\(.+?[x×]\s*\d+\)/i.test(txt)) return false;
+    if (!/Bewerken/i.test(txt) || !/Verwijderen/i.test(txt)) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 150 && r.height > 20;
+  }).filter((el, idx, arr) => !arr.some(other => other !== el && other.contains(el)));
 }
 
 function ensureStyle(){
@@ -166,11 +77,11 @@ function ensureStyle(){
   style.id = "generalAbsenceNamesStyle";
   style.textContent = `
     .general-absence-names{
-      margin-top:3px;
+      margin-top:4px;
       color:#475569;
       font-size:11px;
       line-height:1.25;
-      max-width:260px;
+      max-width:280px;
     }
     .general-absence-names b{
       color:#334155;
@@ -178,10 +89,6 @@ function ensureStyle(){
     }
   `;
   document.head.appendChild(style);
-}
-
-function sameHours(a, b){
-  return Math.abs(Number(a || 0) - Number(b || 0)) < 0.01;
 }
 
 function lineLooksLikeEmployeeName(line){
@@ -196,37 +103,77 @@ function lineLooksLikeEmployeeName(line){
   return /[A-Za-zÀ-ÿ]/.test(s);
 }
 
-function namesFromVisibleModalRows(modal, parsed){
+function namesFromLines(modal, parsed){
   const lines = String(modal.innerText || modal.textContent || "")
     .split(/\n+/)
     .map(x => x.trim())
     .filter(Boolean);
 
-  const titleNorm = norm(parsed.title || "Verlof");
-  const hourText = fmtHours(parsed.hours);
-  const hourVariants = new Set([
-    `${hourText} uur`,
-    `${hourText}u`,
-    `${String(parsed.hours).replace(".", ",")} uur`,
-    `${String(parsed.hours).replace(".", ",")}u`
-  ].map(norm));
+  const hour = fmtHours(parsed.hours);
+  const hourRegex = new RegExp(`^${hour.replace(",", "[,.]")}\\s*uur$`, "i");
+  const titleRegex = new RegExp(`^${String(parsed.title || "Verlof").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
 
-  const out = [];
-  for (let i = 0; i < lines.length - 1; i++) {
-    const maybeName = lines[i];
-    if (!lineLooksLikeEmployeeName(maybeName)) continue;
+  const names = [];
+  for (let i = 0; i < lines.length; i++) {
+    const name = lines[i];
+    if (!lineLooksLikeEmployeeName(name)) continue;
 
-    const next1 = norm(lines[i + 1] || "");
-    const next2 = norm(lines[i + 2] || "");
-    const next3 = norm(lines[i + 3] || "");
-
-    const hasTitle = next1 === titleNorm || next2 === titleNorm;
-    const hasHours = hourVariants.has(next1) || hourVariants.has(next2) || hourVariants.has(next3);
-
-    if (hasTitle && hasHours && !out.includes(maybeName)) out.push(maybeName);
+    const next = lines.slice(i + 1, i + 5);
+    const hasTitle = next.some(x => titleRegex.test(x));
+    const hasHours = next.some(x => hourRegex.test(x) || new RegExp(`^${String(parsed.hours).replace(".", "[,.]")}\\s*uur$`, "i").test(x));
+    if (hasTitle && hasHours && !names.includes(name)) names.push(name);
   }
+  return names;
+}
 
-  return out;
+function namesFromCompactText(modal, parsed){
+  const txt = String(modal.innerText || modal.textContent || "").replace(/\s+/g, " ").trim();
+  const title = String(parsed.title || "Verlof").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const h1 = fmtHours(parsed.hours).replace(",", "[,.]");
+  const h2 = String(parsed.hours).replace(".", "[,.]");
+
+  const re = new RegExp(`([A-ZÀ-Ý][A-Za-zÀ-ÿ.' -]{2,40}?)\\s+${title}\\s+(?:${h1}|${h2})\\s*uur`, "g");
+  const names = [];
+  let m;
+  while ((m = re.exec(txt))) {
+    const raw = String(m[1] || "").trim();
+    const parts = raw.split(/\s+/);
+    const name = parts.slice(Math.max(0, parts.length - 4)).join(" ").trim();
+    if (lineLooksLikeEmployeeName(name) && !names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
+function namesFromVisibleCards(modal, parsed){
+  const cardCandidates = Array.from(modal.querySelectorAll("div, span"))
+    .filter(isVisible)
+    .filter(el => {
+      const t = textOf(el);
+      return new RegExp(`\\b${String(parsed.title || "Verlof").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(t) &&
+        new RegExp(`\\b${fmtHours(parsed.hours).replace(",", "[,.]")}\\s*uur\\b|\\b${String(parsed.hours).replace(".", "[,.]")}\\s*uur\\b`, "i").test(t) &&
+        !/\(.+?[x×]\s*\d+\)/i.test(t);
+    });
+
+  const names = [];
+  for (const card of cardCandidates) {
+    let cur = card.previousElementSibling;
+    let found = "";
+    for (let i = 0; i < 5 && cur; i++, cur = cur.previousElementSibling) {
+      const t = textOf(cur);
+      if (lineLooksLikeEmployeeName(t)) { found = t; break; }
+    }
+
+    if (!found) {
+      let parent = card.parentElement;
+      for (let depth = 0; depth < 4 && parent && parent !== modal; depth++, parent = parent.parentElement) {
+        const maybe = Array.from(parent.children).map(textOf).find(lineLooksLikeEmployeeName);
+        if (maybe) { found = maybe; break; }
+      }
+    }
+
+    if (found && !names.includes(found)) names.push(found);
+  }
+  return names;
 }
 
 function insertNames(rowEl, names){
@@ -237,50 +184,38 @@ function insertNames(rowEl, names){
   nameLine.className = "general-absence-names";
   nameLine.innerHTML = `<b>Medewerkers:</b> ${escapeHtml(names.join(", "))}`;
 
-  const firstTextBlock = Array.from(rowEl.children).find(ch => !/button/i.test(ch.tagName) && textOf(ch));
-  if (firstTextBlock) {
-    firstTextBlock.appendChild(nameLine);
-  } else {
-    rowEl.insertBefore(nameLine, rowEl.firstChild?.nextSibling || null);
+  const buttons = Array.from(rowEl.querySelectorAll("button"));
+  const firstButton = buttons[0];
+  if (firstButton?.parentElement && firstButton.parentElement !== rowEl) {
+    rowEl.insertBefore(nameLine, firstButton.parentElement);
+    return;
   }
+
+  rowEl.appendChild(nameLine);
 }
 
-async function applyGeneralAbsenceNames(){
+function applyGeneralAbsenceNames(){
   ensureStyle();
-
   const modal = findGeneralAbsenceModal();
   if (!modal) return;
 
   const rows = findGeneralRows(modal);
   if (!rows.length) return;
 
-  const dateISO = parseModalDateISO(modal);
-  const employeesById = await loadEmployeesById();
-  const absences = await loadAbsencesForDate(dateISO);
-
   for (const rowEl of rows) {
     const parsed = parseGeneralRow(rowEl);
     if (!parsed) continue;
 
-    let names = namesFromVisibleModalRows(modal, parsed);
+    let names = namesFromLines(modal, parsed);
+    if (!names.length) names = namesFromVisibleCards(modal, parsed);
+    if (!names.length) names = namesFromCompactText(modal, parsed);
 
-    if (!names.length && absences.length) {
-      const matches = absences.filter(a =>
-        norm(a.title || "Verlof") === norm(parsed.title || "Verlof") &&
-        sameHours(a.hours, parsed.hours)
-      );
-
-      names = matches
-        .map(a => employeesById.get(String(a.werknemer_id)) || String(a.werknemer_id || ""))
-        .filter(Boolean);
-    }
-
-    names = [...new Set(names)].sort((a,b) => a.localeCompare(b, "nl"));
+    names = [...new Set(names)].slice(0, parsed.count || undefined).sort((a,b) => a.localeCompare(b, "nl"));
     insertNames(rowEl, names);
   }
 }
 
-function scheduleGeneralAbsenceNames(delay = 180){
+function scheduleGeneralAbsenceNames(delay = 120){
   if (generalAbsPending) return;
   generalAbsPending = true;
   window.setTimeout(() => {
@@ -293,9 +228,10 @@ window.addEventListener("DOMContentLoaded", () => scheduleGeneralAbsenceNames(50
 window.addEventListener("load", () => scheduleGeneralAbsenceNames(500));
 
 document.addEventListener("click", () => {
-  scheduleGeneralAbsenceNames(250);
-  scheduleGeneralAbsenceNames(900);
+  scheduleGeneralAbsenceNames(150);
+  scheduleGeneralAbsenceNames(700);
+  scheduleGeneralAbsenceNames(1500);
 }, true);
 
-const generalAbsObserver = new MutationObserver(() => scheduleGeneralAbsenceNames(300));
+const generalAbsObserver = new MutationObserver(() => scheduleGeneralAbsenceNames(250));
 generalAbsObserver.observe(document.body, { childList:true, subtree:true });
