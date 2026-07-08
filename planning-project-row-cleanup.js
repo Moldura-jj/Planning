@@ -130,6 +130,9 @@ function bindProjectRowCellClicks(){
     const cell = ev.target.closest("tr.project-row > td.project-cell, tr.project-row > td.rowhdr.project-cell");
     if (!cell) return;
 
+    // Laat klikken op het project-schakelaartje volledig met rust.
+    if (ev.target.closest(".project-include-toggle-wrap, .project-include-toggle, .project-include-switch, .project-include-label")) return;
+
     // Laat klikken op echte controls met rust.
     if (ev.target.closest("button:not(.expander), input, select, textarea, a")) return;
 
