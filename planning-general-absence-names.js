@@ -2,7 +2,8 @@ import { makeSupabaseClient } from "./auth.js";
 
 // planning-general-absence-names.js
 // Toont bij "Algemene vrije dag" welke medewerkers onder een gegroepeerde verlofregel vallen.
-// Voorbeeld: Verlof (7,50u × 5) krijgt daaronder de namen van die 5 medewerkers.
+// Leest de namen primair uit het geopende modal zelf, zodat dit ook werkt als de databasekoppeling
+// of datum-parsing niet exact genoeg is.
 
 const sbGeneralAbsNames = makeSupabaseClient();
 let generalAbsPending = false;
@@ -15,7 +16,7 @@ function isVisible(el){
 }
 
 function textOf(el){
-  return String(el?.textContent || "").replace(/\s+/g, " ").trim();
+  return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
 }
 
 function norm(s){
@@ -67,18 +68,12 @@ function findGeneralAbsenceModal(){
 function parseCurrentYearForMonth(monthNr){
   const label = textOf(document.querySelector("#current-week-label"));
   const yearMatches = Array.from(label.matchAll(/\b(20\d{2})\b/g)).map(m => Number(m[1]));
-  if (yearMatches.length === 1) return yearMatches[0];
-
-  // In de planner staan maanden meestal als "juli 2026 - oktober 2026".
-  // Als er meerdere jaren zijn, kies de eerste als veilige default.
   if (yearMatches.length) return yearMatches[0];
-
   return new Date().getFullYear();
 }
 
 function parseModalDateISO(modal){
   const txt = textOf(modal);
-  // Meestal staat er onder de dagtitel iets als 24-9.
   const m = txt.match(/(?:^|\s)(\d{1,2})-(\d{1,2})(?:\s|$)/);
   if (!m) return "";
 
@@ -116,6 +111,8 @@ async function loadEmployeesById(){
 }
 
 async function loadAbsencesForDate(dateISO){
+  if (!dateISO) return [];
+
   const { data, error } = await sbGeneralAbsNames
     .from("employee_absences")
     .select("id, werknemer_id, work_date, title, hours, all_day, note")
@@ -132,8 +129,6 @@ async function loadAbsencesForDate(dateISO){
 
 function parseGeneralRow(row){
   const txt = textOf(row);
-
-  // Voorbeeld: Verlof (7,50u × 5)
   const m = txt.match(/^(.+?)\s*\(\s*(-?\d+(?:[,.]\d+)?)\s*u\s*[x×]\s*(\d+)\s*\)/i);
   if (!m) return null;
 
@@ -175,7 +170,7 @@ function ensureStyle(){
       color:#475569;
       font-size:11px;
       line-height:1.25;
-      max-width:210px;
+      max-width:260px;
     }
     .general-absence-names b{
       color:#334155;
@@ -189,18 +184,77 @@ function sameHours(a, b){
   return Math.abs(Number(a || 0) - Number(b || 0)) < 0.01;
 }
 
+function lineLooksLikeEmployeeName(line){
+  const s = String(line || "").trim();
+  if (!s) return false;
+  if (/^(Donderdag|Maandag|Dinsdag|Woensdag|Vrijdag|Zaterdag|Zondag)$/i.test(s)) return false;
+  if (/^\d{1,2}-\d{1,2}$/.test(s)) return false;
+  if (/^(Algemene vrije dag|Verlof|Uren|Hele dag|Opslaan|Bewerken|Verwijderen|Beschikbaar)$/i.test(s)) return false;
+  if (/Wordt opgeslagen/i.test(s)) return false;
+  if (/\(.+?[x×]\s*\d+\)/i.test(s)) return false;
+  if (/uur$/i.test(s)) return false;
+  return /[A-Za-zÀ-ÿ]/.test(s);
+}
+
+function namesFromVisibleModalRows(modal, parsed){
+  const lines = String(modal.innerText || modal.textContent || "")
+    .split(/\n+/)
+    .map(x => x.trim())
+    .filter(Boolean);
+
+  const titleNorm = norm(parsed.title || "Verlof");
+  const hourText = fmtHours(parsed.hours);
+  const hourVariants = new Set([
+    `${hourText} uur`,
+    `${hourText}u`,
+    `${String(parsed.hours).replace(".", ",")} uur`,
+    `${String(parsed.hours).replace(".", ",")}u`
+  ].map(norm));
+
+  const out = [];
+  for (let i = 0; i < lines.length - 1; i++) {
+    const maybeName = lines[i];
+    if (!lineLooksLikeEmployeeName(maybeName)) continue;
+
+    const next1 = norm(lines[i + 1] || "");
+    const next2 = norm(lines[i + 2] || "");
+    const next3 = norm(lines[i + 3] || "");
+
+    const hasTitle = next1 === titleNorm || next2 === titleNorm;
+    const hasHours = hourVariants.has(next1) || hourVariants.has(next2) || hourVariants.has(next3);
+
+    if (hasTitle && hasHours && !out.includes(maybeName)) out.push(maybeName);
+  }
+
+  return out;
+}
+
+function insertNames(rowEl, names){
+  rowEl.querySelectorAll(".general-absence-names").forEach(el => el.remove());
+  if (!names.length) return;
+
+  const nameLine = document.createElement("div");
+  nameLine.className = "general-absence-names";
+  nameLine.innerHTML = `<b>Medewerkers:</b> ${escapeHtml(names.join(", "))}`;
+
+  const firstTextBlock = Array.from(rowEl.children).find(ch => !/button/i.test(ch.tagName) && textOf(ch));
+  if (firstTextBlock) {
+    firstTextBlock.appendChild(nameLine);
+  } else {
+    rowEl.insertBefore(nameLine, rowEl.firstChild?.nextSibling || null);
+  }
+}
+
 async function applyGeneralAbsenceNames(){
   ensureStyle();
 
   const modal = findGeneralAbsenceModal();
   if (!modal) return;
 
-  const dateISO = parseModalDateISO(modal);
-  if (!dateISO) return;
-
   const rows = findGeneralRows(modal);
   if (!rows.length) return;
 
+  const dateISO = parseModalDateISO(modal);
   const employeesById = await loadEmployeesById();
   const absences = await loadAbsencesForDate(dateISO);
 
@@ -208,30 +262,21 @@ async function applyGeneralAbsenceNames(){
     const parsed = parseGeneralRow(rowEl);
     if (!parsed) continue;
 
-    const matches = absences.filter(a =>
-      norm(a.title || "Verlof") === norm(parsed.title || "Verlof") &&
-      sameHours(a.hours, parsed.hours)
-    );
+    let names = namesFromVisibleModalRows(modal, parsed);
 
-    const names = matches
-      .map(a => employeesById.get(String(a.werknemer_id)) || String(a.werknemer_id || ""))
-      .filter(Boolean)
-      .sort((a,b) => a.localeCompare(b, "nl"));
+    if (!names.length && absences.length) {
+      const matches = absences.filter(a =>
+        norm(a.title || "Verlof") === norm(parsed.title || "Verlof") &&
+        sameHours(a.hours, parsed.hours)
+      );
 
-    rowEl.querySelectorAll(".general-absence-names").forEach(el => el.remove());
-
-    if (!names.length) continue;
-
-    const nameLine = document.createElement("div");
-    nameLine.className = "general-absence-names";
-    nameLine.innerHTML = `<b>Medewerkers:</b> ${escapeHtml(names.join(", "))}`;
-
-    const firstTextBlock = Array.from(rowEl.children).find(ch => !/button/i.test(ch.tagName) && textOf(ch));
-    if (firstTextBlock) {
-      firstTextBlock.appendChild(nameLine);
-    } else {
-      rowEl.insertBefore(nameLine, rowEl.firstChild?.nextSibling || null);
+      names = matches
+        .map(a => employeesById.get(String(a.werknemer_id)) || String(a.werknemer_id || ""))
+        .filter(Boolean);
     }
+
+    names = [...new Set(names)].sort((a,b) => a.localeCompare(b, "nl"));
+    insertNames(rowEl, names);
   }
 }
 
