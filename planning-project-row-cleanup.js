@@ -1,6 +1,7 @@
 // planning-project-row-cleanup.js
 // Verbergt de project-pijltjes links, schuift projectgegevens naar links
 // en maakt de volledige projectcel klikbaar om secties te openen/sluiten.
+// Projecttekst + datumvelden vullen nu de volledige hoogte van de projectregel.
 
 function ensureProjectRowCleanupStyle(){
   if (document.getElementById("projectRowCleanupStyle")) return;
@@ -9,11 +10,15 @@ function ensureProjectRowCleanupStyle(){
   style.textContent = `
     tr.project-row > td.project-cell,
     tr.project-row > td.rowhdr.project-cell{
-      padding-left:6px !important;
-      padding-right:6px !important;
+      padding:0 6px !important;
       cursor:pointer !important;
-      vertical-align:stretch !important;
+      vertical-align:middle !important;
       height:100% !important;
+      min-height:44px !important;
+      position:sticky !important;
+      left:0 !important;
+      overflow:hidden !important;
+      box-sizing:border-box !important;
     }
 
     tr.project-row > td.project-cell .expander[data-proj]{
@@ -26,29 +31,55 @@ function ensureProjectRowCleanupStyle(){
     }
 
     tr.project-row > td.project-cell .projtext{
-      margin-left:0 !important;
-      padding-left:0 !important;
+      position:absolute !important;
+      left:6px !important;
+      right:82px !important;
+      top:0 !important;
+      bottom:0 !important;
+      margin:0 !important;
+      padding:0 !important;
       display:flex !important;
       flex-direction:column !important;
       justify-content:center !important;
-      height:100% !important;
-      min-height:34px !important;
-      max-width:calc(100% - 76px) !important;
+      align-items:flex-start !important;
+      min-height:100% !important;
+      max-width:none !important;
+      overflow:hidden !important;
+      box-sizing:border-box !important;
     }
 
     tr.project-row > td.project-cell .project-date-summary{
+      position:absolute !important;
+      top:0 !important;
+      right:6px !important;
+      bottom:0 !important;
+      width:74px !important;
       display:flex !important;
       flex-direction:column !important;
       justify-content:center !important;
-      align-self:stretch !important;
+      align-items:flex-end !important;
       height:auto !important;
-      margin-left:auto !important;
-      padding-left:6px !important;
+      margin:0 !important;
+      padding:0 !important;
+      box-sizing:border-box !important;
+      overflow:hidden !important;
     }
 
     tr.project-row > td.project-cell .projline1,
     tr.project-row > td.project-cell .projline2{
       line-height:1.15 !important;
+      max-width:100% !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      white-space:nowrap !important;
+    }
+
+    tr.project-row > td.project-cell .project-date-summary span{
+      line-height:1.15 !important;
+      max-width:100% !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      white-space:nowrap !important;
     }
 
     tr.project-row > td.project-cell:hover{
