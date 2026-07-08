@@ -1,10 +1,9 @@
 import { makeSupabaseClient } from "./auth.js";
 
 // planning-all-time-hours-column.js
-// Correctie voor de uren-kolom links naast de planning.
-// De bestaande planning.js berekent 'gepland' op basis van de zichtbare periode.
-// Deze helper vult de kolom opnieuw met totalen uit alle planningregels in Supabase,
-// ongeacht welke maand zichtbaar is.
+// Corrigeert de urenkolom zodat 'gepland' niet afhankelijk is van de zichtbare maand.
+// Belangrijk: projectniveau-tabellen zijn optioneel. Als die tabel niet bestaat,
+// blijft de correctie voor sectieplanning gewoon werken.
 
 const sbAllTimeHours = makeSupabaseClient();
 const DEFAULT_HOURS = 7.5;
@@ -13,28 +12,10 @@ let allTimeRunning = false;
 let allTimeCache = null;
 let allTimeCacheAt = 0;
 
-function txt(el){
-  return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
-}
-
-function esc(s){
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
-function num(v){
-  const n = Number(String(v ?? "0").replace(",", "."));
-  return Number.isFinite(n) ? n : 0;
-}
-
-function fmt(n){
-  const v = Math.round((Number(n || 0) + Number.EPSILON) * 10) / 10;
-  return String(v).replace(".", ",");
-}
+function txt(el){ return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim(); }
+function esc(s){ return String(s ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+function num(v){ const n = Number(String(v ?? "0").replace(",", ".")); return Number.isFinite(n) ? n : 0; }
+function fmt(n){ const v = Math.round((Number(n || 0) + Number.EPSILON) * 10) / 10; return String(v).replace(".", ","); }
 
 function parseConceptHours(note, fallback = DEFAULT_HOURS){
   const m = String(note || "").match(/concept-hours:([0-9]+(?:[,.][0-9]+)?)/i);
@@ -43,28 +24,10 @@ function parseConceptHours(note, fallback = DEFAULT_HOURS){
   return h > 0 ? h : fallback;
 }
 
-function canonicalSectionId(section){
-  return String(section?.id ?? section?.section_id ?? "").trim();
-}
-
-function addAlias(map, key, canon){
-  const k = String(key ?? "").trim();
-  const c = String(canon ?? "").trim();
-  if (k && c) map.set(k, c);
-}
-
-function emptyTotals(){
-  return { prep:0, prod:0, cnc:0, mont:0, reis:0 };
-}
-
-function addTotals(a, b){
-  a.prep += num(b.prep);
-  a.prod += num(b.prod);
-  a.cnc  += num(b.cnc);
-  a.mont += num(b.mont);
-  a.reis += num(b.reis);
-  return a;
-}
+function emptyTotals(){ return { prep:0, prod:0, cnc:0, mont:0, reis:0 }; }
+function addTotals(a, b){ a.prep += num(b.prep); a.prod += num(b.prod); a.cnc += num(b.cnc); a.mont += num(b.mont); a.reis += num(b.reis); return a; }
+function addAlias(map, key, canon){ const k = String(key ?? "").trim(); const c = String(canon ?? "").trim(); if (k && c) map.set(k, c); }
+function canonicalSectionId(s){ return String(s?.id ?? s?.section_id ?? "").trim(); }
 
 function requiredFromSection(s){
   return {
@@ -76,9 +39,16 @@ function requiredFromSection(s){
   };
 }
 
-function plannedFromAssignmentRows(rows, planFactor){
+function getPlanFactor(){
+  // planning.js rekent in de urenkolom ook terug naar ingeplande capaciteit.
+  // Als de factor niet vindbaar is, gebruiken we 1 zodat de helper niet crasht.
+  const pf = Number(window.__plannerCtx?.settings?.planFactor || window.settings?.planFactor || 1);
+  return Number.isFinite(pf) && pf > 0 ? pf : 1;
+}
+
+function plannedFromRows(rows){
   const out = emptyTotals();
-  const pf = Number(planFactor || 1) || 1;
+  const pf = getPlanFactor();
 
   for (const r of rows || []) {
     const wt = String(r.work_type || "").toLowerCase().trim();
@@ -106,7 +76,7 @@ function plannedFromAssignmentRows(rows, planFactor){
 
 function miniHoursHtml(req, planned){
   return `
-    <div class="alltime-hours-mini">
+    <div class="alltime-hours-mini" title="Gepland = totaal uit alle planningregels, niet alleen zichtbare periode">
       <div class="alltime-hours-row"><span>Wvb</span><b>${esc(fmt(req.prep))}</b><i>|</i><strong>${esc(fmt(planned.prep))}</strong></div>
       <div class="alltime-hours-row"><span>Prod.+CNC</span><b>${esc(fmt(num(req.prod) + num(req.cnc)))}</b><i>|</i><strong>${esc(fmt(num(planned.prod) + num(planned.cnc)))}</strong></div>
       <div class="alltime-hours-row"><span>Mont.+Reis</span><b>${esc(fmt(num(req.mont) + num(req.reis)))}</b><i>|</i><strong>${esc(fmt(num(planned.mont) + num(planned.reis)))}</strong></div>
@@ -119,46 +89,49 @@ function ensureStyle(){
   const style = document.createElement("style");
   style.id = "allTimeHoursColumnStyle";
   style.textContent = `
-    .alltime-hours-mini{
-      width:100%;
-      font-size:11px;
-      line-height:1.15;
-      color:#0f172a;
-      padding:1px 2px;
-      box-sizing:border-box;
-    }
-    .alltime-hours-row{
-      display:grid;
-      grid-template-columns:minmax(48px,1fr) 28px 7px 30px;
-      gap:2px;
-      align-items:center;
-      white-space:nowrap;
-    }
-    .alltime-hours-row span{ overflow:hidden; text-overflow:ellipsis; color:#334155; }
-    .alltime-hours-row b,
-    .alltime-hours-row strong{ font-weight:500; text-align:right; }
-    .alltime-hours-row i{ font-style:normal; color:#94a3b8; text-align:center; }
+    .alltime-hours-mini{width:100%;font-size:11px;line-height:1.15;color:#0f172a;padding:1px 2px;box-sizing:border-box;}
+    .alltime-hours-row{display:grid;grid-template-columns:minmax(48px,1fr) 28px 7px 30px;gap:2px;align-items:center;white-space:nowrap;}
+    .alltime-hours-row span{overflow:hidden;text-overflow:ellipsis;color:#334155;}
+    .alltime-hours-row b,.alltime-hours-row strong{font-weight:500;text-align:right;}
+    .alltime-hours-row i{font-style:normal;color:#94a3b8;text-align:center;}
   `;
   document.head.appendChild(style);
+}
+
+async function fetchOptionalTable(table, select){
+  const res = await sbAllTimeHours.from(table).select(select).limit(200000);
+  if (res.error) {
+    console.warn(`Alle geplande uren: optionele tabel ${table} niet gebruikt:`, res.error.message || res.error);
+    return [];
+  }
+  return res.data || [];
 }
 
 async function loadAllTimeData(force = false){
   const now = Date.now();
   if (!force && allTimeCache && (now - allTimeCacheAt) < 30000) return allTimeCache;
 
-  const [sectionsRes, sectionAssignRes, projectAssignRes] = await Promise.all([
-    sbAllTimeHours.from("secties").select("*").limit(50000),
-    sbAllTimeHours.from("section_assignments").select("section_id, work_date, werknemer_id, work_type, hours, note").limit(200000),
-    sbAllTimeHours.from("project_assignments").select("project_id, work_date, werknemer_id, work_type, hours, note").limit(200000),
-  ]);
-
+  const sectionsRes = await sbAllTimeHours.from("secties").select("*").limit(50000);
   if (sectionsRes.error) throw sectionsRes.error;
+
+  const sectionAssignRes = await sbAllTimeHours
+    .from("section_assignments")
+    .select("section_id, work_date, werknemer_id, work_type, hours, note")
+    .limit(200000);
   if (sectionAssignRes.error) throw sectionAssignRes.error;
-  if (projectAssignRes.error) throw projectAssignRes.error;
+
+  // Projectniveau kan in verschillende versies anders heten. Niet laten crashen.
+  let projectAssigns = [];
+  for (const table of ["project_assignments", "projecten_planner", "project_assignments_planner"]) {
+    const rows = await fetchOptionalTable(table, "project_id, work_date, werknemer_id, work_type, hours, note");
+    if (rows.length) {
+      projectAssigns = rows;
+      break;
+    }
+  }
 
   const sections = sectionsRes.data || [];
   const sectionAssigns = sectionAssignRes.data || [];
-  const projectAssigns = projectAssignRes.data || [];
 
   const alias = new Map();
   const sectionByCanon = new Map();
@@ -194,22 +167,16 @@ async function loadAllTimeData(force = false){
     rowsByProject.get(pid).push(r);
   }
 
-  allTimeCache = { sections, alias, sectionByCanon, sectionIdsByProject, rowsBySection, rowsByProject };
+  allTimeCache = { alias, sectionByCanon, sectionIdsByProject, rowsBySection, rowsByProject };
   allTimeCacheAt = now;
   return allTimeCache;
-}
-
-function getPlanFactor(){
-  const ctx = window.__plannerCtx;
-  const pf = Number(ctx?.settings?.planFactor || window.settings?.planFactor || 1);
-  return Number.isFinite(pf) && pf > 0 ? pf : 1;
 }
 
 function getSectionTotals(data, sectionId){
   const sid = data.alias.get(String(sectionId || "").trim()) || String(sectionId || "").trim();
   const s = data.sectionByCanon.get(sid);
   const req = s ? requiredFromSection(s) : emptyTotals();
-  const planned = plannedFromAssignmentRows(data.rowsBySection.get(sid) || [], getPlanFactor());
+  const planned = plannedFromRows(data.rowsBySection.get(sid) || []);
   return { req, planned };
 }
 
@@ -221,10 +188,10 @@ function getProjectTotals(data, projectId){
   for (const sid of data.sectionIdsByProject.get(pid) || []) {
     const s = data.sectionByCanon.get(sid);
     if (s) addTotals(req, requiredFromSection(s));
-    addTotals(planned, plannedFromAssignmentRows(data.rowsBySection.get(sid) || [], getPlanFactor()));
+    addTotals(planned, plannedFromRows(data.rowsBySection.get(sid) || []));
   }
 
-  addTotals(planned, plannedFromAssignmentRows(data.rowsByProject.get(pid) || [], getPlanFactor()));
+  addTotals(planned, plannedFromRows(data.rowsByProject.get(pid) || []));
   return { req, planned };
 }
 
@@ -272,19 +239,18 @@ function scheduleAllTimeHours(delay = 350, force = false){
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  scheduleAllTimeHours(800, true);
-  scheduleAllTimeHours(2200, false);
+  scheduleAllTimeHours(900, true);
+  scheduleAllTimeHours(2500, false);
 });
-window.addEventListener("load", () => scheduleAllTimeHours(800, true));
+window.addEventListener("load", () => scheduleAllTimeHours(900, true));
 
-const observer = new MutationObserver(() => scheduleAllTimeHours(900, false));
+const observer = new MutationObserver(() => scheduleAllTimeHours(1000, false));
 observer.observe(document.body, { childList:true, subtree:true });
 
-// Na opslaan/verwijderen in modals snel opnieuw uit Supabase laden.
 document.addEventListener("click", (ev) => {
   const label = txt(ev.target.closest("button"));
-  if (/^(Opslaan|Verwijderen|Bijwerken)$/i.test(label)) {
+  if (/^(Opslaan|Verwijderen|Bijwerken|Volgende maand|Vorige maand)$/i.test(label)) {
     allTimeCache = null;
-    scheduleAllTimeHours(1500, true);
+    scheduleAllTimeHours(1800, true);
   }
 }, true);
