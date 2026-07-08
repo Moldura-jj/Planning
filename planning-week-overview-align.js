@@ -1,6 +1,6 @@
 // planning-week-overview-align.js
-// Lijnt het weekoverzicht-modal uit: dezelfde medewerker staat in elke dagkolom op dezelfde hoogte.
-// Dit script verandert geen data of planninglogica; het zet alleen min-height op de dagblokken.
+// Lijnt alleen het echte weekoverzicht-modal uit: 7 dagkolommen naast elkaar.
+// Belangrijk: beschikbaarheidsmodal bevat ook "Week xx", maar heeft dagen onder elkaar en wordt genegeerd.
 
 let weekAlignPending = false;
 
@@ -22,17 +22,17 @@ function isDayHeaderText(txt){
   return /^(Ma|Di|Wo|Do|Vr|Za|Zo)\s+\d{1,2}\s*-\s*\d{1,2}\b/i.test(String(txt || "").trim());
 }
 
-function findWeekModal(){
-  const candidates = Array.from(document.querySelectorAll(".modal, [role='dialog'], .modal-card, .week-overview-modal, .week-modal"))
+function clearOldAlignment(root = document){
+  root.querySelectorAll(".week-align-day-col, .week-align-row-block").forEach(el => {
+    el.classList.remove("week-align-day-col", "week-align-row-block");
+    el.style.minHeight = "";
+  });
+}
+
+function findWeekModalCandidates(){
+  return Array.from(document.querySelectorAll(".modal, [role='dialog'], .modal-card, .week-overview-modal, .week-modal"))
     .filter(isVisible)
     .filter(hasWeekTitle);
-
-  // Kies de grootste zichtbare kandidaat; dat is vrijwel altijd het geopende modal.
-  return candidates.sort((a,b) => {
-    const ar = a.getBoundingClientRect();
-    const br = b.getBoundingClientRect();
-    return (br.width * br.height) - (ar.width * ar.height);
-  })[0] || null;
 }
 
 function directDayColumns(modal){
@@ -84,7 +84,6 @@ function getDayColumns(modal){
   cols = findDayColumnsByHeaders(modal);
   if (cols.length >= 5) return cols;
 
-  // Laatste fallback: zoek een rij/grid met 7 zichtbare kinderen.
   const containers = Array.from(modal.querySelectorAll("div, section"))
     .filter(isVisible)
     .sort((a,b) => b.getBoundingClientRect().width - a.getBoundingClientRect().width);
@@ -97,6 +96,39 @@ function getDayColumns(modal){
   }
 
   return [];
+}
+
+function areHorizontalDayColumns(cols){
+  if (!cols || cols.length < 5) return false;
+
+  const rects = cols.map(c => c.getBoundingClientRect());
+  const validWidths = rects.every(r => r.width >= 110 && r.width <= 420 && r.height >= 250);
+  if (!validWidths) return false;
+
+  // Echte weekoverzicht-kolommen staan naast elkaar: top-positie vrijwel gelijk.
+  const tops = rects.map(r => Math.round(r.top));
+  const minTop = Math.min(...tops);
+  const maxTop = Math.max(...tops);
+  if ((maxTop - minTop) > 45) return false;
+
+  // En x-posities lopen duidelijk op. Bij beschikbaarheid staan ze onder elkaar en is dit niet zo.
+  const lefts = rects.map(r => Math.round(r.left));
+  let increasing = 0;
+  for (let i = 1; i < lefts.length; i++) {
+    if (lefts[i] > lefts[i - 1] + 40) increasing++;
+  }
+  return increasing >= Math.min(4, lefts.length - 1);
+}
+
+function findWeekModal(){
+  const candidates = findWeekModalCandidates();
+
+  for (const modal of candidates) {
+    const cols = getDayColumns(modal);
+    if (areHorizontalDayColumns(cols)) return modal;
+  }
+
+  return null;
 }
 
 function looksLikeDayHeaderBlock(el){
@@ -126,11 +158,9 @@ function directBlocks(col){
   const children = Array.from(col.children).filter(isVisible);
   if (!children.length) return [];
 
-  // Verwijder headerblok(ken) bovenaan. Daarna blijven medewerkers + Concepten over.
   const blocks = children.filter(ch => !looksLikeDayHeaderBlock(ch));
   if (blocks.length >= 4) return blocks;
 
-  // Soms zit er een body-wrapper onder de header.
   for (const ch of children) {
     const nested = Array.from(ch.children).filter(isVisible).filter(x => !looksLikeDayHeaderBlock(x));
     if (nested.length >= 4) return nested;
@@ -140,7 +170,8 @@ function directBlocks(col){
 }
 
 function getBlocksForColumn(col){
-  return preferredBlocks(col).length ? preferredBlocks(col) : directBlocks(col);
+  const preferred = preferredBlocks(col);
+  return preferred.length ? preferred : directBlocks(col);
 }
 
 function resetAlignment(cols){
@@ -154,11 +185,13 @@ function resetAlignment(cols){
 }
 
 function alignWeekOverview(){
+  clearOldAlignment();
+
   const modal = findWeekModal();
   if (!modal) return;
 
   const cols = getDayColumns(modal);
-  if (cols.length < 5) return;
+  if (!areHorizontalDayColumns(cols)) return;
 
   resetAlignment(cols);
 
