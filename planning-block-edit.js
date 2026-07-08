@@ -6,11 +6,13 @@ import { makeSupabaseClient } from "./auth.js";
 // - Shift + klik = alleen die losse dag openen
 // - uren per dag aanpassen
 // - medewerkers voor het hele blok aanpassen
+// - concepturen ondersteunen zonder medewerkerkeuze
 //
 // Let op: verschuiven van het complete blok volgt in fase 3.
 
 const sbBlockEdit = makeSupabaseClient();
-const DUMMY_IDS = new Set(["999999", "9999999", "-1"]);
+const CONCEPT_EMP_ID = "999999";
+const DUMMY_IDS = new Set([CONCEPT_EMP_ID, "9999999", "-1"]);
 let blockCtx = null;
 let employeesCache = null;
 
@@ -31,20 +33,6 @@ function parseISODateLocal(iso){
   const m = String(iso || "").slice(0,10).match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return null;
   return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-}
-
-function toISODateLocal(date){
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function addDaysISO(iso, days){
-  const d = parseISODateLocal(iso);
-  if (!d) return "";
-  d.setDate(d.getDate() + Number(days || 0));
-  return toISODateLocal(d);
 }
 
 function fmtDateShort(iso){
@@ -172,6 +160,13 @@ function ensureStyle(){
       background:#fff;
       border:1px solid #e5e7eb;
     }
+    .block-edit-concept{
+      border-color:#c4b5fd;
+      background:#f5f3ff;
+      color:#4c1d95;
+      font-weight:800;
+      margin-bottom:6px;
+    }
     .block-edit-dates{
       margin-top:14px;
       border:1px solid #e2e8f0;
@@ -293,10 +288,8 @@ function getSectionIdFromRow(row){
 function kindFromCell(cell){
   const t = textOf(cell).toLowerCase();
   const cls = String(cell?.className || "").toLowerCase();
-  if (cls.includes("mont") || t.includes("mont")) return "montage";
-  if (cls.includes("prod") || t.includes("prod")) return "productie";
-  if (cell.querySelector(".bar-mont, .cap-cell-fill.mont")) return "montage";
-  if (cell.querySelector(".bar-prod, .cap-cell-fill.prod")) return "productie";
+  if (cls.includes("mont") || t.includes("mont") || cell.querySelector(".bar-mont, .cap-cell-fill.mont")) return "montage";
+  if (cls.includes("prod") || t.includes("prod") || cell.querySelector(".bar-prod, .cap-cell-fill.prod")) return "productie";
   return "";
 }
 
@@ -308,16 +301,27 @@ function primaryType(kind){
   return kind === "montage" ? "montage" : "productie";
 }
 
+function dummyHoursFromNote(note){
+  const m = String(note || "").match(/concept-hours:([0-9]+(?:[,.][0-9]+)?)/i);
+  return m ? parseHours(m[1]) : 0;
+}
+
 function getEntry(ctx, sectionId, dateISO){
   return ctx?.assignMap?.get(String(sectionId))?.get(String(dateISO)) || null;
+}
+
+function entryHasConcept(entry, kind){
+  if (!entry) return false;
+  if (kind === "montage") return Number(entry.dummyMontHours || 0) > 0 || Number(entry.dummyReisHours || 0) > 0 || Number(entry.dummyMont || 0) > 0 || Number(entry.dummyReis || 0) > 0;
+  return Number(entry.dummyProdHours || 0) > 0 || Number(entry.dummyCncHours || 0) > 0 || Number(entry.dummyProd || 0) > 0 || Number(entry.dummyCnc || 0) > 0;
 }
 
 function entryHasKind(entry, kind){
   if (!entry) return false;
   if (kind === "montage") {
-    return Number(entry.montHours || 0) > 0 || Number(entry.reisHours || 0) > 0 || Number(entry.dummyMontHours || 0) > 0 || Number(entry.dummyReisHours || 0) > 0 || (entry.montage?.size || 0) > 0 || (entry.reis?.size || 0) > 0;
+    return Number(entry.montHours || 0) > 0 || Number(entry.reisHours || 0) > 0 || entryHasConcept(entry, "montage") || (entry.montage?.size || 0) > 0 || (entry.reis?.size || 0) > 0;
   }
-  return Number(entry.prodHours || 0) > 0 || Number(entry.cncHours || 0) > 0 || Number(entry.dummyProdHours || 0) > 0 || Number(entry.dummyCncHours || 0) > 0 || (entry.productie?.size || 0) > 0 || (entry.cnc?.size || 0) > 0;
+  return Number(entry.prodHours || 0) > 0 || Number(entry.cncHours || 0) > 0 || entryHasConcept(entry, "productie") || (entry.productie?.size || 0) > 0 || (entry.cnc?.size || 0) > 0;
 }
 
 function entryHours(entry, kind){
@@ -389,6 +393,17 @@ function highlight(row, dates){
   }
 }
 
+function chooseKindFromEntryAndCell(entry, cell){
+  let kind = kindFromCell(cell);
+  if (kind) return kind;
+  const hasProd = entryHasKind(entry, "productie");
+  const hasMont = entryHasKind(entry, "montage");
+  if (hasProd && !hasMont) return "productie";
+  if (hasMont && !hasProd) return "montage";
+  if (hasProd && hasMont) return "productie";
+  return "";
+}
+
 async function openBlockEditor({ row, cell, shiftKey }){
   const ctx = window.__plannerCtx;
   if (!ctx?.assignMap) return;
@@ -397,22 +412,20 @@ async function openBlockEditor({ row, cell, shiftKey }){
   const dateISO = getDateForCell(row, cell);
   if (!sectionId || !dateISO) return;
 
-  let kind = kindFromCell(cell);
   const entry = getEntry(ctx, sectionId, dateISO);
-  if (!kind) {
-    if (entryHasKind(entry, "productie") && !entryHasKind(entry, "montage")) kind = "productie";
-    else if (entryHasKind(entry, "montage") && !entryHasKind(entry, "productie")) kind = "montage";
-  }
+  const kind = chooseKindFromEntryAndCell(entry, cell);
   if (!kind || !entryHasKind(entry, kind)) return;
 
   const dates = contiguousDates(ctx, sectionId, dateISO, kind, !!shiftKey);
   const employees = await loadEmployees();
   const selected = new Set();
   const hoursByDate = {};
+  let conceptSelected = false;
 
   for (const iso of dates) {
     const e = getEntry(ctx, sectionId, iso);
     entryEmpSet(e, kind).forEach(id => selected.add(String(id)));
+    if (entryHasConcept(e, kind)) conceptSelected = true;
     hoursByDate[iso] = entryHours(e, kind);
   }
 
@@ -434,8 +447,12 @@ async function openBlockEditor({ row, cell, shiftKey }){
         </div>
       </div>
       <div>
-        <div class="block-edit-emps-title">Medewerker(s)</div>
+        <div class="block-edit-emps-title">Concept / medewerker(s)</div>
         <div class="block-edit-emps">
+          <label class="block-edit-emp block-edit-concept">
+            <input type="checkbox" id="blockEditConcept" value="concept" ${conceptSelected || !selected.size ? "checked" : ""} />
+            <span>Concept</span>
+          </label>
           ${employees.map(emp => `
             <label class="block-edit-emp">
               <input type="checkbox" class="blockEditEmp" value="${escapeHtml(emp.id)}" ${selected.has(String(emp.id)) ? "checked" : ""} />
@@ -454,7 +471,7 @@ async function openBlockEditor({ row, cell, shiftKey }){
       `).join("")}
     </div>
     <div class="block-edit-warning">
-      Normale klik selecteert een aaneengesloten blok. Shift + klik selecteert één losse dag. Opslaan vervangt voor deze dagen de bestaande ${kind === "montage" ? "Mont.+Reis" : "Prod.+CNC"}-planning door de gekozen medewerker(s) en uren.
+      Normale klik selecteert een aaneengesloten blok. Shift + klik selecteert één losse dag. Opslaan vervangt voor deze dagen de bestaande ${kind === "montage" ? "Mont.+Reis" : "Prod.+CNC"}-planning door Concept en/of gekozen medewerker(s) en uren.
     </div>
   `;
 
@@ -472,12 +489,13 @@ async function saveBlockEdit(){
   const wrap = ensureModal();
   const body = wrap.querySelector("#blockEditBody");
 
+  const conceptSelected = !!body.querySelector("#blockEditConcept")?.checked;
   const employees = Array.from(body.querySelectorAll(".blockEditEmp:checked"))
     .map(x => String(x.value || "").trim())
     .filter(Boolean);
 
-  if (!employees.length) {
-    alert("Kies minimaal één medewerker.");
+  if (!conceptSelected && !employees.length) {
+    alert("Kies Concept of minimaal één medewerker.");
     return;
   }
 
@@ -496,6 +514,18 @@ async function saveBlockEdit(){
   const rows = [];
   for (const iso of blockCtx.dates) {
     const h = hoursByDate.get(iso) || 0;
+
+    if (conceptSelected) {
+      rows.push({
+        section_id: blockCtx.sectionId,
+        work_date: iso,
+        werknemer_id: Number(CONCEPT_EMP_ID),
+        work_type: primaryType(blockCtx.kind),
+        hours: h,
+        note: `concept-hours:${h}`
+      });
+    }
+
     for (const empId of employees) {
       rows.push({
         section_id: blockCtx.sectionId,
