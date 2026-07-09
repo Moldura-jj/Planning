@@ -1,7 +1,7 @@
 // planning-project-row-cleanup.js
-// Verbergt de project-pijltjes links, schuift projectgegevens naar links
-// en maakt de volledige projectcel klikbaar om secties te openen/sluiten.
-// Geen absolute positionering meer: dat maakte de datums rommelig.
+// Verbergt de project-pijltjes links en schuift projectgegevens naar links.
+// Normale klik blijft beschikbaar voor de originele projectgegevens-modal.
+// Dubbelklik op de projectregel toggelt de secties via de verborgen expander.
 
 function ensureProjectRowCleanupStyle(){
   if (document.getElementById("projectRowCleanupStyle")) return;
@@ -126,14 +126,13 @@ function bindProjectRowCellClicks(){
   if (grid.dataset.projectRowCleanupBound === "1") return;
   grid.dataset.projectRowCleanupBound = "1";
 
-  grid.addEventListener("click", (ev) => {
+  // Geen single-click intercept meer: die moet naar de originele projectgegevens-modal kunnen.
+  // Dubbelklik toggelt secties via de verborgen expander.
+  grid.addEventListener("dblclick", (ev) => {
     const cell = ev.target.closest("tr.project-row > td.project-cell, tr.project-row > td.rowhdr.project-cell");
     if (!cell) return;
 
-    // Laat klikken op het project-schakelaartje volledig met rust.
     if (ev.target.closest(".project-include-toggle-wrap, .project-include-toggle, .project-include-switch, .project-include-label")) return;
-
-    // Laat klikken op echte controls met rust.
     if (ev.target.closest("button:not(.expander), input, select, textarea, a")) return;
 
     const btn = cell.querySelector(".expander[data-proj]");
