@@ -49,67 +49,84 @@ window.__projectPlanningIncluded = function(pid){
 };
 
 function ensureStyle(){
-  if (document.getElementById("projectIncludeToggleStyle")) return;
+  // Style altijd opnieuw zetten. Anders kan een oude versie met hetzelfde id blijven hangen.
+  document.getElementById("projectIncludeToggleStyle")?.remove();
+
   const style = document.createElement("style");
   style.id = "projectIncludeToggleStyle";
   style.textContent = `
     .project-include-toggle-wrap{
-      margin-top:4px;
-      display:flex;
-      align-items:center;
-      gap:6px;
-      font-size:10px;
-      color:#64748b;
-      line-height:1;
-      user-select:none;
-      cursor:pointer;
-      position:relative;
-      z-index:5;
+      margin-top:4px !important;
+      display:flex !important;
+      align-items:center !important;
+      gap:6px !important;
+      font-size:10px !important;
+      color:#64748b !important;
+      line-height:1 !important;
+      user-select:none !important;
+      cursor:pointer !important;
+      position:relative !important;
+      z-index:5 !important;
     }
-    .project-include-toggle-wrap input{
-      position:absolute;
-      opacity:0;
-      width:1px;
-      height:1px;
-      pointer-events:none;
+    .project-include-toggle-wrap input.project-include-toggle{
+      display:none !important;
+      appearance:none !important;
+      -webkit-appearance:none !important;
+      opacity:0 !important;
+      width:0 !important;
+      height:0 !important;
+      margin:0 !important;
+      padding:0 !important;
+      border:0 !important;
+      pointer-events:none !important;
     }
     .project-include-switch{
-      width:38px;
-      height:22px;
-      border-radius:999px;
-      background:#fb7185;
-      position:relative;
-      flex:0 0 auto;
-      box-shadow:inset 0 0 0 1px rgba(15,23,42,.14), 0 1px 2px rgba(15,23,42,.12);
-      transition:background .15s ease, box-shadow .15s ease;
-      pointer-events:none;
+      width:38px !important;
+      height:22px !important;
+      border-radius:999px !important;
+      background:#fb7185 !important;
+      position:relative !important;
+      flex:0 0 auto !important;
+      box-shadow:inset 0 0 0 1px rgba(15,23,42,.14), 0 1px 2px rgba(15,23,42,.12) !important;
+      transition:background .15s ease, box-shadow .15s ease !important;
+      pointer-events:none !important;
+      display:inline-block !important;
+      box-sizing:border-box !important;
     }
     .project-include-switch::after{
-      content:"";
-      position:absolute;
-      top:2px;
-      left:2px;
-      width:18px;
-      height:18px;
-      border-radius:50%;
-      background:#fff;
-      box-shadow:0 1px 3px rgba(15,23,42,.28);
-      transition:left .15s ease;
+      content:"" !important;
+      position:absolute !important;
+      top:2px !important;
+      left:2px !important;
+      width:18px !important;
+      height:18px !important;
+      border-radius:50% !important;
+      background:#fff !important;
+      box-shadow:0 1px 3px rgba(15,23,42,.28) !important;
+      transition:left .15s ease !important;
     }
+    .project-include-toggle-wrap.is-on .project-include-switch,
     .project-include-toggle-wrap input:checked + .project-include-switch{
-      background:#22c55e;
+      background:#22c55e !important;
     }
+    .project-include-toggle-wrap.is-on .project-include-switch::after,
     .project-include-toggle-wrap input:checked + .project-include-switch::after{
-      left:18px;
+      left:18px !important;
+    }
+    .project-include-toggle-wrap.is-off .project-include-switch{
+      background:#fb7185 !important;
+    }
+    .project-include-toggle-wrap.is-off .project-include-switch::after{
+      left:2px !important;
     }
     .project-include-toggle-wrap:hover .project-include-switch{
-      box-shadow:inset 0 0 0 1px rgba(15,23,42,.18), 0 1px 4px rgba(15,23,42,.18);
+      box-shadow:inset 0 0 0 1px rgba(15,23,42,.18), 0 1px 4px rgba(15,23,42,.18) !important;
     }
     .project-include-label{
-      white-space:nowrap;
-      overflow:hidden;
-      text-overflow:ellipsis;
-      pointer-events:none;
+      white-space:nowrap !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      pointer-events:none !important;
     }
     tr.project-planning-disabled > td.project-cell{
       background:#f8fafc !important;
@@ -118,16 +135,16 @@ function ensureStyle(){
     tr.project-planning-disabled .projline1,
     tr.project-planning-disabled .projline2,
     tr.project-planning-disabled .project-date-summary{
-      opacity:.62;
+      opacity:.62 !important;
     }
     tr.project-planning-disabled .project-include-label{
-      color:#ef4444;
-      font-weight:700;
+      color:#ef4444 !important;
+      font-weight:700 !important;
     }
     tr.project-planning-disabled-row > td:not(.project-cell):not(.hourscol),
     tr.project-planning-disabled-row .cell:not(.hourscol){
-      opacity:.28;
-      filter:grayscale(1);
+      opacity:.28 !important;
+      filter:grayscale(1) !important;
     }
     tr.project-planning-disabled-row .assign-chip,
     tr.project-planning-disabled-row .cap-cell-fillbar,
@@ -190,6 +207,8 @@ function ensureToggleForRow(row){
   const input = wrap.querySelector("input");
   const label = wrap.querySelector(".project-include-label");
   const included = isProjectIncluded(pid, row);
+  wrap.classList.toggle("is-on", included);
+  wrap.classList.toggle("is-off", !included);
   if (input) input.checked = included;
   if (label) label.textContent = included ? "planning aan" : "planning uit";
 }
