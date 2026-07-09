@@ -49,7 +49,6 @@ window.__projectPlanningIncluded = function(pid){
 };
 
 function ensureStyle(){
-  // Style altijd opnieuw zetten. Anders kan een oude versie met hetzelfde id blijven hangen.
   document.getElementById("projectIncludeToggleStyle")?.remove();
 
   const style = document.createElement("style");
@@ -158,6 +157,36 @@ function ensureStyle(){
   document.head.appendChild(style);
 }
 
+function applyInlineSwitchStyles(wrap, included){
+  if (!wrap) return;
+  const input = wrap.querySelector("input.project-include-toggle");
+  const sw = wrap.querySelector(".project-include-switch");
+
+  if (input) {
+    input.style.setProperty("display", "none", "important");
+    input.style.setProperty("appearance", "none", "important");
+    input.style.setProperty("-webkit-appearance", "none", "important");
+    input.style.setProperty("opacity", "0", "important");
+    input.style.setProperty("width", "0", "important");
+    input.style.setProperty("height", "0", "important");
+    input.style.setProperty("margin", "0", "important");
+    input.style.setProperty("padding", "0", "important");
+    input.style.setProperty("border", "0", "important");
+  }
+
+  if (sw) {
+    sw.style.setProperty("width", "38px", "important");
+    sw.style.setProperty("height", "22px", "important");
+    sw.style.setProperty("border-radius", "999px", "important");
+    sw.style.setProperty("background", included ? "#22c55e" : "#fb7185", "important");
+    sw.style.setProperty("position", "relative", "important");
+    sw.style.setProperty("display", "inline-block", "important");
+    sw.style.setProperty("flex", "0 0 auto", "important");
+    sw.style.setProperty("box-shadow", "inset 0 0 0 1px rgba(15,23,42,.14), 0 1px 2px rgba(15,23,42,.12)", "important");
+    sw.style.setProperty("pointer-events", "none", "important");
+  }
+}
+
 function setProjectIncluded(pid, included){
   const map = readProjectIncludeMap();
   map[String(pid)] = !!included;
@@ -168,7 +197,6 @@ function setProjectIncluded(pid, included){
     detail:{ projectId:String(pid), included:!!included }
   }));
 
-  // Extra directe hook voor de capaciteitscorrectie, als die geladen is.
   if (typeof window.__applyProjectIncludeCapacity === "function") {
     window.__applyProjectIncludeCapacity(true);
   }
@@ -202,6 +230,23 @@ function ensureToggleForRow(row){
       const current = !!input?.checked;
       setProjectIncluded(pid, !current);
     }, true);
+  } else {
+    // Herstel bestaande oude markup eventueel.
+    if (!wrap.querySelector(".project-include-switch")) {
+      const input = wrap.querySelector("input.project-include-toggle") || document.createElement("input");
+      input.type = "checkbox";
+      input.className = "project-include-toggle";
+      input.tabIndex = -1;
+      const label = wrap.querySelector(".project-include-label") || document.createElement("span");
+      label.className = "project-include-label";
+      wrap.innerHTML = "";
+      wrap.appendChild(input);
+      const sw = document.createElement("span");
+      sw.className = "project-include-switch";
+      sw.setAttribute("aria-hidden", "true");
+      wrap.appendChild(sw);
+      wrap.appendChild(label);
+    }
   }
 
   const input = wrap.querySelector("input");
@@ -211,6 +256,7 @@ function ensureToggleForRow(row){
   wrap.classList.toggle("is-off", !included);
   if (input) input.checked = included;
   if (label) label.textContent = included ? "planning aan" : "planning uit";
+  applyInlineSwitchStyles(wrap, included);
 }
 
 function markRowsForProject(pid, included){
