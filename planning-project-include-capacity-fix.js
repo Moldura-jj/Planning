@@ -3,6 +3,7 @@ import { makeSupabaseClient } from "./auth.js";
 // planning-project-include-capacity-fix.js
 // Als een project met het schakelaartje op "planning uit" staat, tellen de uren
 // niet mee in de capaciteitsregels onder de planning. Uren blijven in Supabase staan.
+// Belangrijk: eerst rekenen vanuit window.__plannerCtx, dus dezelfde bron als de zichtbare planning.
 
 const sb = makeSupabaseClient();
 const INCLUDE_KEY = "moldura_project_include_planning_v1";
@@ -58,6 +59,74 @@ function isProdType(t){ return t === "productie" || t === "cnc"; }
 function isMontType(t){ return t === "montage" || t === "reis"; }
 function isWvbType(t){ return t === "wvb" || t === "werkvoorbereiding" || t.includes("werkvoor"); }
 
+function projectIncludedByCurrentUi(pid, fallbackData){
+  const key = String(pid || "").trim();
+  if(!key) return true;
+
+  if(typeof window.__projectPlanningIncluded === "function") {
+    return !!window.__projectPlanningIncluded(key);
+  }
+
+  const map = readIncludeMap();
+  if(Object.prototype.hasOwnProperty.call(map, key)) return !!map[key];
+  if(fallbackData?.status2?.has(key)) return false;
+  return true;
+}
+
+function computePlannedFromPlannerContext(dates){
+  const ctx = window.__plannerCtx;
+  if(!ctx?.assignMap && !ctx?.projectAssignMap) return null;
+
+  const pf = getPlanFactor();
+  const prod = emptyDayMap(dates);
+  const mont = emptyDayMap(dates);
+  const wvb = emptyDayMap(dates);
+
+  for(const [sid, dm] of (ctx.assignMap || new Map())){
+    const sObj = ctx.sectById?.get(String(sid));
+    const pid = String(sObj?.[ctx.sectProjKey] || "").trim();
+    if(pid && !projectIncludedByCurrentUi(pid)) continue;
+
+    for(const [iso, entry] of (dm || new Map())){
+      if(!Object.prototype.hasOwnProperty.call(prod, iso)) continue;
+
+      add(wvb, iso, (num(entry.wvbHours) / pf) + (num(entry.dummyWvbHours) / pf));
+      add(prod, iso, (num(entry.prodHours) / pf) + (num(entry.cncHours) / pf));
+      add(mont, iso, (num(entry.montHours) / pf) + (num(entry.reisHours) / pf));
+
+      // Conceptsecties tellen in de planner met factor mee voor productie/montage.
+      add(prod, iso, (num(entry.dummyProdHours) + num(entry.dummyCncHours)) * pf);
+      add(mont, iso, (num(entry.dummyMontHours) + num(entry.dummyReisHours)) * pf);
+    }
+  }
+
+  for(const [pid, dm] of (ctx.projectAssignMap || new Map())){
+    if(pid && !projectIncludedByCurrentUi(pid)) continue;
+
+    for(const [iso, entry] of (dm || new Map())){
+      if(!Object.prototype.hasOwnProperty.call(prod, iso)) continue;
+
+      add(wvb, iso, num(entry.wvbHours));
+      add(prod, iso,
+        num(entry.prodHours) +
+        num(entry.cncHours) +
+        num(entry.dummyProdHours || (num(entry.dummyProd) * DEFAULT_HOURS)) +
+        num(entry.dummyCncHours || (num(entry.dummyCnc) * DEFAULT_HOURS)) +
+        (num(entry.inhuurProdIds?.size) * DEFAULT_HOURS)
+      );
+      add(mont, iso,
+        num(entry.montHours) +
+        num(entry.reisHours) +
+        num(entry.dummyMontHours || (num(entry.dummyMont) * DEFAULT_HOURS)) +
+        num(entry.dummyReisHours || (num(entry.dummyReis) * DEFAULT_HOURS)) +
+        (num(entry.inhuurMontIds?.size) * DEFAULT_HOURS)
+      );
+    }
+  }
+
+  return { prod, mont, wvb };
+}
+
 async function optionalSelect(table, select){
   const res = await sb.from(table).select(select).limit(200000);
   if(res.error){ console.warn(`Project include capaciteit: ${table} overgeslagen`, res.error.message); return []; }
@@ -108,14 +177,7 @@ async function loadData(force=false){
   cacheAt = now;
   return cache;
 }
-function projectIncluded(pid, data){
-  const map = readIncludeMap();
-  const key = String(pid || "").trim();
-  if(!key) return true;
-  if(Object.prototype.hasOwnProperty.call(map, key)) return !!map[key];
-  return !data.status2.has(key);
-}
-function computePlanned(dates, data){
+function computePlannedFromDatabaseFallback(dates, data){
   const pf = getPlanFactor();
   const prod = emptyDayMap(dates);
   const mont = emptyDayMap(dates);
@@ -125,7 +187,7 @@ function computePlanned(dates, data){
     const rawSid = String(r.section_id ?? "").trim();
     const sid = data.alias.get(rawSid) || rawSid;
     const pid = data.sectionPid.get(sid);
-    if(pid && !projectIncluded(pid, data)) continue;
+    if(pid && !projectIncludedByCurrentUi(pid, data)) continue;
 
     const iso = String(r.work_date || "").slice(0,10);
     if(!Object.prototype.hasOwnProperty.call(prod, iso)) continue;
@@ -148,7 +210,7 @@ function computePlanned(dates, data){
 
   for(const r of data.projectAssigns || []){
     const pid = String(r.project_id ?? "").trim();
-    if(pid && !projectIncluded(pid, data)) continue;
+    if(pid && !projectIncludedByCurrentUi(pid, data)) continue;
 
     const iso = String(r.work_date || "").slice(0,10);
     if(!Object.prototype.hasOwnProperty.call(prod, iso)) continue;
@@ -193,8 +255,12 @@ async function apply(force=false){
   try{
     const dates = getDates();
     if(!dates.length) return;
-    const data = await loadData(force);
-    const planned = computePlanned(dates, data);
+
+    let planned = computePlannedFromPlannerContext(dates);
+    if(!planned){
+      const data = await loadData(force);
+      planned = computePlannedFromDatabaseFallback(dates, data);
+    }
 
     const prodRow = findRow("Gepland productie", "planned-prod") || findRow("Gepland productie") || findRow("productie");
     const montRow = findRow("Gepland montage", "planned-mont") || findRow("Gepland montage") || findRow("montage");
