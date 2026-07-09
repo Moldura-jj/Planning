@@ -1,9 +1,9 @@
 // planning-capacity-sticky-bottom.js
 // Zet het capaciteit-/beschikbaarheidblok vast onderaan het scherm.
-// De rijen blijven onderdeel van dezelfde planningtabel, dus horizontaal scrollen blijft gelijk lopen.
+// V2: gebruikt een vaste kopie onderaan, omdat sticky bottom op tabelrijen niet betrouwbaar werkt.
 
 let capacityStickyTimer = null;
-let capacityStickyRunning = false;
+let capacityStickySyncTimer = null;
 
 function stickyText(el){
   return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
@@ -17,72 +17,12 @@ function isHiddenRow(row){
 }
 
 function isCapacityHeaderRow(row){
-  const txt = stickyText(row).toLowerCase();
-  return txt === "capaciteit";
+  return stickyText(row).toLowerCase() === "capaciteit";
 }
 
 function isNewOrderCapacityRow(row){
   const txt = stickyText(row).toLowerCase();
   return txt.includes("capaciteit met nieuwe order") || txt.includes("nieuwe order");
-}
-
-function ensureCapacityStickyStyle(){
-  document.getElementById("capacityStickyBottomStyle")?.remove();
-  const style = document.createElement("style");
-  style.id = "capacityStickyBottomStyle";
-  style.textContent = `
-    .planner-table tr.capacity-sticky-row > th,
-    .planner-table tr.capacity-sticky-row > td{
-      position:sticky !important;
-      bottom:var(--cap-sticky-bottom, 0px) !important;
-      z-index:120 !important;
-      background:#fff !important;
-      box-shadow:0 -1px 0 #cbd5e1, 0 1px 0 #e5e7eb !important;
-    }
-
-    .planner-table tr.capacity-sticky-row.capacity-sticky-header > th,
-    .planner-table tr.capacity-sticky-row.capacity-sticky-header > td{
-      background:#f8fafc !important;
-      z-index:123 !important;
-      font-weight:800 !important;
-      box-shadow:0 -2px 8px rgba(15,23,42,.10), 0 -1px 0 #94a3b8 !important;
-    }
-
-    .planner-table tr.capacity-sticky-row > .sticky-left,
-    .planner-table tr.capacity-sticky-row > .rowhdr.sticky-left{
-      left:0 !important;
-      z-index:130 !important;
-      background:#fff !important;
-    }
-
-    .planner-table tr.capacity-sticky-row.capacity-sticky-header > .sticky-left,
-    .planner-table tr.capacity-sticky-row.capacity-sticky-header > .rowhdr.sticky-left{
-      background:#f8fafc !important;
-      z-index:133 !important;
-    }
-
-    .planner-table tr.capacity-sticky-row > .sticky-left2,
-    .planner-table tr.capacity-sticky-row > .hourscol.sticky-left2{
-      left:var(--left-w, 380px) !important;
-      z-index:131 !important;
-      background:#fff !important;
-    }
-
-    .planner-table tr.capacity-sticky-row.capacity-sticky-header > .sticky-left2,
-    .planner-table tr.capacity-sticky-row.capacity-sticky-header > .hourscol.sticky-left2{
-      background:#f8fafc !important;
-      z-index:134 !important;
-    }
-
-    .planner-table tr.capacity-sticky-row .wknd{
-      background:#dbeafe !important;
-    }
-
-    .planner-table tr.capacity-sticky-row .balance-cell.pos{ background:#bbf7d0 !important; }
-    .planner-table tr.capacity-sticky-row .balance-cell.zero{ background:#fde68a !important; }
-    .planner-table tr.capacity-sticky-row .balance-cell.neg{ background:#fecaca !important; }
-  `;
-  document.head.appendChild(style);
 }
 
 function collectCapacityRows(table){
@@ -94,51 +34,160 @@ function collectCapacityRows(table){
   for (let i = startIndex; i < rows.length; i++) {
     const row = rows[i];
     if (i > startIndex && isNewOrderCapacityRow(row)) break;
-    out.push(row);
+    if (!isHiddenRow(row)) out.push(row);
   }
   return out;
 }
 
-function applyCapacityStickyBottom(){
-  if (capacityStickyRunning) return;
-  capacityStickyRunning = true;
-  try {
-    ensureCapacityStickyStyle();
-
-    document.querySelectorAll("tr.capacity-sticky-row").forEach(row => {
-      row.classList.remove("capacity-sticky-row", "capacity-sticky-header");
-      row.style.removeProperty("--cap-sticky-bottom");
-    });
-
-    const table = document.querySelector(".planner-table");
-    if (!table) return;
-
-    const rows = collectCapacityRows(table);
-    if (!rows.length) return;
-
-    const visibleRows = rows.filter(row => !isHiddenRow(row));
-    let bottom = 0;
-
-    for (let i = visibleRows.length - 1; i >= 0; i--) {
-      const row = visibleRows[i];
-      const h = Math.ceil(row.getBoundingClientRect().height || row.offsetHeight || 20);
-      row.classList.add("capacity-sticky-row");
-      row.style.setProperty("--cap-sticky-bottom", `${bottom}px`);
-      if (isCapacityHeaderRow(row) || stickyText(row).toLowerCase() === "werkvoorbereiding") {
-        row.classList.add("capacity-sticky-header");
-      }
-      bottom += h;
+function ensureCapacityFixedShell(){
+  document.getElementById("capacityStickyBottomStyle")?.remove();
+  const style = document.createElement("style");
+  style.id = "capacityStickyBottomStyle";
+  style.textContent = `
+    #capacityStickyBottomClone{
+      position:fixed;
+      left:0;
+      right:0;
+      bottom:0;
+      z-index:450;
+      background:#fff;
+      border-top:2px solid #94a3b8;
+      box-shadow:0 -8px 22px rgba(15,23,42,.16);
+      overflow:hidden;
+      max-height:45vh;
+      pointer-events:none;
     }
+    #capacityStickyBottomClone .capacity-sticky-inner{
+      position:relative;
+      width:max-content;
+      min-width:100%;
+      will-change:transform;
+    }
+    #capacityStickyBottomClone table{
+      margin:0 !important;
+      box-shadow:none !important;
+      border-radius:0 !important;
+    }
+    #capacityStickyBottomClone tbody tr > th,
+    #capacityStickyBottomClone tbody tr > td{
+      background:#fff !important;
+      box-shadow:none !important;
+    }
+    #capacityStickyBottomClone tbody tr.capacity-clone-header > th,
+    #capacityStickyBottomClone tbody tr.capacity-clone-header > td{
+      background:#f8fafc !important;
+      font-weight:800 !important;
+    }
+    #capacityStickyBottomClone .sticky-left,
+    #capacityStickyBottomClone .sticky-left2{
+      position:static !important;
+      left:auto !important;
+      z-index:auto !important;
+    }
+    #capacityStickyBottomClone .wknd{ background:#dbeafe !important; }
+    #capacityStickyBottomClone .balance-cell.pos{ background:#bbf7d0 !important; }
+    #capacityStickyBottomClone .balance-cell.zero{ background:#fde68a !important; }
+    #capacityStickyBottomClone .balance-cell.neg{ background:#fecaca !important; }
+    body.has-capacity-sticky-clone{
+      padding-bottom:var(--capacity-sticky-height, 180px) !important;
+    }
+  `;
+  document.head.appendChild(style);
 
-    document.documentElement.style.setProperty("--capacity-sticky-height", `${bottom}px`);
-  } finally {
-    capacityStickyRunning = false;
+  let shell = document.getElementById("capacityStickyBottomClone");
+  if (!shell) {
+    shell = document.createElement("div");
+    shell.id = "capacityStickyBottomClone";
+    shell.innerHTML = `<div class="capacity-sticky-inner"></div>`;
+    document.body.appendChild(shell);
   }
+  return shell;
+}
+
+function copyColWidths(sourceTable, cloneTable){
+  const sourceFirstRow = sourceTable.querySelector("tr");
+  const cloneFirstRow = cloneTable.querySelector("tr");
+  if (!sourceFirstRow || !cloneFirstRow) return;
+
+  const srcCells = Array.from(sourceFirstRow.children);
+  const colgroup = document.createElement("colgroup");
+  srcCells.forEach(cell => {
+    const col = document.createElement("col");
+    const w = Math.ceil(cell.getBoundingClientRect().width || cell.offsetWidth || 32);
+    col.style.width = `${w}px`;
+    colgroup.appendChild(col);
+  });
+  cloneTable.prepend(colgroup);
+}
+
+function buildCloneTable(sourceTable, rows){
+  const cloneTable = document.createElement("table");
+  cloneTable.className = sourceTable.className;
+  cloneTable.style.width = `${Math.ceil(sourceTable.getBoundingClientRect().width || sourceTable.scrollWidth)}px`;
+  cloneTable.style.minWidth = cloneTable.style.width;
+
+  const tbody = document.createElement("tbody");
+  rows.forEach(row => {
+    const r = row.cloneNode(true);
+    r.classList.remove("hidden");
+    if (isCapacityHeaderRow(row) || stickyText(row).toLowerCase() === "werkvoorbereiding") {
+      r.classList.add("capacity-clone-header");
+    }
+    r.querySelectorAll("button, input, select, textarea").forEach(el => {
+      el.disabled = true;
+      el.tabIndex = -1;
+    });
+    tbody.appendChild(r);
+  });
+  cloneTable.appendChild(tbody);
+  copyColWidths(sourceTable, cloneTable);
+  return cloneTable;
+}
+
+function syncFixedCapacityHorizontal(){
+  const shell = document.getElementById("capacityStickyBottomClone");
+  const inner = shell?.querySelector(".capacity-sticky-inner");
+  const table = document.querySelector(".planner-table");
+  if (!shell || !inner || !table) return;
+
+  const rect = table.getBoundingClientRect();
+  const x = Math.round(rect.left);
+  inner.style.transform = `translateX(${x}px)`;
+}
+
+function applyCapacityStickyBottom(){
+  const sourceTable = document.querySelector(".planner-table");
+  if (!sourceTable) return;
+
+  const rows = collectCapacityRows(sourceTable);
+  const shell = ensureCapacityFixedShell();
+  const inner = shell.querySelector(".capacity-sticky-inner");
+  if (!inner) return;
+
+  if (!rows.length) {
+    shell.hidden = true;
+    document.body.classList.remove("has-capacity-sticky-clone");
+    return;
+  }
+
+  shell.hidden = false;
+  inner.innerHTML = "";
+  inner.appendChild(buildCloneTable(sourceTable, rows));
+  syncFixedCapacityHorizontal();
+
+  const h = Math.ceil(shell.getBoundingClientRect().height || 180);
+  document.documentElement.style.setProperty("--capacity-sticky-height", `${h}px`);
+  document.body.classList.add("has-capacity-sticky-clone");
 }
 
 function scheduleCapacitySticky(delay = 250){
   window.clearTimeout(capacityStickyTimer);
   capacityStickyTimer = window.setTimeout(applyCapacityStickyBottom, delay);
+}
+
+function scheduleHorizontalSync(){
+  window.clearTimeout(capacityStickySyncTimer);
+  capacityStickySyncTimer = window.setTimeout(syncFixedCapacityHorizontal, 20);
 }
 
 window.addEventListener("DOMContentLoaded", () => {
@@ -147,10 +196,10 @@ window.addEventListener("DOMContentLoaded", () => {
 });
 window.addEventListener("load", () => scheduleCapacitySticky(700));
 window.addEventListener("resize", () => scheduleCapacitySticky(150));
+window.addEventListener("scroll", scheduleHorizontalSync, { passive:true });
 window.addEventListener("planning:project-include-changed", () => scheduleCapacitySticky(250));
 window.addEventListener("planning:all-time-hours-updated", () => scheduleCapacitySticky(250));
 
-// Na expand/collapse van capaciteit opnieuw offsets berekenen.
 document.addEventListener("click", (ev) => {
   if (ev.target.closest(".cap-expander, #btnPrev, #btnNext, #btnSettingsSave, #amSave")) {
     scheduleCapacitySticky(500);
