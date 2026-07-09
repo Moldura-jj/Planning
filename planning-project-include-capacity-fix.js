@@ -11,6 +11,7 @@ const DUMMY_PROJECT_ID = "999999";
 const DEFAULT_HOURS = 7.5;
 let timer = null;
 let running = false;
+let rerunRequested = false;
 let cache = null;
 let cacheAt = 0;
 
@@ -166,7 +167,7 @@ function computePlanned(dates, data){
   return { prod, mont, wvb };
 }
 function findRow(label, requiredClass=""){
-  const rows = Array.from(document.querySelectorAll(".planner-table tbody tr"));
+  const rows = Array.from(document.querySelectorAll(".planner-table tbody tr, table tbody tr"));
   const l = String(label).toLowerCase();
   return rows.find(row => {
     if(requiredClass && !row.classList.contains(requiredClass)) return false;
@@ -187,7 +188,7 @@ function updateRow(row, dates, values){
   dates.forEach((d,i)=>{ if(cells[i]) cells[i].textContent = fmt(values[d] || 0); });
 }
 async function apply(force=false){
-  if(running) return;
+  if(running){ rerunRequested = true; return; }
   running = true;
   try{
     const dates = getDates();
@@ -195,8 +196,8 @@ async function apply(force=false){
     const data = await loadData(force);
     const planned = computePlanned(dates, data);
 
-    const prodRow = findRow("Gepland productie", "planned-prod") || findRow("Gepland productie");
-    const montRow = findRow("Gepland montage", "planned-mont") || findRow("Gepland montage");
+    const prodRow = findRow("Gepland productie", "planned-prod") || findRow("Gepland productie") || findRow("productie");
+    const montRow = findRow("Gepland montage", "planned-mont") || findRow("Gepland montage") || findRow("montage");
     const wvbRow = findRow("Gepland WVB", "planned-wvb") || findRow("Gepland WVB");
     updateRow(prodRow, dates, planned.prod);
     updateRow(montRow, dates, planned.mont);
@@ -223,6 +224,10 @@ async function apply(force=false){
     console.warn("Project include capaciteit corrigeren mislukt:", e?.message || e);
   }finally{
     running = false;
+    if(rerunRequested){
+      rerunRequested = false;
+      window.setTimeout(()=>apply(force), 50);
+    }
   }
 }
 function schedule(delay=600, force=false){
@@ -230,9 +235,16 @@ function schedule(delay=600, force=false){
   timer = window.setTimeout(()=>apply(force), delay);
 }
 
+window.__applyProjectIncludeCapacity = function(force=false){
+  cache = null;
+  apply(!!force);
+  schedule(400, !!force);
+  schedule(1200, !!force);
+};
+
 window.addEventListener("DOMContentLoaded", ()=>{ schedule(1200,true); schedule(2600,false); });
 window.addEventListener("load", ()=>schedule(1000,true));
-window.addEventListener("planning:project-include-changed", ()=>{ cache=null; schedule(200,true); schedule(1200,true); });
+window.addEventListener("planning:project-include-changed", ()=>{ cache=null; schedule(100,true); schedule(700,true); schedule(1600,true); });
 
 document.addEventListener("click", ev => {
   if(ev.target.closest("#btnPrev, #btnNext, #amSave, #btnSettingsSave")) { cache=null; schedule(1800,true); }
