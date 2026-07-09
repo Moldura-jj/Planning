@@ -3,8 +3,8 @@ import { makeSupabaseClient } from "./auth.js";
 // planning-project-include-capacity-fix.js
 // Als een project met het schakelaartje op "planning uit" staat, tellen de uren
 // niet mee in de capaciteitsregels onder de planning. Uren blijven in Supabase staan.
-// Belangrijk: eerst rekenen vanuit window.__plannerCtx, dus dezelfde bron als de zichtbare planning.
-// Deze correctie werkt ook de kleurclasses van Saldo/Salo WVB opnieuw bij.
+// Rekent vanuit window.__plannerCtx waar mogelijk: dezelfde bron als de zichtbare planning.
+// Belangrijk: waarden uit assignMap zijn al planning/capaciteitsuren; dus NIET nog eens / planningsfactor doen.
 
 const sb = makeSupabaseClient();
 const INCLUDE_KEY = "moldura_project_include_planning_v1";
@@ -40,21 +40,13 @@ function readIncludeMap(){
   try { return JSON.parse(localStorage.getItem(INCLUDE_KEY) || "{}"); }
   catch { return {}; }
 }
-function getPlanFactor(){
-  const pf = Number(window.__plannerCtx?.settings?.planFactor || window.settings?.planFactor || 0.8);
-  return Number.isFinite(pf) && pf > 0 ? pf : 0.8;
-}
 function getDates(){
   return Array.from(document.querySelectorAll(".dayhead-btn[data-iso], th[data-iso], .dayhead[data-iso]"))
     .map(el => String(el.dataset.iso || "").slice(0,10))
     .filter(Boolean)
     .filter((v,i,a)=>a.indexOf(v)===i);
 }
-function emptyDayMap(dates){
-  const o = {};
-  for(const d of dates) o[d] = 0;
-  return o;
-}
+function emptyDayMap(dates){ const o = {}; for(const d of dates) o[d] = 0; return o; }
 function add(o, d, h){ if(d && Object.prototype.hasOwnProperty.call(o,d)) o[d] = num(o[d]) + num(h); }
 function isProdType(t){ return t === "productie" || t === "cnc"; }
 function isMontType(t){ return t === "montage" || t === "reis"; }
@@ -63,11 +55,7 @@ function isWvbType(t){ return t === "wvb" || t === "werkvoorbereiding" || t.incl
 function projectIncludedByCurrentUi(pid, fallbackData){
   const key = String(pid || "").trim();
   if(!key) return true;
-
-  if(typeof window.__projectPlanningIncluded === "function") {
-    return !!window.__projectPlanningIncluded(key);
-  }
-
+  if(typeof window.__projectPlanningIncluded === "function") return !!window.__projectPlanningIncluded(key);
   const map = readIncludeMap();
   if(Object.prototype.hasOwnProperty.call(map, key)) return !!map[key];
   if(fallbackData?.status2?.has(key)) return false;
@@ -78,7 +66,6 @@ function computePlannedFromPlannerContext(dates){
   const ctx = window.__plannerCtx;
   if(!ctx?.assignMap && !ctx?.projectAssignMap) return null;
 
-  const pf = getPlanFactor();
   const prod = emptyDayMap(dates);
   const mont = emptyDayMap(dates);
   const wvb = emptyDayMap(dates);
@@ -91,13 +78,10 @@ function computePlannedFromPlannerContext(dates){
     for(const [iso, entry] of (dm || new Map())){
       if(!Object.prototype.hasOwnProperty.call(prod, iso)) continue;
 
-      add(wvb, iso, (num(entry.wvbHours) / pf) + (num(entry.dummyWvbHours) / pf));
-      add(prod, iso, (num(entry.prodHours) / pf) + (num(entry.cncHours) / pf));
-      add(mont, iso, (num(entry.montHours) / pf) + (num(entry.reisHours) / pf));
-
-      // Conceptsecties tellen in de planner met factor mee voor productie/montage.
-      add(prod, iso, (num(entry.dummyProdHours) + num(entry.dummyCncHours)) * pf);
-      add(mont, iso, (num(entry.dummyMontHours) + num(entry.dummyReisHours)) * pf);
+      // assignMap bevat al de waarden zoals de planning/capaciteit ze gebruikt.
+      add(wvb, iso, num(entry.wvbHours) + num(entry.dummyWvbHours));
+      add(prod, iso, num(entry.prodHours) + num(entry.cncHours) + num(entry.dummyProdHours) + num(entry.dummyCncHours));
+      add(mont, iso, num(entry.montHours) + num(entry.reisHours) + num(entry.dummyMontHours) + num(entry.dummyReisHours));
     }
   }
 
@@ -106,18 +90,15 @@ function computePlannedFromPlannerContext(dates){
 
     for(const [iso, entry] of (dm || new Map())){
       if(!Object.prototype.hasOwnProperty.call(prod, iso)) continue;
-
       add(wvb, iso, num(entry.wvbHours));
       add(prod, iso,
-        num(entry.prodHours) +
-        num(entry.cncHours) +
+        num(entry.prodHours) + num(entry.cncHours) +
         num(entry.dummyProdHours || (num(entry.dummyProd) * DEFAULT_HOURS)) +
         num(entry.dummyCncHours || (num(entry.dummyCnc) * DEFAULT_HOURS)) +
         (num(entry.inhuurProdIds?.size) * DEFAULT_HOURS)
       );
       add(mont, iso,
-        num(entry.montHours) +
-        num(entry.reisHours) +
+        num(entry.montHours) + num(entry.reisHours) +
         num(entry.dummyMontHours || (num(entry.dummyMont) * DEFAULT_HOURS)) +
         num(entry.dummyReisHours || (num(entry.dummyReis) * DEFAULT_HOURS)) +
         (num(entry.inhuurMontIds?.size) * DEFAULT_HOURS)
@@ -179,7 +160,6 @@ async function loadData(force=false){
   return cache;
 }
 function computePlannedFromDatabaseFallback(dates, data){
-  const pf = getPlanFactor();
   const prod = emptyDayMap(dates);
   const mont = emptyDayMap(dates);
   const wvb = emptyDayMap(dates);
@@ -197,12 +177,7 @@ function computePlannedFromDatabaseFallback(dates, data){
     const note = String(r.note || "");
     const isConcept = emp === DUMMY_SEC_ID;
     const isInhuur = note.startsWith("inhuur:");
-
-    let h = 0;
-    if(isConcept && isWvbType(wt)) h = parseConcept(note) / pf;
-    else if(isConcept) h = parseConcept(note) * pf;
-    else if(isInhuur) h = DEFAULT_HOURS;
-    else h = num(r.hours || 0) / pf;
+    const h = isConcept ? parseConcept(note) : isInhuur ? DEFAULT_HOURS : num(r.hours || 0);
 
     if(isProdType(wt)) add(prod, iso, h);
     else if(isMontType(wt)) add(mont, iso, h);
