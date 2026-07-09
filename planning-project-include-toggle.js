@@ -54,10 +54,10 @@ function ensureStyle(){
   style.id = "projectIncludeToggleStyle";
   style.textContent = `
     .project-include-toggle-wrap{
-      margin-top:3px;
+      margin-top:4px;
       display:flex;
       align-items:center;
-      gap:5px;
+      gap:6px;
       font-size:10px;
       color:#64748b;
       line-height:1;
@@ -74,13 +74,14 @@ function ensureStyle(){
       pointer-events:none;
     }
     .project-include-switch{
-      width:26px;
-      height:14px;
+      width:38px;
+      height:22px;
       border-radius:999px;
-      background:#cbd5e1;
+      background:#fb7185;
       position:relative;
       flex:0 0 auto;
-      box-shadow:inset 0 0 0 1px rgba(15,23,42,.12);
+      box-shadow:inset 0 0 0 1px rgba(15,23,42,.14), 0 1px 2px rgba(15,23,42,.12);
+      transition:background .15s ease, box-shadow .15s ease;
       pointer-events:none;
     }
     .project-include-switch::after{
@@ -88,18 +89,21 @@ function ensureStyle(){
       position:absolute;
       top:2px;
       left:2px;
-      width:10px;
-      height:10px;
+      width:18px;
+      height:18px;
       border-radius:50%;
       background:#fff;
-      box-shadow:0 1px 2px rgba(15,23,42,.25);
-      transition:left .12s ease;
+      box-shadow:0 1px 3px rgba(15,23,42,.28);
+      transition:left .15s ease;
     }
     .project-include-toggle-wrap input:checked + .project-include-switch{
       background:#22c55e;
     }
     .project-include-toggle-wrap input:checked + .project-include-switch::after{
-      left:14px;
+      left:18px;
+    }
+    .project-include-toggle-wrap:hover .project-include-switch{
+      box-shadow:inset 0 0 0 1px rgba(15,23,42,.18), 0 1px 4px rgba(15,23,42,.18);
     }
     .project-include-label{
       white-space:nowrap;
