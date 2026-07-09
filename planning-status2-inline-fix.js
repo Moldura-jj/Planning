@@ -4,11 +4,13 @@ import { makeSupabaseClient } from "./auth.js";
 // Status 2:
 // - blijft in de normale plannerlogica
 // - wordt onderaan geplaatst en paars gekleurd
+// - status-2 herkenning is gebaseerd op projectstatus uit Supabase, niet op geplande uren
 // - in status-2 secties mag alleen Concept worden ingevuld, geen medewerkers
-// - wordt na een planning-rerender opnieuw toegepast, zonder klikgedrag te overrulen
+// - wordt na elke planning-rerender opnieuw toegepast
 
 const sb = makeSupabaseClient();
 const status2ProjectIds = new Set();
+const status2ProjectNumbers = new Set();
 let loaded = false;
 let running = false;
 let status2ModalModeUntil = 0;
@@ -43,25 +45,50 @@ async function loadStatus2Ids(force = false){
   const rows = data || [];
   const sample = rows[0] || {};
   const idKey = pickKey(sample, ["project_id", "id"]);
+  const numberKey = pickKey(sample, ["projectnummer", "project_number", "number", "nummer", "projectnr", "project_nr"]);
   const statusKey = pickKey(sample, ["salesstatus", "projectstatus", "project_status", "status", "status_id", "sales_status"]);
-  if (!idKey || !statusKey) return;
+  if (!statusKey) return;
 
   status2ProjectIds.clear();
+  status2ProjectNumbers.clear();
+
   rows.forEach(row => {
     if (String(row?.[statusKey] ?? "").trim() === "2") {
       const id = String(row?.[idKey] ?? "").trim();
+      const nr = String(row?.[numberKey] ?? "").trim();
       if (id) status2ProjectIds.add(id);
+      if (nr) status2ProjectNumbers.add(nr);
     }
   });
 }
 
+function textOf(el){
+  return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
+}
+
 function getProjectId(row){
-  return String(row?.querySelector(".expander[data-proj]")?.dataset?.proj || "").trim();
+  return String(row?.querySelector(".expander[data-proj]")?.dataset?.proj || row?.dataset?.projectId || row?.dataset?.proj || "").trim();
+}
+
+function getProjectNumberFromRow(row){
+  const line = textOf(row?.querySelector(".projline1") || row?.querySelector(".projtext") || row);
+  const m = line.match(/\b(?:PR-)?\d{5,}\b/i);
+  return m ? m[0].trim() : "";
+}
+
+function isStatus2ProjectRow(row){
+  const pid = getProjectId(row);
+  if (pid && status2ProjectIds.has(pid)) return true;
+
+  const nr = getProjectNumberFromRow(row);
+  if (nr && status2ProjectNumbers.has(nr)) return true;
+
+  return false;
 }
 
 function findCapacityStart(tbody){
   return Array.from(tbody.querySelectorAll("tr")).find(row => {
-    const txt = String(row.textContent || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const txt = textOf(row).toLowerCase();
     return row.classList.contains("cap-total-row") ||
       row.classList.contains("wvb-cap-total-row") ||
       txt === "capaciteit" ||
@@ -153,6 +180,13 @@ function ensureStyle(){
   document.head.appendChild(style);
 }
 
+function clearOldStatus2Classes(tbody){
+  tbody.querySelectorAll("tr.status2-project-row, tr.status2-child-row").forEach(row => {
+    row.classList.remove("status2-project-row", "status2-child-row");
+    if (row.dataset.projectStatus === "2") delete row.dataset.projectStatus;
+  });
+}
+
 async function applyStatus2PositionAndStyle({ refreshIds = false } = {}){
   if (running) return;
   running = true;
@@ -161,7 +195,7 @@ async function applyStatus2PositionAndStyle({ refreshIds = false } = {}){
   try {
     ensureStyle();
     await loadStatus2Ids(refreshIds);
-    if (!status2ProjectIds.size) return;
+    if (!status2ProjectIds.size && !status2ProjectNumbers.size) return;
 
     const tbody = document.querySelector(".planner-table tbody");
     if (!tbody) return;
@@ -171,24 +205,28 @@ async function applyStatus2PositionAndStyle({ refreshIds = false } = {}){
     const insertBefore = findCapacityStart(tbody);
     if (!insertBefore) return;
 
+    clearOldStatus2Classes(tbody);
+
     const fragment = document.createDocumentFragment();
     let moved = false;
 
     Array.from(tbody.querySelectorAll("tr.project-row:not(.concept-status2-row)")).forEach(projectRow => {
-      const pid = getProjectId(projectRow);
-      if (!status2ProjectIds.has(pid)) return;
+      if (!isStatus2ProjectRow(projectRow)) return;
 
+      const pid = getProjectId(projectRow);
       projectRow.classList.add("status2-project-row");
       projectRow.dataset.projectStatus = "2";
       addBadge(projectRow);
       fragment.appendChild(projectRow);
       moved = true;
 
-      Array.from(tbody.querySelectorAll(`tr[data-parent="${CSS.escape(pid)}"]:not(.concept-status2-row)`)).forEach(childRow => {
-        childRow.classList.add("status2-child-row");
-        childRow.dataset.projectStatus = "2";
-        fragment.appendChild(childRow);
-      });
+      if (pid) {
+        Array.from(tbody.querySelectorAll(`tr[data-parent="${CSS.escape(pid)}"]:not(.concept-status2-row)`)).forEach(childRow => {
+          childRow.classList.add("status2-child-row");
+          childRow.dataset.projectStatus = "2";
+          fragment.appendChild(childRow);
+        });
+      }
     });
 
     if (moved) tbody.insertBefore(fragment, insertBefore);
@@ -262,10 +300,13 @@ function enforceStatus2ConceptOnly(){
 }
 
 window.addEventListener("DOMContentLoaded", () => {
-  scheduleApply(250);
+  scheduleApply(250, { refreshIds:true });
   scheduleApply(1000);
+  scheduleApply(2500);
 });
-window.addEventListener("load", () => scheduleApply(250));
+window.addEventListener("load", () => scheduleApply(250, { refreshIds:true }));
+window.addEventListener("planning:project-include-changed", () => scheduleApply(150));
+window.addEventListener("planning:all-time-hours-updated", () => scheduleApply(150));
 
 // Na een volledige tabel-rerender opnieuw toepassen, maar gedebounced.
 const status2Observer = new MutationObserver((mutations) => {
@@ -293,12 +334,12 @@ document.addEventListener("click", (ev) => {
   }
 
   if (ev.target.closest("#btnPrev, #btnNext")) {
-    scheduleApply(900);
-    scheduleApply(1800);
+    loaded = false;
+    scheduleApply(900, { refreshIds:true });
+    scheduleApply(1800, { refreshIds:true });
   }
 
   if (ev.target.closest("#amSave")) {
-    // Na opslaan rendert planning.js opnieuw; daarna status 2 opnieuw onderaan/paars zetten.
     loaded = false;
     scheduleApply(1000, { refreshIds:true });
     scheduleApply(2200, { refreshIds:true });
