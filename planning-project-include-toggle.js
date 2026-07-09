@@ -62,10 +62,15 @@ function ensureStyle(){
       color:#64748b;
       line-height:1;
       user-select:none;
+      cursor:pointer;
+      position:relative;
+      z-index:5;
     }
     .project-include-toggle-wrap input{
       position:absolute;
       opacity:0;
+      width:1px;
+      height:1px;
       pointer-events:none;
     }
     .project-include-switch{
@@ -76,6 +81,7 @@ function ensureStyle(){
       position:relative;
       flex:0 0 auto;
       box-shadow:inset 0 0 0 1px rgba(15,23,42,.12);
+      pointer-events:none;
     }
     .project-include-switch::after{
       content:"";
@@ -99,6 +105,7 @@ function ensureStyle(){
       white-space:nowrap;
       overflow:hidden;
       text-overflow:ellipsis;
+      pointer-events:none;
     }
     tr.project-planning-disabled > td.project-cell{
       background:#f8fafc !important;
@@ -130,6 +137,22 @@ function ensureStyle(){
   document.head.appendChild(style);
 }
 
+function setProjectIncluded(pid, included){
+  const map = readProjectIncludeMap();
+  map[String(pid)] = !!included;
+  writeProjectIncludeMap(map);
+  applyProjectIncludeState();
+
+  window.dispatchEvent(new CustomEvent("planning:project-include-changed", {
+    detail:{ projectId:String(pid), included:!!included }
+  }));
+
+  // Extra directe hook voor de capaciteitscorrectie, als die geladen is.
+  if (typeof window.__applyProjectIncludeCapacity === "function") {
+    window.__applyProjectIncludeCapacity(true);
+  }
+}
+
 function ensureToggleForRow(row){
   const pid = projectIdFromRow(row);
   if (!pid) return;
@@ -139,27 +162,25 @@ function ensureToggleForRow(row){
 
   let wrap = textBox.querySelector(".project-include-toggle-wrap");
   if (!wrap) {
-    wrap = document.createElement("label");
+    wrap = document.createElement("div");
     wrap.className = "project-include-toggle-wrap";
-    wrap.title = "Project wel/niet meenemen in de planning. Uren blijven bewaard.";
+    wrap.title = "Project wel/niet meenemen in de capaciteit. Uren blijven bewaard.";
     wrap.innerHTML = `
-      <input type="checkbox" class="project-include-toggle" />
+      <input type="checkbox" class="project-include-toggle" tabindex="-1" />
       <span class="project-include-switch" aria-hidden="true"></span>
       <span class="project-include-label"></span>
     `;
     textBox.appendChild(wrap);
 
     wrap.addEventListener("click", (ev) => {
+      ev.preventDefault();
       ev.stopPropagation();
-    }, true);
+      ev.stopImmediatePropagation();
 
-    wrap.querySelector("input")?.addEventListener("change", (ev) => {
-      const map = readProjectIncludeMap();
-      map[pid] = !!ev.target.checked;
-      writeProjectIncludeMap(map);
-      applyProjectIncludeState();
-      window.dispatchEvent(new CustomEvent("planning:project-include-changed", { detail:{ projectId:pid, included:!!ev.target.checked } }));
-    });
+      const input = wrap.querySelector("input");
+      const current = !!input?.checked;
+      setProjectIncluded(pid, !current);
+    }, true);
   }
 
   const input = wrap.querySelector("input");
