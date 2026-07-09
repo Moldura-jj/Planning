@@ -4,6 +4,7 @@ import { makeSupabaseClient } from "./auth.js";
 // Als een project met het schakelaartje op "planning uit" staat, tellen de uren
 // niet mee in de capaciteitsregels onder de planning. Uren blijven in Supabase staan.
 // Belangrijk: eerst rekenen vanuit window.__plannerCtx, dus dezelfde bron als de zichtbare planning.
+// Deze correctie werkt ook de kleurclasses van Saldo/Salo WVB opnieuw bij.
 
 const sb = makeSupabaseClient();
 const INCLUDE_KEY = "moldura_project_include_planning_v1";
@@ -244,10 +245,26 @@ function rowValues(row, dates){
   dates.forEach((d,i)=> out[d] = num(textOf(cells[i])));
   return out;
 }
-function updateRow(row, dates, values){
+function applyBalanceCellClass(cell, value){
+  if(!cell) return;
+  const v = num(value);
+  const eps = 0.001;
+  cell.classList.add("balance-cell");
+  cell.classList.remove("pos", "neg", "zero");
+  if(v > eps) cell.classList.add("pos");
+  else if(v < -eps) cell.classList.add("neg");
+  else cell.classList.add("zero");
+}
+function updateRow(row, dates, values, options = {}){
   if(!row) return;
   const cells = Array.from(row.children).slice(2);
-  dates.forEach((d,i)=>{ if(cells[i]) cells[i].textContent = fmt(values[d] || 0); });
+  dates.forEach((d,i)=>{
+    const cell = cells[i];
+    if(!cell) return;
+    const value = values[d] || 0;
+    cell.textContent = fmt(value);
+    if(options.balance) applyBalanceCellClass(cell, value);
+  });
 }
 async function apply(force=false){
   if(running){ rerunRequested = true; return; }
@@ -276,7 +293,7 @@ async function apply(force=false){
     const verlof = rowValues(verlofRow, dates);
     const saldo = emptyDayMap(dates);
     dates.forEach(d => saldo[d] = Math.round((num(cap[d]) - num(planned.prod[d]) - num(planned.mont[d]) - num(verlof[d])) * 10) / 10);
-    updateRow(saldoRow, dates, saldo);
+    updateRow(saldoRow, dates, saldo, { balance:true });
 
     const wvbCapRow = findRow("Uren beschikbaar WVB");
     const wvbVerlofRow = findRow("Verlof WVB");
@@ -285,7 +302,7 @@ async function apply(force=false){
     const wvbVerlof = rowValues(wvbVerlofRow, dates);
     const wvbSaldo = emptyDayMap(dates);
     dates.forEach(d => wvbSaldo[d] = Math.round((num(wvbCap[d]) - num(planned.wvb[d]) - num(wvbVerlof[d])) * 10) / 10);
-    updateRow(wvbSaldoRow, dates, wvbSaldo);
+    updateRow(wvbSaldoRow, dates, wvbSaldo, { balance:true });
   }catch(e){
     console.warn("Project include capaciteit corrigeren mislukt:", e?.message || e);
   }finally{
