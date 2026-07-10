@@ -1,7 +1,7 @@
 // planning-capacity-sticky-v2.js
 // Alleen geladen op planning_v2.html.
 // Doel: capaciteit onderaan vast tonen zonder planning.html te beïnvloeden.
-// V2.3: alleen maand/week/dagkoppen tonen, geen Planning/+Project-regels en geen dubbele Capaciteit-regel.
+// V2.4: sticky kopie verbergen zodra het originele capaciteitblok zelf in beeld is.
 
 let v2Timer = null;
 let v2SyncTimer = null;
@@ -44,8 +44,16 @@ function v2Visible(row){
   return cs.display !== "none" && cs.visibility !== "hidden";
 }
 
+function v2AllBodyRows(table){
+  return Array.from(table?.querySelectorAll("tbody tr") || []);
+}
+
+function v2CapacityTitleRow(table){
+  return v2AllBodyRows(table).find(v2IsCapacityTitle) || null;
+}
+
 function v2CapacityRows(table){
-  const rows = Array.from(table?.querySelectorAll("tbody tr") || []);
+  const rows = v2AllBodyRows(table);
   const start = rows.findIndex(v2IsCapacityTitle);
   if (start < 0) return [];
 
@@ -59,6 +67,19 @@ function v2CapacityRows(table){
     out.push(row);
   }
   return out;
+}
+
+function v2OriginalCapacityVisible(table){
+  const rows = [v2CapacityTitleRow(table), ...v2CapacityRows(table)].filter(Boolean);
+  if (!rows.length) return false;
+
+  const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+  // Als het echte capaciteitblok in de onderste 75% van het scherm zichtbaar is,
+  // verbergen we de sticky kopie om dubbele tabellen te voorkomen.
+  return rows.some(row => {
+    const r = row.getBoundingClientRect();
+    return r.bottom > 80 && r.top < (vh - 40);
+  });
 }
 
 function v2LooksLikeDateHeader(row){
@@ -81,7 +102,7 @@ function v2HeaderRows(table){
     return (filtered.length ? filtered : theadRows.slice(-3)).slice(-3);
   }
 
-  const bodyRows = Array.from(table?.querySelectorAll("tbody tr") || []);
+  const bodyRows = v2AllBodyRows(table);
   const out = [];
   for (const row of bodyRows) {
     if (row.classList.contains("project-row") || v2IsCapacityTitle(row)) break;
@@ -107,7 +128,6 @@ function v2ColumnWidths(table){
 }
 
 function v2LeftWidth(widths){
-  // Eerste twee kolommen zijn project/medewerkerkolom + urenkolom.
   return Math.max(260, (widths[0] || 280) + (widths[1] || 64));
 }
 
@@ -131,6 +151,7 @@ function v2EnsureShell(){
       font-size:11px;
       color:#0f172a;
     }
+    #capacityStickyV2[hidden]{ display:none !important; }
     #capacityStickyV2 .v2-bar{
       display:grid;
       grid-template-columns:var(--v2-left-width, 360px) 1fr;
@@ -312,7 +333,7 @@ function v2BuildSticky(table){
 
 function v2EqualizeRowHeights(){
   const shell = document.getElementById("capacityStickyV2");
-  if (!shell) return;
+  if (!shell || shell.hidden) return;
   const leftRows = Array.from(shell.querySelectorAll(".v2-left tr"));
   const rightRows = Array.from(shell.querySelectorAll(".v2-right tr"));
   const count = Math.min(leftRows.length, rightRows.length);
@@ -351,6 +372,13 @@ function v2Sync(){
   const rightInner = shell?.querySelector(".v2-right-inner");
   if (!shell || !rightInner || !table) return;
 
+  if (v2OriginalCapacityVisible(table)) {
+    shell.hidden = true;
+    document.body.classList.remove("has-capacity-sticky-v2");
+    return;
+  }
+
+  shell.hidden = false;
   const rect = (scroll || table).getBoundingClientRect();
   shell.style.left = `${Math.max(0, Math.round(rect.left))}px`;
   shell.style.width = `${Math.round(rect.width || window.innerWidth)}px`;
@@ -368,16 +396,15 @@ function v2Apply(){
   const built = v2BuildSticky(table);
   if (!built) return false;
 
-  shell.hidden = false;
   shell.innerHTML = "";
   shell.appendChild(built);
   v2Sync();
   v2EqualizeRowHeights();
-  window.setTimeout(() => { v2EqualizeRowHeights(); v2Sync(); }, 80);
+  window.setTimeout(() => { v2EqualizeRowHeights(); v2Sync(); }, 60);
 
   const h = Math.ceil(shell.getBoundingClientRect().height || 220);
   document.documentElement.style.setProperty("--v2-sticky-height", `${h}px`);
-  document.body.classList.add("has-capacity-sticky-v2");
+  if (!shell.hidden) document.body.classList.add("has-capacity-sticky-v2");
   return true;
 }
 
