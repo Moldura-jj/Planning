@@ -1,6 +1,6 @@
 // planning-capacity-sticky-bottom.js
 // Zet het capaciteit-/beschikbaarheidblok vast onderaan het scherm.
-// V7: 1-op-1 kopie van de originele indeling + dag/week/maand headers boven de capaciteit.
+// V8: 1-op-1 sticky capaciteit met dag/weekkoppen, zonder extra Capaciteit-tussenregel.
 
 let capacityStickyTimer = null;
 let capacityStickySyncTimer = null;
@@ -38,16 +38,26 @@ function isNewOrderCapacityRow(row){
   return txt.includes("capaciteit met nieuwe order") || txt.includes("nieuwe order");
 }
 
+function isMeaninglessSpacerRow(row){
+  if (!row) return true;
+  const txt = stickyText(row);
+  if (txt) return false;
+  const cells = Array.from(row.children || []);
+  return cells.length && cells.every(c => !stickyText(c));
+}
+
 function collectCapacityRows(table){
   const rows = Array.from(table?.querySelectorAll("tbody tr") || []);
   const startIndex = rows.findIndex(isCapacityHeaderRow);
   if (startIndex < 0) return [];
 
   const out = [];
-  for (let i = startIndex; i < rows.length; i++) {
+  for (let i = startIndex + 1; i < rows.length; i++) {
     const row = rows[i];
-    if (i > startIndex && isNewOrderCapacityRow(row)) break;
-    if (!isHiddenRow(row)) out.push(row);
+    if (isNewOrderCapacityRow(row)) break;
+    if (isHiddenRow(row)) continue;
+    if (isMeaninglessSpacerRow(row)) continue;
+    out.push(row);
   }
   return out;
 }
@@ -81,12 +91,17 @@ function ensureCapacityFixedShell(){
       border-collapse:separate !important;
       border-spacing:0 !important;
       table-layout:fixed !important;
+      font-weight:400 !important;
+    }
+    #capacityStickyBottomClone th,
+    #capacityStickyBottomClone td{
+      font-weight:400 !important;
     }
     #capacityStickyBottomClone thead th,
     #capacityStickyBottomClone thead td{
       background:#f8fafc !important;
       font-size:10px !important;
-      font-weight:700 !important;
+      font-weight:400 !important;
       text-align:center !important;
       border:1px solid #dbe3ef !important;
       white-space:nowrap !important;
@@ -94,15 +109,24 @@ function ensureCapacityFixedShell(){
       text-overflow:ellipsis !important;
       box-shadow:none !important;
     }
+    #capacityStickyBottomClone .capacity-sticky-title-cell{
+      text-align:left !important;
+      padding-left:8px !important;
+      font-size:12px !important;
+      font-weight:400 !important;
+      color:#0f172a !important;
+      background:#f8fafc !important;
+    }
     #capacityStickyBottomClone tbody tr > th,
     #capacityStickyBottomClone tbody tr > td{
       box-shadow:none !important;
       border:1px solid #dbe3ef !important;
+      font-weight:400 !important;
     }
-    #capacityStickyBottomClone tbody tr.capacity-clone-header > th,
-    #capacityStickyBottomClone tbody tr.capacity-clone-header > td{
+    #capacityStickyBottomClone tbody tr.capacity-clone-section > th,
+    #capacityStickyBottomClone tbody tr.capacity-clone-section > td{
       background:#f8fafc !important;
-      font-weight:800 !important;
+      font-weight:400 !important;
     }
     #capacityStickyBottomClone .sticky-left,
     #capacityStickyBottomClone .sticky-left2{
@@ -119,8 +143,8 @@ function ensureCapacityFixedShell(){
     }
     #capacityStickyBottomClone thead .sticky-left,
     #capacityStickyBottomClone thead .sticky-left2,
-    #capacityStickyBottomClone tbody tr.capacity-clone-header .sticky-left,
-    #capacityStickyBottomClone tbody tr.capacity-clone-header .sticky-left2{
+    #capacityStickyBottomClone tbody tr.capacity-clone-section .sticky-left,
+    #capacityStickyBottomClone tbody tr.capacity-clone-section .sticky-left2{
       background:#f8fafc !important;
       z-index:10 !important;
     }
@@ -128,6 +152,14 @@ function ensureCapacityFixedShell(){
     #capacityStickyBottomClone .balance-cell.pos{ background:#bbf7d0 !important; }
     #capacityStickyBottomClone .balance-cell.zero{ background:#fde68a !important; }
     #capacityStickyBottomClone .balance-cell.neg{ background:#fecaca !important; }
+    #capacityStickyBottomClone .week-clickable-week{
+      pointer-events:auto !important;
+      cursor:pointer !important;
+      font-weight:400 !important;
+    }
+    #capacityStickyBottomClone .week-clickable-week:hover{
+      background:#e0f2fe !important;
+    }
     body.has-capacity-sticky-clone{
       padding-bottom:var(--capacity-sticky-height, 210px) !important;
     }
@@ -165,36 +197,62 @@ function copyColWidths(sourceTable, cloneTable){
 
 function cloneRow(row){
   const r = row.cloneNode(true);
-  r.classList.remove("hidden");
-  if (isCapacityHeaderRow(row) || stickyText(row).toLowerCase() === "werkvoorbereiding") {
-    r.classList.add("capacity-clone-header");
-  }
+  r.classList.remove("hidden", "capacity-clone-header");
   r.querySelectorAll("button, input, select, textarea").forEach(el => {
     el.disabled = true;
     el.tabIndex = -1;
   });
+  const txt = stickyText(row).toLowerCase();
+  if (txt === "werkvoorbereiding") r.classList.add("capacity-clone-section");
   return r;
 }
 
 function cloneHeader(sourceTable){
-  const thead = sourceTable.querySelector("thead");
-  if (thead) return thead.cloneNode(true);
+  const thead = sourceTable.querySelector("thead")?.cloneNode(true);
+  let header = thead;
 
-  // Fallback: sommige renders zetten headers in tbody. Neem de eerste paar rijen tot vóór de eerste projectregel/capaciteit mee.
-  const rows = Array.from(sourceTable.querySelectorAll("tbody tr"));
-  const headRows = [];
-  for (const row of rows) {
-    if (row.classList.contains("project-row") || isCapacityHeaderRow(row)) break;
-    const txt = stickyText(row).toLowerCase();
-    if (txt.includes("wk") || txt.includes("ma") || txt.includes("di") || txt.includes("juli") || txt.includes("augustus") || row.querySelector("[data-iso]")) {
-      headRows.push(row);
+  if (!header) {
+    const rows = Array.from(sourceTable.querySelectorAll("tbody tr"));
+    const headRows = [];
+    for (const row of rows) {
+      if (row.classList.contains("project-row") || isCapacityHeaderRow(row)) break;
+      const txt = stickyText(row).toLowerCase();
+      if (txt.includes("wk") || txt.includes("ma") || txt.includes("di") || txt.includes("juli") || txt.includes("augustus") || row.querySelector("[data-iso]")) {
+        headRows.push(row);
+      }
+    }
+    if (headRows.length) {
+      header = document.createElement("thead");
+      headRows.forEach(row => header.appendChild(cloneRow(row)));
     }
   }
-  if (!headRows.length) return null;
 
-  const h = document.createElement("thead");
-  headRows.forEach(row => h.appendChild(cloneRow(row)));
-  return h;
+  if (!header) return null;
+
+  header.querySelectorAll("button, input, select, textarea").forEach(el => {
+    el.disabled = true;
+    el.tabIndex = -1;
+  });
+
+  // Zet 'Capaciteit' in de onderste headerregel links, zodat de aparte separatorrij weg kan.
+  const lastHeaderRow = Array.from(header.querySelectorAll("tr")).at(-1);
+  const firstCell = lastHeaderRow?.children?.[0];
+  if (firstCell) {
+    firstCell.textContent = "Capaciteit";
+    firstCell.classList.add("capacity-sticky-title-cell", "sticky-left");
+    firstCell.title = "Capaciteit";
+  }
+
+  // Weekkoppen in de clone klikbaar houden voor het bestaande weekoverzichtscript.
+  header.querySelectorAll("th,td,div,span,button").forEach(el => {
+    const txt = String(el.textContent || "").trim();
+    if (/^Wk\s+\d+$/i.test(txt)) {
+      el.classList.add("week-clickable-week");
+      el.title = "Weekoverzicht openen";
+    }
+  });
+
+  return header;
 }
 
 function buildCloneTable(sourceTable, rows){
