@@ -6,6 +6,7 @@
 
 // Extra module: weekoverzicht openen via klik op weeknummer.
 import("./planning-week-overview.js?v=week-overview-3").catch(err => console.warn("Weekoverzicht laden mislukt:", err));
+import("./planning-week-overview-font-fix.js?v=week-font-1").catch(err => console.warn("Weekoverzicht font-fix laden mislukt:", err));
 
 function parseNlNumber(value){
   const raw = String(value ?? "").trim();
