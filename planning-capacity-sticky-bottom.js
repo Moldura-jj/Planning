@@ -1,12 +1,19 @@
 // planning-capacity-sticky-bottom.js
 // Zet het capaciteit-/beschikbaarheidblok vast onderaan het scherm.
-// V2: gebruikt een vaste kopie onderaan, omdat sticky bottom op tabelrijen niet betrouwbaar werkt.
+// V3: vaste kopie onderaan. Gebruikt nu de echte planningtabel via #plannerGrid table.
 
 let capacityStickyTimer = null;
 let capacityStickySyncTimer = null;
 
 function stickyText(el){
   return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function getPlannerTable(){
+  return document.querySelector("#plannerGrid table") ||
+    document.querySelector(".planning-grid table") ||
+    document.querySelector("#plannerScroll table") ||
+    document.querySelector("table");
 }
 
 function isHiddenRow(row){
@@ -45,23 +52,23 @@ function ensureCapacityFixedShell(){
   style.id = "capacityStickyBottomStyle";
   style.textContent = `
     #capacityStickyBottomClone{
-      position:fixed;
-      left:0;
-      right:0;
-      bottom:0;
-      z-index:450;
-      background:#fff;
-      border-top:2px solid #94a3b8;
-      box-shadow:0 -8px 22px rgba(15,23,42,.16);
-      overflow:hidden;
-      max-height:45vh;
-      pointer-events:none;
+      position:fixed !important;
+      left:0 !important;
+      right:0 !important;
+      bottom:0 !important;
+      z-index:450 !important;
+      background:#fff !important;
+      border-top:2px solid #94a3b8 !important;
+      box-shadow:0 -8px 22px rgba(15,23,42,.16) !important;
+      overflow:hidden !important;
+      max-height:45vh !important;
+      pointer-events:none !important;
     }
     #capacityStickyBottomClone .capacity-sticky-inner{
-      position:relative;
-      width:max-content;
-      min-width:100%;
-      will-change:transform;
+      position:relative !important;
+      width:max-content !important;
+      min-width:100% !important;
+      will-change:transform !important;
     }
     #capacityStickyBottomClone table{
       margin:0 !important;
@@ -106,8 +113,7 @@ function ensureCapacityFixedShell(){
 
 function copyColWidths(sourceTable, cloneTable){
   const sourceFirstRow = sourceTable.querySelector("tr");
-  const cloneFirstRow = cloneTable.querySelector("tr");
-  if (!sourceFirstRow || !cloneFirstRow) return;
+  if (!sourceFirstRow) return;
 
   const srcCells = Array.from(sourceFirstRow.children);
   const colgroup = document.createElement("colgroup");
@@ -147,7 +153,7 @@ function buildCloneTable(sourceTable, rows){
 function syncFixedCapacityHorizontal(){
   const shell = document.getElementById("capacityStickyBottomClone");
   const inner = shell?.querySelector(".capacity-sticky-inner");
-  const table = document.querySelector(".planner-table");
+  const table = getPlannerTable();
   if (!shell || !inner || !table) return;
 
   const rect = table.getBoundingClientRect();
@@ -156,7 +162,7 @@ function syncFixedCapacityHorizontal(){
 }
 
 function applyCapacityStickyBottom(){
-  const sourceTable = document.querySelector(".planner-table");
+  const sourceTable = getPlannerTable();
   if (!sourceTable) return;
 
   const rows = collectCapacityRows(sourceTable);
@@ -193,6 +199,7 @@ function scheduleHorizontalSync(){
 window.addEventListener("DOMContentLoaded", () => {
   scheduleCapacitySticky(700);
   scheduleCapacitySticky(1800);
+  scheduleCapacitySticky(3000);
 });
 window.addEventListener("load", () => scheduleCapacitySticky(700));
 window.addEventListener("resize", () => scheduleCapacitySticky(150));
