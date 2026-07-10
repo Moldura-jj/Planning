@@ -1,6 +1,6 @@
 // planning-capacity-sticky-bottom.js
 // Zet het capaciteit-/beschikbaarheidblok vast onderaan het scherm.
-// V8: 1-op-1 sticky capaciteit met dag/weekkoppen, zonder extra Capaciteit-tussenregel.
+// V9: sticky capaciteit met dag/weekkoppen en vaste linkerkolommen bij horizontaal scrollen.
 
 let capacityStickyTimer = null;
 let capacityStickySyncTimer = null;
@@ -77,6 +77,7 @@ function ensureCapacityFixedShell(){
       overflow:hidden !important;
       max-height:52vh !important;
       pointer-events:none !important;
+      --cap-scroll-left:0px;
     }
     #capacityStickyBottomClone .capacity-sticky-inner{
       position:relative !important;
@@ -128,25 +129,30 @@ function ensureCapacityFixedShell(){
       background:#f8fafc !important;
       font-weight:400 !important;
     }
+
+    /* De hele clone-tabel schuift horizontaal mee. Deze cellen krijgen een tegentransform,
+       zodat medewerkers/rijlabels links zichtbaar blijven. */
     #capacityStickyBottomClone .sticky-left,
     #capacityStickyBottomClone .sticky-left2{
-      position:sticky !important;
-      z-index:8 !important;
+      position:relative !important;
+      z-index:30 !important;
+      transform:translateX(var(--cap-scroll-left, 0px)) !important;
+      will-change:transform !important;
+      box-shadow:2px 0 0 #dbe3ef !important;
     }
     #capacityStickyBottomClone .sticky-left{
-      left:0 !important;
       background:#fff !important;
     }
     #capacityStickyBottomClone .sticky-left2{
-      left:var(--left-w, 380px) !important;
       background:#fff !important;
+      z-index:31 !important;
     }
     #capacityStickyBottomClone thead .sticky-left,
     #capacityStickyBottomClone thead .sticky-left2,
     #capacityStickyBottomClone tbody tr.capacity-clone-section .sticky-left,
     #capacityStickyBottomClone tbody tr.capacity-clone-section .sticky-left2{
       background:#f8fafc !important;
-      z-index:10 !important;
+      z-index:35 !important;
     }
     #capacityStickyBottomClone .wknd{ background:#dbeafe !important; }
     #capacityStickyBottomClone .balance-cell.pos{ background:#bbf7d0 !important; }
@@ -234,7 +240,6 @@ function cloneHeader(sourceTable){
     el.tabIndex = -1;
   });
 
-  // Zet 'Capaciteit' in de onderste headerregel links, zodat de aparte separatorrij weg kan.
   const lastHeaderRow = Array.from(header.querySelectorAll("tr")).at(-1);
   const firstCell = lastHeaderRow?.children?.[0];
   if (firstCell) {
@@ -243,7 +248,6 @@ function cloneHeader(sourceTable){
     firstCell.title = "Capaciteit";
   }
 
-  // Weekkoppen in de clone klikbaar houden voor het bestaande weekoverzichtscript.
   header.querySelectorAll("th,td,div,span,button").forEach(el => {
     const txt = String(el.textContent || "").trim();
     if (/^Wk\s+\d+$/i.test(txt)) {
@@ -286,6 +290,7 @@ function syncFixedCapacityHorizontal(){
 
   const scrollLeft = scroll ? scroll.scrollLeft : 0;
   inner.style.transform = `translateX(${-Math.round(scrollLeft)}px)`;
+  shell.style.setProperty("--cap-scroll-left", `${Math.round(scrollLeft)}px`);
 }
 
 function applyCapacityStickyBottom(){
