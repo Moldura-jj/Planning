@@ -1,6 +1,6 @@
 // planning-capacity-sticky-bottom.js
 // Zet het capaciteit-/beschikbaarheidblok vast onderaan het scherm.
-// V6: 1-op-1 kopie van de originele beschikbaarheid/capaciteitstabelindeling, maar sticky onderaan.
+// V7: 1-op-1 kopie van de originele indeling + dag/week/maand headers boven de capaciteit.
 
 let capacityStickyTimer = null;
 let capacityStickySyncTimer = null;
@@ -65,7 +65,7 @@ function ensureCapacityFixedShell(){
       border-top:2px solid #94a3b8 !important;
       box-shadow:0 -8px 22px rgba(15,23,42,.16) !important;
       overflow:hidden !important;
-      max-height:46vh !important;
+      max-height:52vh !important;
       pointer-events:none !important;
     }
     #capacityStickyBottomClone .capacity-sticky-inner{
@@ -78,10 +78,26 @@ function ensureCapacityFixedShell(){
       margin:0 !important;
       box-shadow:none !important;
       border-radius:0 !important;
+      border-collapse:separate !important;
+      border-spacing:0 !important;
+      table-layout:fixed !important;
+    }
+    #capacityStickyBottomClone thead th,
+    #capacityStickyBottomClone thead td{
+      background:#f8fafc !important;
+      font-size:10px !important;
+      font-weight:700 !important;
+      text-align:center !important;
+      border:1px solid #dbe3ef !important;
+      white-space:nowrap !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      box-shadow:none !important;
     }
     #capacityStickyBottomClone tbody tr > th,
     #capacityStickyBottomClone tbody tr > td{
       box-shadow:none !important;
+      border:1px solid #dbe3ef !important;
     }
     #capacityStickyBottomClone tbody tr.capacity-clone-header > th,
     #capacityStickyBottomClone tbody tr.capacity-clone-header > td{
@@ -90,16 +106,30 @@ function ensureCapacityFixedShell(){
     }
     #capacityStickyBottomClone .sticky-left,
     #capacityStickyBottomClone .sticky-left2{
-      position:static !important;
-      left:auto !important;
-      z-index:auto !important;
+      position:sticky !important;
+      z-index:8 !important;
+    }
+    #capacityStickyBottomClone .sticky-left{
+      left:0 !important;
+      background:#fff !important;
+    }
+    #capacityStickyBottomClone .sticky-left2{
+      left:var(--left-w, 380px) !important;
+      background:#fff !important;
+    }
+    #capacityStickyBottomClone thead .sticky-left,
+    #capacityStickyBottomClone thead .sticky-left2,
+    #capacityStickyBottomClone tbody tr.capacity-clone-header .sticky-left,
+    #capacityStickyBottomClone tbody tr.capacity-clone-header .sticky-left2{
+      background:#f8fafc !important;
+      z-index:10 !important;
     }
     #capacityStickyBottomClone .wknd{ background:#dbeafe !important; }
     #capacityStickyBottomClone .balance-cell.pos{ background:#bbf7d0 !important; }
     #capacityStickyBottomClone .balance-cell.zero{ background:#fde68a !important; }
     #capacityStickyBottomClone .balance-cell.neg{ background:#fecaca !important; }
     body.has-capacity-sticky-clone{
-      padding-bottom:var(--capacity-sticky-height, 180px) !important;
+      padding-bottom:var(--capacity-sticky-height, 210px) !important;
     }
   `;
   document.head.appendChild(style);
@@ -114,11 +144,15 @@ function ensureCapacityFixedShell(){
   return shell;
 }
 
-function copyColWidths(sourceTable, cloneTable){
-  const sourceFirstRow = sourceTable.querySelector("tr");
-  if (!sourceFirstRow) return;
+function firstSizingRow(sourceTable){
+  return sourceTable.querySelector("thead tr:last-child") || sourceTable.querySelector("tbody tr") || sourceTable.querySelector("tr");
+}
 
-  const srcCells = Array.from(sourceFirstRow.children);
+function copyColWidths(sourceTable, cloneTable){
+  const sourceRow = firstSizingRow(sourceTable);
+  if (!sourceRow) return;
+
+  const srcCells = Array.from(sourceRow.children);
   const colgroup = document.createElement("colgroup");
   srcCells.forEach(cell => {
     const col = document.createElement("col");
@@ -139,12 +173,28 @@ function cloneRow(row){
     el.disabled = true;
     el.tabIndex = -1;
   });
-  r.querySelectorAll(".sticky-left, .sticky-left2").forEach(el => {
-    el.style.position = "static";
-    el.style.left = "auto";
-    el.style.zIndex = "auto";
-  });
   return r;
+}
+
+function cloneHeader(sourceTable){
+  const thead = sourceTable.querySelector("thead");
+  if (thead) return thead.cloneNode(true);
+
+  // Fallback: sommige renders zetten headers in tbody. Neem de eerste paar rijen tot vóór de eerste projectregel/capaciteit mee.
+  const rows = Array.from(sourceTable.querySelectorAll("tbody tr"));
+  const headRows = [];
+  for (const row of rows) {
+    if (row.classList.contains("project-row") || isCapacityHeaderRow(row)) break;
+    const txt = stickyText(row).toLowerCase();
+    if (txt.includes("wk") || txt.includes("ma") || txt.includes("di") || txt.includes("juli") || txt.includes("augustus") || row.querySelector("[data-iso]")) {
+      headRows.push(row);
+    }
+  }
+  if (!headRows.length) return null;
+
+  const h = document.createElement("thead");
+  headRows.forEach(row => h.appendChild(cloneRow(row)));
+  return h;
 }
 
 function buildCloneTable(sourceTable, rows){
@@ -153,6 +203,9 @@ function buildCloneTable(sourceTable, rows){
   const w = Math.ceil(sourceTable.getBoundingClientRect().width || sourceTable.scrollWidth || 1200);
   cloneTable.style.width = `${w}px`;
   cloneTable.style.minWidth = `${w}px`;
+
+  const header = cloneHeader(sourceTable);
+  if (header) cloneTable.appendChild(header);
 
   const tbody = document.createElement("tbody");
   rows.forEach(row => tbody.appendChild(cloneRow(row)));
@@ -196,7 +249,7 @@ function applyCapacityStickyBottom(){
   inner.appendChild(buildCloneTable(sourceTable, rows));
   syncFixedCapacityHorizontal();
 
-  const h = Math.ceil(shell.getBoundingClientRect().height || 180);
+  const h = Math.ceil(shell.getBoundingClientRect().height || 210);
   document.documentElement.style.setProperty("--capacity-sticky-height", `${h}px`);
   document.body.classList.add("has-capacity-sticky-clone");
   return true;
