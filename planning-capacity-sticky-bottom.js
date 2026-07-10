@@ -1,11 +1,13 @@
 // planning-capacity-sticky-bottom.js
 // Zet het capaciteit-/beschikbaarheidblok vast onderaan het scherm.
-// V9: sticky capaciteit met dag/weekkoppen en vaste linkerkolommen bij horizontaal scrollen.
+// V10: split-view: links vaste labels/medewerkers, rechts scrollende dagkolommen.
 
 let capacityStickyTimer = null;
 let capacityStickySyncTimer = null;
 let capacityStickyWatchdog = null;
 let capacityStickyBootTries = 0;
+
+const FIXED_COLS = 2;
 
 function stickyText(el){
   return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
@@ -62,6 +64,36 @@ function collectCapacityRows(table){
   return out;
 }
 
+function getHeaderRows(sourceTable){
+  const theadRows = Array.from(sourceTable.querySelectorAll("thead tr"));
+  if (theadRows.length) return theadRows;
+
+  const rows = Array.from(sourceTable.querySelectorAll("tbody tr"));
+  const headRows = [];
+  for (const row of rows) {
+    if (row.classList.contains("project-row") || isCapacityHeaderRow(row)) break;
+    const txt = stickyText(row).toLowerCase();
+    if (txt.includes("wk") || txt.includes("ma") || txt.includes("di") || txt.includes("juli") || txt.includes("augustus") || row.querySelector("[data-iso]")) {
+      headRows.push(row);
+    }
+  }
+  return headRows;
+}
+
+function firstSizingRow(sourceTable){
+  return sourceTable.querySelector("thead tr:last-child") || sourceTable.querySelector("tbody tr") || sourceTable.querySelector("tr");
+}
+
+function cellWidth(cell){
+  return Math.ceil(cell?.getBoundingClientRect?.().width || cell?.offsetWidth || 32);
+}
+
+function getColumnWidths(sourceTable){
+  const row = firstSizingRow(sourceTable);
+  const cells = Array.from(row?.children || []);
+  return cells.map(cellWidth);
+}
+
 function ensureCapacityFixedShell(){
   document.getElementById("capacityStickyBottomStyle")?.remove();
   const style = document.createElement("style");
@@ -77,12 +109,32 @@ function ensureCapacityFixedShell(){
       overflow:hidden !important;
       max-height:52vh !important;
       pointer-events:none !important;
-      --cap-scroll-left:0px;
     }
-    #capacityStickyBottomClone .capacity-sticky-inner{
-      position:relative !important;
+    #capacityStickyBottomClone .capacity-sticky-split{
+      display:flex !important;
+      align-items:stretch !important;
+      width:100% !important;
+      overflow:hidden !important;
+      background:#fff !important;
+    }
+    #capacityStickyBottomClone .capacity-left-pane{
+      flex:0 0 var(--capacity-left-width, 380px) !important;
+      width:var(--capacity-left-width, 380px) !important;
+      min-width:var(--capacity-left-width, 380px) !important;
+      max-width:var(--capacity-left-width, 380px) !important;
+      overflow:hidden !important;
+      background:#fff !important;
+      z-index:3 !important;
+      box-shadow:2px 0 0 #cbd5e1 !important;
+    }
+    #capacityStickyBottomClone .capacity-right-pane{
+      flex:1 1 auto !important;
+      min-width:0 !important;
+      overflow:hidden !important;
+      background:#fff !important;
+    }
+    #capacityStickyBottomClone .capacity-right-inner{
       width:max-content !important;
-      min-width:100% !important;
       will-change:transform !important;
     }
     #capacityStickyBottomClone table{
@@ -97,6 +149,15 @@ function ensureCapacityFixedShell(){
     #capacityStickyBottomClone th,
     #capacityStickyBottomClone td{
       font-weight:400 !important;
+      box-shadow:none !important;
+      border:1px solid #dbe3ef !important;
+      white-space:nowrap !important;
+      overflow:hidden !important;
+      text-overflow:ellipsis !important;
+      box-sizing:border-box !important;
+      height:18px !important;
+      line-height:16px !important;
+      font-size:11px !important;
     }
     #capacityStickyBottomClone thead th,
     #capacityStickyBottomClone thead td{
@@ -104,55 +165,17 @@ function ensureCapacityFixedShell(){
       font-size:10px !important;
       font-weight:400 !important;
       text-align:center !important;
-      border:1px solid #dbe3ef !important;
-      white-space:nowrap !important;
-      overflow:hidden !important;
-      text-overflow:ellipsis !important;
-      box-shadow:none !important;
     }
     #capacityStickyBottomClone .capacity-sticky-title-cell{
       text-align:left !important;
       padding-left:8px !important;
       font-size:12px !important;
-      font-weight:400 !important;
       color:#0f172a !important;
       background:#f8fafc !important;
-    }
-    #capacityStickyBottomClone tbody tr > th,
-    #capacityStickyBottomClone tbody tr > td{
-      box-shadow:none !important;
-      border:1px solid #dbe3ef !important;
-      font-weight:400 !important;
     }
     #capacityStickyBottomClone tbody tr.capacity-clone-section > th,
     #capacityStickyBottomClone tbody tr.capacity-clone-section > td{
       background:#f8fafc !important;
-      font-weight:400 !important;
-    }
-
-    /* De hele clone-tabel schuift horizontaal mee. Deze cellen krijgen een tegentransform,
-       zodat medewerkers/rijlabels links zichtbaar blijven. */
-    #capacityStickyBottomClone .sticky-left,
-    #capacityStickyBottomClone .sticky-left2{
-      position:relative !important;
-      z-index:30 !important;
-      transform:translateX(var(--cap-scroll-left, 0px)) !important;
-      will-change:transform !important;
-      box-shadow:2px 0 0 #dbe3ef !important;
-    }
-    #capacityStickyBottomClone .sticky-left{
-      background:#fff !important;
-    }
-    #capacityStickyBottomClone .sticky-left2{
-      background:#fff !important;
-      z-index:31 !important;
-    }
-    #capacityStickyBottomClone thead .sticky-left,
-    #capacityStickyBottomClone thead .sticky-left2,
-    #capacityStickyBottomClone tbody tr.capacity-clone-section .sticky-left,
-    #capacityStickyBottomClone tbody tr.capacity-clone-section .sticky-left2{
-      background:#f8fafc !important;
-      z-index:35 !important;
     }
     #capacityStickyBottomClone .wknd{ background:#dbeafe !important; }
     #capacityStickyBottomClone .balance-cell.pos{ background:#bbf7d0 !important; }
@@ -163,9 +186,7 @@ function ensureCapacityFixedShell(){
       cursor:pointer !important;
       font-weight:400 !important;
     }
-    #capacityStickyBottomClone .week-clickable-week:hover{
-      background:#e0f2fe !important;
-    }
+    #capacityStickyBottomClone .week-clickable-week:hover{ background:#e0f2fe !important; }
     body.has-capacity-sticky-clone{
       padding-bottom:var(--capacity-sticky-height, 210px) !important;
     }
@@ -176,112 +197,116 @@ function ensureCapacityFixedShell(){
   if (!shell) {
     shell = document.createElement("div");
     shell.id = "capacityStickyBottomClone";
-    shell.innerHTML = `<div class="capacity-sticky-inner"></div>`;
     document.body.appendChild(shell);
   }
   return shell;
 }
 
-function firstSizingRow(sourceTable){
-  return sourceTable.querySelector("thead tr:last-child") || sourceTable.querySelector("tbody tr") || sourceTable.querySelector("tr");
-}
-
-function copyColWidths(sourceTable, cloneTable){
-  const sourceRow = firstSizingRow(sourceTable);
-  if (!sourceRow) return;
-
-  const srcCells = Array.from(sourceRow.children);
-  const colgroup = document.createElement("colgroup");
-  srcCells.forEach(cell => {
-    const col = document.createElement("col");
-    const w = Math.ceil(cell.getBoundingClientRect().width || cell.offsetWidth || 32);
-    col.style.width = `${w}px`;
-    colgroup.appendChild(col);
-  });
-  cloneTable.prepend(colgroup);
-}
-
-function cloneRow(row){
-  const r = row.cloneNode(true);
-  r.classList.remove("hidden", "capacity-clone-header");
-  r.querySelectorAll("button, input, select, textarea").forEach(el => {
+function cloneCell(cell, fallbackTag = "td"){
+  if (!cell) return document.createElement(fallbackTag);
+  const c = cell.cloneNode(true);
+  c.classList.remove("sticky-left", "sticky-left2");
+  c.style.position = "";
+  c.style.left = "";
+  c.style.transform = "";
+  c.querySelectorAll("button, input, select, textarea").forEach(el => {
     el.disabled = true;
     el.tabIndex = -1;
   });
-  const txt = stickyText(row).toLowerCase();
-  if (txt === "werkvoorbereiding") r.classList.add("capacity-clone-section");
-  return r;
+  return c;
 }
 
-function cloneHeader(sourceTable){
-  const thead = sourceTable.querySelector("thead")?.cloneNode(true);
-  let header = thead;
-
-  if (!header) {
-    const rows = Array.from(sourceTable.querySelectorAll("tbody tr"));
-    const headRows = [];
-    for (const row of rows) {
-      if (row.classList.contains("project-row") || isCapacityHeaderRow(row)) break;
-      const txt = stickyText(row).toLowerCase();
-      if (txt.includes("wk") || txt.includes("ma") || txt.includes("di") || txt.includes("juli") || txt.includes("augustus") || row.querySelector("[data-iso]")) {
-        headRows.push(row);
-      }
-    }
-    if (headRows.length) {
-      header = document.createElement("thead");
-      headRows.forEach(row => header.appendChild(cloneRow(row)));
-    }
-  }
-
-  if (!header) return null;
-
-  header.querySelectorAll("button, input, select, textarea").forEach(el => {
-    el.disabled = true;
-    el.tabIndex = -1;
-  });
-
-  const lastHeaderRow = Array.from(header.querySelectorAll("tr")).at(-1);
-  const firstCell = lastHeaderRow?.children?.[0];
-  if (firstCell) {
-    firstCell.textContent = "Capaciteit";
-    firstCell.classList.add("capacity-sticky-title-cell", "sticky-left");
-    firstCell.title = "Capaciteit";
-  }
-
-  header.querySelectorAll("th,td,div,span,button").forEach(el => {
-    const txt = String(el.textContent || "").trim();
-    if (/^Wk\s+\d+$/i.test(txt)) {
-      el.classList.add("week-clickable-week");
-      el.title = "Weekoverzicht openen";
-    }
-  });
-
-  return header;
+function setCellWidth(cell, width){
+  cell.style.width = `${width}px`;
+  cell.style.minWidth = `${width}px`;
+  cell.style.maxWidth = `${width}px`;
 }
 
-function buildCloneTable(sourceTable, rows){
-  const cloneTable = document.createElement("table");
-  cloneTable.className = sourceTable.className;
-  const w = Math.ceil(sourceTable.getBoundingClientRect().width || sourceTable.scrollWidth || 1200);
-  cloneTable.style.width = `${w}px`;
-  cloneTable.style.minWidth = `${w}px`;
+function buildRowPart(sourceRow, start, end, widths, rowIndex, isHeader, isLeft){
+  const tr = document.createElement("tr");
+  tr.className = sourceRow.className || "";
+  tr.classList.remove("hidden", "capacity-clone-header");
+  const txt = stickyText(sourceRow).toLowerCase();
+  if (txt === "werkvoorbereiding") tr.classList.add("capacity-clone-section");
 
-  const header = cloneHeader(sourceTable);
-  if (header) cloneTable.appendChild(header);
+  const sourceCells = Array.from(sourceRow.children || []);
+  const tag = isHeader ? "th" : "td";
+  for (let i = start; i < end; i++) {
+    const cell = cloneCell(sourceCells[i], tag);
+    setCellWidth(cell, widths[i] || 32);
+
+    if (isHeader && isLeft && rowIndex === -1 && i === 0) {
+      cell.textContent = "Capaciteit";
+      cell.classList.add("capacity-sticky-title-cell");
+      cell.title = "Capaciteit";
+    }
+
+    const cellTxt = String(cell.textContent || "").trim();
+    if (/^Wk\s+\d+$/i.test(cellTxt)) {
+      cell.classList.add("week-clickable-week");
+      cell.title = "Weekoverzicht openen";
+    }
+
+    tr.appendChild(cell);
+  }
+  return tr;
+}
+
+function buildTablePart(sourceRows, start, end, widths, isHeaderOnlyLeftTitle = false){
+  const table = document.createElement("table");
+  const totalW = widths.slice(start, end).reduce((a,b) => a + (b || 32), 0);
+  table.style.width = `${totalW}px`;
+  table.style.minWidth = `${totalW}px`;
+
+  const headerRows = sourceRows.headers || [];
+  if (headerRows.length) {
+    const thead = document.createElement("thead");
+    headerRows.forEach((row, idx) => {
+      const marker = idx === headerRows.length - 1 ? -1 : idx;
+      thead.appendChild(buildRowPart(row, start, end, widths, marker, true, isHeaderOnlyLeftTitle));
+    });
+    table.appendChild(thead);
+  }
 
   const tbody = document.createElement("tbody");
-  rows.forEach(row => tbody.appendChild(cloneRow(row)));
-  cloneTable.appendChild(tbody);
-  copyColWidths(sourceTable, cloneTable);
-  return cloneTable;
+  (sourceRows.body || []).forEach((row, idx) => tbody.appendChild(buildRowPart(row, start, end, widths, idx, false, false)));
+  table.appendChild(tbody);
+  return table;
+}
+
+function buildStickySplit(sourceTable, rows){
+  const widths = getColumnWidths(sourceTable);
+  const headers = getHeaderRows(sourceTable);
+  const sourceRows = { headers, body: rows };
+  const fixedCols = Math.min(FIXED_COLS, widths.length);
+  const leftWidth = widths.slice(0, fixedCols).reduce((a,b) => a + (b || 32), 0);
+
+  const split = document.createElement("div");
+  split.className = "capacity-sticky-split";
+  split.style.setProperty("--capacity-left-width", `${leftWidth}px`);
+
+  const leftPane = document.createElement("div");
+  leftPane.className = "capacity-left-pane";
+  leftPane.appendChild(buildTablePart(sourceRows, 0, fixedCols, widths, true));
+
+  const rightPane = document.createElement("div");
+  rightPane.className = "capacity-right-pane";
+  const rightInner = document.createElement("div");
+  rightInner.className = "capacity-right-inner";
+  rightInner.appendChild(buildTablePart(sourceRows, fixedCols, widths.length, widths, false));
+  rightPane.appendChild(rightInner);
+
+  split.appendChild(leftPane);
+  split.appendChild(rightPane);
+  return split;
 }
 
 function syncFixedCapacityHorizontal(){
   const shell = document.getElementById("capacityStickyBottomClone");
-  const inner = shell?.querySelector(".capacity-sticky-inner");
+  const rightInner = shell?.querySelector(".capacity-right-inner");
   const scroll = getPlannerScroll();
   const table = getPlannerTable();
-  if (!shell || !inner || !table) return;
+  if (!shell || !rightInner || !table) return;
 
   const rect = (scroll || table).getBoundingClientRect();
   shell.style.left = `${Math.max(0, Math.round(rect.left))}px`;
@@ -289,8 +314,7 @@ function syncFixedCapacityHorizontal(){
   shell.style.right = "auto";
 
   const scrollLeft = scroll ? scroll.scrollLeft : 0;
-  inner.style.transform = `translateX(${-Math.round(scrollLeft)}px)`;
-  shell.style.setProperty("--cap-scroll-left", `${Math.round(scrollLeft)}px`);
+  rightInner.style.transform = `translateX(${-Math.round(scrollLeft)}px)`;
 }
 
 function applyCapacityStickyBottom(){
@@ -299,8 +323,7 @@ function applyCapacityStickyBottom(){
 
   const rows = collectCapacityRows(sourceTable);
   const shell = ensureCapacityFixedShell();
-  const inner = shell.querySelector(".capacity-sticky-inner");
-  if (!inner) return false;
+  if (!shell) return false;
 
   if (!rows.length) {
     scheduleCapacitySticky(700);
@@ -308,8 +331,8 @@ function applyCapacityStickyBottom(){
   }
 
   shell.hidden = false;
-  inner.innerHTML = "";
-  inner.appendChild(buildCloneTable(sourceTable, rows));
+  shell.innerHTML = "";
+  shell.appendChild(buildStickySplit(sourceTable, rows));
   syncFixedCapacityHorizontal();
 
   const h = Math.ceil(shell.getBoundingClientRect().height || 210);
@@ -338,9 +361,7 @@ function startCapacityStickyBootLoop(){
   run();
 
   window.clearInterval(capacityStickyWatchdog);
-  capacityStickyWatchdog = window.setInterval(() => {
-    applyCapacityStickyBottom();
-  }, 5000);
+  capacityStickyWatchdog = window.setInterval(() => applyCapacityStickyBottom(), 5000);
 }
 
 window.addEventListener("DOMContentLoaded", startCapacityStickyBootLoop);
