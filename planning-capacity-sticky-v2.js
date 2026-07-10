@@ -1,7 +1,7 @@
 // planning-capacity-sticky-v2.js
 // Alleen geladen op planning_v2.html.
 // Doel: capaciteit onderaan vast tonen zonder planning.html te beïnvloeden.
-// V2.4: sticky kopie verbergen zodra het originele capaciteitblok zelf in beeld is.
+// V2.5: één gekloonde tabel in een eigen scroll-container; linker kolommen blijven sticky.
 
 let v2Timer = null;
 let v2SyncTimer = null;
@@ -23,6 +23,13 @@ function v2PlannerTable(){
     Array.from(document.querySelectorAll("table")).find(t => !t.closest("#capacityStickyV2"));
 }
 
+function v2Visible(row){
+  if (!row) return false;
+  if (row.classList.contains("hidden")) return false;
+  const cs = window.getComputedStyle(row);
+  return cs.display !== "none" && cs.visibility !== "hidden";
+}
+
 function v2IsCapacityTitle(row){
   return v2Text(row).toLowerCase() === "capaciteit";
 }
@@ -35,51 +42,6 @@ function v2IsNewOrderRow(row){
 function v2IsEmptyRow(row){
   const cells = Array.from(row?.children || []);
   return cells.length > 0 && cells.every(c => !v2Text(c));
-}
-
-function v2Visible(row){
-  if (!row) return false;
-  if (row.classList.contains("hidden")) return false;
-  const cs = window.getComputedStyle(row);
-  return cs.display !== "none" && cs.visibility !== "hidden";
-}
-
-function v2AllBodyRows(table){
-  return Array.from(table?.querySelectorAll("tbody tr") || []);
-}
-
-function v2CapacityTitleRow(table){
-  return v2AllBodyRows(table).find(v2IsCapacityTitle) || null;
-}
-
-function v2CapacityRows(table){
-  const rows = v2AllBodyRows(table);
-  const start = rows.findIndex(v2IsCapacityTitle);
-  if (start < 0) return [];
-
-  const out = [];
-  // Sla de losse titelrij "Capaciteit" over. Die zetten we linksboven in de sticky header.
-  for (let i = start + 1; i < rows.length; i++) {
-    const row = rows[i];
-    if (v2IsNewOrderRow(row)) break;
-    if (!v2Visible(row)) continue;
-    if (v2IsEmptyRow(row)) continue;
-    out.push(row);
-  }
-  return out;
-}
-
-function v2OriginalCapacityVisible(table){
-  const rows = [v2CapacityTitleRow(table), ...v2CapacityRows(table)].filter(Boolean);
-  if (!rows.length) return false;
-
-  const vh = window.innerHeight || document.documentElement.clientHeight || 0;
-  // Als het echte capaciteitblok in de onderste 75% van het scherm zichtbaar is,
-  // verbergen we de sticky kopie om dubbele tabellen te voorkomen.
-  return rows.some(row => {
-    const r = row.getBoundingClientRect();
-    return r.bottom > 80 && r.top < (vh - 40);
-  });
 }
 
 function v2LooksLikeDateHeader(row){
@@ -96,30 +58,46 @@ function v2LooksLikeDateHeader(row){
 }
 
 function v2HeaderRows(table){
-  const theadRows = Array.from(table?.querySelectorAll("thead tr") || []);
+  const theadRows = Array.from(table?.querySelectorAll("thead tr") || []).filter(v2Visible);
   if (theadRows.length) {
     const filtered = theadRows.filter(v2LooksLikeDateHeader);
     return (filtered.length ? filtered : theadRows.slice(-3)).slice(-3);
   }
 
-  const bodyRows = v2AllBodyRows(table);
+  const bodyRows = Array.from(table?.querySelectorAll("tbody tr") || []);
   const out = [];
   for (const row of bodyRows) {
     if (row.classList.contains("project-row") || v2IsCapacityTitle(row)) break;
-    if (v2LooksLikeDateHeader(row)) out.push(row);
+    if (v2Visible(row) && v2LooksLikeDateHeader(row)) out.push(row);
   }
   return out.slice(-3);
 }
 
-function v2CellWidth(cell){
-  return Math.ceil(cell?.getBoundingClientRect?.().width || cell?.offsetWidth || 32);
+function v2CapacityRows(table){
+  const rows = Array.from(table?.querySelectorAll("tbody tr") || []);
+  const start = rows.findIndex(v2IsCapacityTitle);
+  if (start < 0) return [];
+
+  const out = [];
+  for (let i = start + 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (v2IsNewOrderRow(row)) break;
+    if (!v2Visible(row)) continue;
+    if (v2IsEmptyRow(row)) continue;
+    out.push(row);
+  }
+  return out;
 }
 
 function v2SizingRow(table){
-  const allRows = Array.from(table?.querySelectorAll("thead tr, tbody tr") || []);
-  const candidates = allRows.filter(row => v2Visible(row) && Array.from(row.children || []).length > 2);
+  const rows = Array.from(table?.querySelectorAll("thead tr, tbody tr") || []);
+  const candidates = rows.filter(row => v2Visible(row) && Array.from(row.children || []).length > 2);
   candidates.sort((a,b) => Array.from(b.children || []).length - Array.from(a.children || []).length);
   return candidates[0] || table?.querySelector("tr");
+}
+
+function v2CellWidth(cell){
+  return Math.ceil(cell?.getBoundingClientRect?.().width || cell?.offsetWidth || 32);
 }
 
 function v2ColumnWidths(table){
@@ -128,7 +106,7 @@ function v2ColumnWidths(table){
 }
 
 function v2LeftWidth(widths){
-  return Math.max(260, (widths[0] || 280) + (widths[1] || 64));
+  return Math.max(240, Math.round((widths[0] || 280) + (widths[1] || 64)));
 }
 
 function v2EnsureShell(){
@@ -151,26 +129,10 @@ function v2EnsureShell(){
       font-size:11px;
       color:#0f172a;
     }
-    #capacityStickyV2[hidden]{ display:none !important; }
-    #capacityStickyV2 .v2-bar{
-      display:grid;
-      grid-template-columns:var(--v2-left-width, 360px) 1fr;
+    #capacityStickyV2 .v2-viewport{
+      overflow:hidden;
       width:100%;
-      overflow:hidden;
       background:#fff;
-    }
-    #capacityStickyV2 .v2-left,
-    #capacityStickyV2 .v2-right{
-      overflow:hidden;
-      background:#fff;
-    }
-    #capacityStickyV2 .v2-left{
-      border-right:2px solid #cbd5e1;
-      z-index:2;
-    }
-    #capacityStickyV2 .v2-right-inner{
-      width:max-content;
-      will-change:transform;
     }
     #capacityStickyV2 table{
       border-collapse:separate;
@@ -180,8 +142,8 @@ function v2EnsureShell(){
       box-shadow:none;
       border-radius:0;
       font-weight:400;
+      background:#fff;
     }
-    #capacityStickyV2 tr{ height:18px; }
     #capacityStickyV2 th,
     #capacityStickyV2 td{
       border:1px solid #dbe3ef;
@@ -202,6 +164,29 @@ function v2EnsureShell(){
       text-align:center;
       font-size:10px;
     }
+    #capacityStickyV2 .sticky-left,
+    #capacityStickyV2 .rowhdr.sticky-left,
+    #capacityStickyV2 .v2-sticky-left{
+      position:sticky !important;
+      left:0 !important;
+      z-index:20 !important;
+      background:#fff !important;
+    }
+    #capacityStickyV2 .sticky-left2,
+    #capacityStickyV2 .hourscol.sticky-left2,
+    #capacityStickyV2 .v2-sticky-left2{
+      position:sticky !important;
+      left:var(--v2-first-col-width, 280px) !important;
+      z-index:21 !important;
+      background:#fff !important;
+    }
+    #capacityStickyV2 thead .sticky-left,
+    #capacityStickyV2 thead .sticky-left2,
+    #capacityStickyV2 thead .v2-sticky-left,
+    #capacityStickyV2 thead .v2-sticky-left2{
+      background:#f8fafc !important;
+      z-index:30 !important;
+    }
     #capacityStickyV2 .v2-title-cell{
       text-align:left !important;
       font-size:12px !important;
@@ -216,10 +201,7 @@ function v2EnsureShell(){
     #capacityStickyV2 .balance-cell.pos{ background:#bbf7d0 !important; }
     #capacityStickyV2 .balance-cell.zero{ background:#fde68a !important; }
     #capacityStickyV2 .balance-cell.neg{ background:#fecaca !important; }
-    #capacityStickyV2 .week-clickable-week{
-      pointer-events:auto;
-      cursor:pointer;
-    }
+    #capacityStickyV2 .week-clickable-week{ pointer-events:auto; cursor:pointer; }
     #capacityStickyV2 .week-clickable-week:hover{ background:#e0f2fe !important; }
     body.has-capacity-sticky-v2{ padding-bottom:var(--v2-sticky-height, 220px) !important; }
   `;
@@ -236,10 +218,11 @@ function v2EnsureShell(){
 
 function v2CloneCell(cell, tag="td"){
   const c = cell ? cell.cloneNode(true) : document.createElement(tag);
-  c.classList.remove("sticky-left", "sticky-left2");
   c.style.position = "";
   c.style.left = "";
+  c.style.right = "";
   c.style.transform = "";
+  c.style.zIndex = "";
   c.querySelectorAll("button,input,select,textarea").forEach(el => {
     el.disabled = true;
     el.tabIndex = -1;
@@ -252,140 +235,115 @@ function v2CloneCell(cell, tag="td"){
   return c;
 }
 
-function v2SetWidth(cell, width){
+function v2ApplyCellWidth(cell, width){
   const w = Math.max(1, Math.round(width || 32));
   cell.style.width = `${w}px`;
   cell.style.minWidth = `${w}px`;
   cell.style.maxWidth = `${w}px`;
 }
 
-function v2BuildPart(rows, colStart, colEnd, widths, isLeft){
-  const table = document.createElement("table");
-  const total = widths.slice(colStart, colEnd).reduce((a,b)=>a+(b||32),0);
-  table.style.width = `${total}px`;
-  table.style.minWidth = `${total}px`;
+function v2ApplyRowWidths(row, widths){
+  let col = 0;
+  Array.from(row.children || []).forEach(cell => {
+    const span = Math.max(1, Number(cell.getAttribute("colspan") || 1));
+    const w = widths.slice(col, col + span).reduce((a,b)=>a+(b||32),0) || v2CellWidth(cell);
+    v2ApplyCellWidth(cell, w);
+    col += span;
+  });
+}
 
+function v2MakeHeaderClone(srcRows, widths){
   const thead = document.createElement("thead");
-  rows.headers.forEach((srcRow, rIdx) => {
-    const tr = document.createElement("tr");
-    Array.from(srcRow.children || []).slice(colStart, colEnd).forEach((srcCell, offset) => {
-      const sourceIndex = colStart + offset;
+  srcRows.forEach((srcRow, idx) => {
+    const tr = srcRow.cloneNode(false);
+    tr.className = srcRow.className || "";
+    Array.from(srcRow.children || []).forEach((srcCell, cellIdx) => {
       const c = v2CloneCell(srcCell, "th");
-      v2SetWidth(c, widths[sourceIndex]);
-      if (isLeft && rIdx === rows.headers.length - 1 && sourceIndex === 0) {
+      if (idx === srcRows.length - 1 && cellIdx === 0) {
         c.textContent = "Capaciteit";
-        c.classList.add("v2-title-cell");
+        c.classList.add("v2-title-cell", "v2-sticky-left");
       }
+      if (cellIdx === 0) c.classList.add("v2-sticky-left");
+      if (cellIdx === 1) c.classList.add("v2-sticky-left2");
       tr.appendChild(c);
     });
+    v2ApplyRowWidths(tr, widths);
     thead.appendChild(tr);
   });
-  table.appendChild(thead);
+  return thead;
+}
 
+function v2MakeBodyClone(srcRows, widths){
   const tbody = document.createElement("tbody");
-  rows.body.forEach(srcRow => {
-    const tr = document.createElement("tr");
+  srcRows.forEach(srcRow => {
+    const tr = srcRow.cloneNode(false);
     tr.className = srcRow.className || "";
     const txt = v2Text(srcRow).toLowerCase();
     if (txt === "werkvoorbereiding") tr.classList.add("v2-section-row");
-
-    Array.from(srcRow.children || []).slice(colStart, colEnd).forEach((srcCell, offset) => {
-      const sourceIndex = colStart + offset;
+    Array.from(srcRow.children || []).forEach((srcCell, cellIdx) => {
       const c = v2CloneCell(srcCell, "td");
-      v2SetWidth(c, widths[sourceIndex]);
+      if (cellIdx === 0) c.classList.add("v2-sticky-left");
+      if (cellIdx === 1) c.classList.add("v2-sticky-left2");
       tr.appendChild(c);
     });
+    v2ApplyRowWidths(tr, widths);
     tbody.appendChild(tr);
   });
-  table.appendChild(tbody);
-  return table;
+  return tbody;
 }
 
-function v2BuildSticky(table){
-  const widths = v2ColumnWidths(table);
+function v2BuildSticky(sourceTable){
+  const widths = v2ColumnWidths(sourceTable);
   if (widths.length < 3) return null;
 
-  const headers = v2HeaderRows(table);
-  const body = v2CapacityRows(table);
-  if (!headers.length || !body.length) return null;
+  const headers = v2HeaderRows(sourceTable);
+  const bodyRows = v2CapacityRows(sourceTable);
+  if (!headers.length || !bodyRows.length) return null;
 
-  const rows = { headers, body };
-  const fixedCols = 2;
-  const shell = document.createElement("div");
-  shell.className = "v2-bar";
-  shell.style.setProperty("--v2-left-width", `${v2LeftWidth(widths)}px`);
+  const viewport = document.createElement("div");
+  viewport.className = "v2-viewport";
+  viewport.style.setProperty("--v2-first-col-width", `${Math.round(widths[0] || 280)}px`);
 
-  const left = document.createElement("div");
-  left.className = "v2-left";
-  left.appendChild(v2BuildPart(rows, 0, fixedCols, widths, true));
+  const table = document.createElement("table");
+  table.className = sourceTable.className || "";
+  const total = widths.reduce((a,b)=>a+(b||32),0);
+  table.style.width = `${total}px`;
+  table.style.minWidth = `${total}px`;
 
-  const right = document.createElement("div");
-  right.className = "v2-right";
-  const rightInner = document.createElement("div");
-  rightInner.className = "v2-right-inner";
-  rightInner.appendChild(v2BuildPart(rows, fixedCols, widths.length, widths, false));
-  right.appendChild(rightInner);
+  table.appendChild(v2MakeHeaderClone(headers, widths));
+  table.appendChild(v2MakeBodyClone(bodyRows, widths));
 
-  shell.appendChild(left);
-  shell.appendChild(right);
-  return shell;
+  viewport.appendChild(table);
+  return viewport;
 }
 
-function v2EqualizeRowHeights(){
+function v2OriginalCapacityVisible(){
+  const table = v2PlannerTable();
+  const row = Array.from(table?.querySelectorAll("tbody tr") || []).find(v2IsCapacityTitle);
+  if (!row) return false;
+  const rect = row.getBoundingClientRect();
   const shell = document.getElementById("capacityStickyV2");
-  if (!shell || shell.hidden) return;
-  const leftRows = Array.from(shell.querySelectorAll(".v2-left tr"));
-  const rightRows = Array.from(shell.querySelectorAll(".v2-right tr"));
-  const count = Math.min(leftRows.length, rightRows.length);
-
-  for (let i = 0; i < count; i++) {
-    const l = leftRows[i];
-    const r = rightRows[i];
-    l.style.height = "";
-    r.style.height = "";
-    l.querySelectorAll("th,td").forEach(c => { c.style.height = ""; c.style.lineHeight = ""; });
-    r.querySelectorAll("th,td").forEach(c => { c.style.height = ""; c.style.lineHeight = ""; });
-  }
-
-  shell.getBoundingClientRect();
-
-  for (let i = 0; i < count; i++) {
-    const l = leftRows[i];
-    const r = rightRows[i];
-    const h = Math.max(18, Math.ceil(l.getBoundingClientRect().height || 18), Math.ceil(r.getBoundingClientRect().height || 18));
-    for (const row of [l, r]) {
-      row.style.height = `${h}px`;
-      row.style.minHeight = `${h}px`;
-      row.querySelectorAll("th,td").forEach(c => {
-        c.style.height = `${h}px`;
-        c.style.minHeight = `${h}px`;
-        c.style.lineHeight = `${Math.max(12, h - 2)}px`;
-      });
-    }
-  }
+  const stickyHeight = shell && !shell.hidden ? (shell.getBoundingClientRect().height || 0) : 0;
+  return rect.top < window.innerHeight - stickyHeight + 24 && rect.bottom > 40;
 }
 
 function v2Sync(){
   const shell = document.getElementById("capacityStickyV2");
+  const viewport = shell?.querySelector(".v2-viewport");
   const scroll = v2PlannerScroll();
   const table = v2PlannerTable();
-  const rightInner = shell?.querySelector(".v2-right-inner");
-  if (!shell || !rightInner || !table) return;
+  if (!shell || !viewport || !table) return;
 
-  if (v2OriginalCapacityVisible(table)) {
-    shell.hidden = true;
-    document.body.classList.remove("has-capacity-sticky-v2");
-    return;
-  }
-
-  shell.hidden = false;
   const rect = (scroll || table).getBoundingClientRect();
   shell.style.left = `${Math.max(0, Math.round(rect.left))}px`;
   shell.style.width = `${Math.round(rect.width || window.innerWidth)}px`;
   shell.style.right = "auto";
 
-  const x = Math.round(scroll?.scrollLeft || 0);
-  rightInner.style.transform = `translateX(${-x}px)`;
+  viewport.scrollLeft = Math.round(scroll?.scrollLeft || 0);
+
+  const hideBecauseOriginalVisible = v2OriginalCapacityVisible();
+  shell.hidden = hideBecauseOriginalVisible;
+  document.body.classList.toggle("has-capacity-sticky-v2", !hideBecauseOriginalVisible);
 }
 
 function v2Apply(){
@@ -398,9 +356,8 @@ function v2Apply(){
 
   shell.innerHTML = "";
   shell.appendChild(built);
+  shell.hidden = false;
   v2Sync();
-  v2EqualizeRowHeights();
-  window.setTimeout(() => { v2EqualizeRowHeights(); v2Sync(); }, 60);
 
   const h = Math.ceil(shell.getBoundingClientRect().height || 220);
   document.documentElement.style.setProperty("--v2-sticky-height", `${h}px`);
@@ -436,14 +393,14 @@ window.addEventListener("load", v2Boot);
 window.addEventListener("resize", () => v2Schedule(150));
 window.addEventListener("scroll", v2ScheduleSync, { passive:true });
 
-const v2Scroll = () => {
+const v2ScrollBind = () => {
   const s = v2PlannerScroll();
   if (s && !s.dataset.v2StickyBound) {
     s.dataset.v2StickyBound = "1";
     s.addEventListener("scroll", v2ScheduleSync, { passive:true });
   }
 };
-window.setInterval(v2Scroll, 1000);
+window.setInterval(v2ScrollBind, 1000);
 
 window.addEventListener("planning:project-include-changed", () => v2Schedule(300));
 window.addEventListener("planning:all-time-hours-updated", () => v2Schedule(300));
