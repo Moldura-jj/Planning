@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moldura Planning V2 — Capaciteit</title>
+  <link rel="icon" type="image/png" href="favicon.png" />
+  <link rel="stylesheet" href="styles.css?v=planning-topbar-2" />
+</head>
+
+<body>
+  <div class="container full-width">
+    <div class="topbar">
+      <div class="topbar-left">
+        <a class="app-logo" href="index.html" aria-label="Moldura">
+          <img class="app-logo-img" src="Logo.png" alt="Moldura" />
+        </a>
+        <a class="btn ghost nav-projects" href="projects.html">Projecten</a>
+        <a class="btn ghost nav-projects" href="planning.html" title="Terug naar de huidige planning">Planning normaal</a>
+        <div class="brand">Capaciteitsplanning V2</div>
+        <span style="font-size:11px;color:#8b5cf6;white-space:nowrap;font-weight:700;" title="Testpagina">test sticky capaciteit</span>
+        <div id="week-nav" class="row planning-topbar-period">
+          <button id="btnPrev" class="btn">Vorige maand</button>
+          <h2 id="current-week-label">Periode --</h2>
+          <button id="btnNext" class="btn">Volgende maand</button>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <button class="icon-btn" id="btnSettings" title="Instellingen" aria-label="Instellingen">Instellingen</button>
+      </div>
+    </div>
+
+    <div class="card planning-card">
+      <div class="bd">
+        <div id="plannerStatus"></div>
+
+        <div class="planner-scroll planner-scroll-sticky" id="plannerScroll">
+          <div class="planning-grid" id="plannerGrid"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section details modal (moet IN body) -->
+<div id="secModalBackdrop" class="modal-backdrop">
+  <div class="modal" style="max-width:900px;">
+    <div class="hd">
+      <div>
+        <div class="assign-title">Sectie</div>
+        <div class="assign-sub" id="secModalSub"></div>
+      </div>
+      <button class="btn small" id="secModalClose" type="button">X</button>
+    </div>
+
+    <div class="bd" id="secModalBody"></div>
+
+    <div class="ft">
+      <button class="btn" id="secModalClose2" type="button">Sluiten</button>
+    </div>
+  </div>
+</div>
+
+  <div class="modal-backdrop" id="settingsBackdrop" hidden></div>
+
+<div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" hidden>
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title" id="settingsTitle">Instellingen</div>
+      <button class="icon-btn" id="btnSettingsClose" aria-label="Sluiten">X</button>
+    </div>
+
+    <div class="modal-body">
+      <label class="field">
+        <div class="field-label">Planningsfactor</div>
+        <div class="field-row">
+          <input type="range" id="planFactor" min="50" max="120" step="5" />
+          <div class="chip" id="planFactorLabel">80%</div>
+        </div>
+        <div class="field-help">
+          Hiermee kun je plannen op bv. 80% van de beschikbare uren (buffer). Later uitbreidbaar met meer regels.
+        </div>
+      </label>
+
+      <div class="settings-section">
+        <div class="settings-section-head">
+          <div>
+            <div class="field-label">Vaste medewerkers</div>
+            <div class="field-help">Vul per dag de beschikbare uren en discipline in. Gebruik doorvoeren om deze week te herhalen.</div>
+          </div>
+          <button class="btn small" id="btnEmployeeAdd" type="button">+ Medewerker</button>
+        </div>
+
+        <div class="settings-weekbar">
+          <button class="btn small" id="settingsEmpPrevWeek" type="button">Vorige week</button>
+          <div class="settings-weeklabel" id="settingsEmpWeekLabel">Week --</div>
+          <button class="btn small" id="settingsEmpNextWeek" type="button">Volgende week</button>
+        </div>
+
+        <div class="settings-applybar">
+          <button class="btn small" id="settingsEmpApplyEven" type="button">Doorvoeren in even weken</button>
+          <button class="btn small" id="settingsEmpApplyOdd" type="button">Doorvoeren in oneven weken</button>
+          <button class="btn small" id="settingsEmpApplyAll" type="button">Doorvoeren in alle weken</button>
+        </div>
+
+        <div class="settings-employees" id="settingsEmployees">
+          <div class="muted">Medewerkers laden...</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn" id="btnSettingsCancel">Annuleren</button>
+      <button class="btn primary" id="btnSettingsSave">Opslaan</button>
+    </div>
+  </div>
+</div>
+    
+  <script src="planning-cap-absence-opens-availability.js?v=cap-absence-open-1"></script>
+  <script src="planning-refresh-cap-modal-after-absence.js?v=cap-refresh-after-absence-1"></script>
+  <script type="module" src="planning-disable-absence-autosync.js?v=absence-guard-1"></script>
+  <script type="module" src="planning.js"></script>
+  <script src="planning-project-row-cleanup.js?v=project-row-cleanup-5"></script>
+  <script src="planning-project-include-toggle.js?v=project-include-5"></script>
+  <script type="module" src="planning-project-include-capacity-fix.js?v=project-include-capacity-5"></script>
+  <script src="planning-capacity-sticky-v2.js?v=sticky-v2-1"></script>
+  <script type="module" src="planning-all-time-hours-column.js?v=all-time-hours-3"></script>
+  <script type="module" src="planning-warning-dot.js?v=prod-hours-dot-7"></script>
+  <script type="module" src="planning-status2-inline-fix.js?v=status2-inline-9"></script>
+  <script src="planning-warning-dot-prod-only-fix.js?v=prod-only-dot-2"></script>
+  <script type="module" src="planning-wvb-absence-style-fix.js?v=wvb-absence-1"></script>
+  <script src="planning-week-overview-align.js?v=week-align-2"></script>
+  <script src="planning-general-absence-names.js?v=general-absence-names-4"></script>
+  <script src="planning-project-search.js?v=project-search-1"></script>
+  <script type="module" src="planning-delete-planned-hours.js?v=delete-planned-1"></script>
+  
+</body>
+</html>
