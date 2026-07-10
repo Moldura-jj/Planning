@@ -2,6 +2,7 @@
 // Alleen geladen op planning_v2.html.
 // Doel: capaciteit onderaan vast tonen zonder planning.html te beïnvloeden.
 // Deze versie bouwt een aparte fixed onderbalk op basis van de bestaande capaciteitrijen.
+// V2.2: rijhoogtes links/rechts worden expliciet gelijkgezet.
 
 let v2Timer = null;
 let v2SyncTimer = null;
@@ -144,6 +145,9 @@ function v2EnsureShell(){
       border-radius:0;
       font-weight:400;
     }
+    #capacityStickyV2 tr{
+      height:18px;
+    }
     #capacityStickyV2 th,
     #capacityStickyV2 td{
       border:1px solid #dbe3ef;
@@ -156,6 +160,7 @@ function v2EnsureShell(){
       text-overflow:ellipsis;
       font-weight:400 !important;
       background:#fff;
+      vertical-align:middle;
     }
     #capacityStickyV2 thead th,
     #capacityStickyV2 thead td{
@@ -291,6 +296,41 @@ function v2BuildSticky(table){
   return shell;
 }
 
+function v2EqualizeRowHeights(){
+  const shell = document.getElementById("capacityStickyV2");
+  if (!shell) return;
+  const leftRows = Array.from(shell.querySelectorAll(".v2-left tr"));
+  const rightRows = Array.from(shell.querySelectorAll(".v2-right tr"));
+  const count = Math.min(leftRows.length, rightRows.length);
+
+  for (let i = 0; i < count; i++) {
+    const l = leftRows[i];
+    const r = rightRows[i];
+    l.style.height = "";
+    r.style.height = "";
+    l.querySelectorAll("th,td").forEach(c => { c.style.height = ""; c.style.lineHeight = ""; });
+    r.querySelectorAll("th,td").forEach(c => { c.style.height = ""; c.style.lineHeight = ""; });
+  }
+
+  // Force layout after reset.
+  shell.getBoundingClientRect();
+
+  for (let i = 0; i < count; i++) {
+    const l = leftRows[i];
+    const r = rightRows[i];
+    const h = Math.max(18, Math.ceil(l.getBoundingClientRect().height || 18), Math.ceil(r.getBoundingClientRect().height || 18));
+    for (const row of [l, r]) {
+      row.style.height = `${h}px`;
+      row.style.minHeight = `${h}px`;
+      row.querySelectorAll("th,td").forEach(c => {
+        c.style.height = `${h}px`;
+        c.style.minHeight = `${h}px`;
+        c.style.lineHeight = `${Math.max(12, h - 2)}px`;
+      });
+    }
+  }
+}
+
 function v2Sync(){
   const shell = document.getElementById("capacityStickyV2");
   const scroll = v2PlannerScroll();
@@ -318,7 +358,9 @@ function v2Apply(){
   shell.hidden = false;
   shell.innerHTML = "";
   shell.appendChild(built);
+  v2EqualizeRowHeights();
   v2Sync();
+  window.setTimeout(() => { v2EqualizeRowHeights(); v2Sync(); }, 60);
 
   const h = Math.ceil(shell.getBoundingClientRect().height || 220);
   document.documentElement.style.setProperty("--v2-sticky-height", `${h}px`);
