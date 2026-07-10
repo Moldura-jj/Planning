@@ -1,8 +1,7 @@
 // planning-capacity-sticky-v2.js
 // Alleen geladen op planning_v2.html.
 // Doel: capaciteit onderaan vast tonen zonder planning.html te beïnvloeden.
-// Deze versie bouwt een aparte fixed onderbalk op basis van de bestaande capaciteitrijen.
-// V2.2: rijhoogtes links/rechts worden expliciet gelijkgezet.
+// V2.3: alleen maand/week/dagkoppen tonen, geen Planning/+Project-regels en geen dubbele Capaciteit-regel.
 
 let v2Timer = null;
 let v2SyncTimer = null;
@@ -51,29 +50,42 @@ function v2CapacityRows(table){
   if (start < 0) return [];
 
   const out = [];
-  // Neem de capaciteitstitel zelf mee, maar sla lege spacerregels over.
-  for (let i = start; i < rows.length; i++) {
+  // Sla de losse titelrij "Capaciteit" over. Die zetten we linksboven in de sticky header.
+  for (let i = start + 1; i < rows.length; i++) {
     const row = rows[i];
-    if (i > start && v2IsNewOrderRow(row)) break;
+    if (v2IsNewOrderRow(row)) break;
     if (!v2Visible(row)) continue;
-    if (i !== start && v2IsEmptyRow(row)) continue;
+    if (v2IsEmptyRow(row)) continue;
     out.push(row);
   }
   return out;
 }
 
+function v2LooksLikeDateHeader(row){
+  const txt = v2Text(row).toLowerCase();
+  if (!txt) return false;
+  if (txt === "planning" || txt.includes("+ project") || txt.includes("alles dicht")) return false;
+  if (row.querySelector("button, input, select, textarea")) return false;
+
+  const monthHit = /(januari|februari|maart|april|mei|juni|juli|augustus|september|oktober|november|december)\s+\d{4}/i.test(txt);
+  const weekHit = /\bwk\s*\d+\b/i.test(txt);
+  const isoHit = !!row.querySelector("[data-iso]");
+  const dayHit = /\b(ma|di|wo|do|vr|za|zo)\b/.test(txt) && /\d{1,2}[-/]\d{1,2}/.test(txt);
+  return monthHit || weekHit || isoHit || dayHit;
+}
+
 function v2HeaderRows(table){
-  const rows = Array.from(table?.querySelectorAll("thead tr") || []);
-  if (rows.length) return rows;
+  const theadRows = Array.from(table?.querySelectorAll("thead tr") || []);
+  if (theadRows.length) {
+    const filtered = theadRows.filter(v2LooksLikeDateHeader);
+    return (filtered.length ? filtered : theadRows.slice(-3)).slice(-3);
+  }
 
   const bodyRows = Array.from(table?.querySelectorAll("tbody tr") || []);
   const out = [];
   for (const row of bodyRows) {
     if (row.classList.contains("project-row") || v2IsCapacityTitle(row)) break;
-    const txt = v2Text(row).toLowerCase();
-    if (txt.includes("wk") || txt.includes("juli") || txt.includes("augustus") || txt.includes("september") || row.querySelector("[data-iso]")) {
-      out.push(row);
-    }
+    if (v2LooksLikeDateHeader(row)) out.push(row);
   }
   return out.slice(-3);
 }
@@ -83,7 +95,10 @@ function v2CellWidth(cell){
 }
 
 function v2SizingRow(table){
-  return table?.querySelector("thead tr:last-child") || table?.querySelector("tbody tr.project-row") || table?.querySelector("tbody tr") || table?.querySelector("tr");
+  const allRows = Array.from(table?.querySelectorAll("thead tr, tbody tr") || []);
+  const candidates = allRows.filter(row => v2Visible(row) && Array.from(row.children || []).length > 2);
+  candidates.sort((a,b) => Array.from(b.children || []).length - Array.from(a.children || []).length);
+  return candidates[0] || table?.querySelector("tr");
 }
 
 function v2ColumnWidths(table){
@@ -145,9 +160,7 @@ function v2EnsureShell(){
       border-radius:0;
       font-weight:400;
     }
-    #capacityStickyV2 tr{
-      height:18px;
-    }
+    #capacityStickyV2 tr{ height:18px; }
     #capacityStickyV2 th,
     #capacityStickyV2 td{
       border:1px solid #dbe3ef;
@@ -171,6 +184,7 @@ function v2EnsureShell(){
     #capacityStickyV2 .v2-title-cell{
       text-align:left !important;
       font-size:12px !important;
+      color:#0f172a !important;
       background:#f8fafc !important;
     }
     #capacityStickyV2 .v2-section-row th,
@@ -252,7 +266,7 @@ function v2BuildPart(rows, colStart, colEnd, widths, isLeft){
     const tr = document.createElement("tr");
     tr.className = srcRow.className || "";
     const txt = v2Text(srcRow).toLowerCase();
-    if (txt === "werkvoorbereiding" || txt === "capaciteit") tr.classList.add("v2-section-row");
+    if (txt === "werkvoorbereiding") tr.classList.add("v2-section-row");
 
     Array.from(srcRow.children || []).slice(colStart, colEnd).forEach((srcCell, offset) => {
       const sourceIndex = colStart + offset;
@@ -312,7 +326,6 @@ function v2EqualizeRowHeights(){
     r.querySelectorAll("th,td").forEach(c => { c.style.height = ""; c.style.lineHeight = ""; });
   }
 
-  // Force layout after reset.
   shell.getBoundingClientRect();
 
   for (let i = 0; i < count; i++) {
@@ -358,9 +371,9 @@ function v2Apply(){
   shell.hidden = false;
   shell.innerHTML = "";
   shell.appendChild(built);
-  v2EqualizeRowHeights();
   v2Sync();
-  window.setTimeout(() => { v2EqualizeRowHeights(); v2Sync(); }, 60);
+  v2EqualizeRowHeights();
+  window.setTimeout(() => { v2EqualizeRowHeights(); v2Sync(); }, 80);
 
   const h = Math.ceil(shell.getBoundingClientRect().height || 220);
   document.documentElement.style.setProperty("--v2-sticky-height", `${h}px`);
