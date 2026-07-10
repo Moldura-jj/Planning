@@ -1,19 +1,25 @@
 // planning-capacity-sticky-bottom.js
 // Zet het capaciteit-/beschikbaarheidblok vast onderaan het scherm.
-// V3: vaste kopie onderaan. Gebruikt nu de echte planningtabel via #plannerGrid table.
+// V4: vaste kopie gekoppeld aan #plannerScroll, met retry/watchdog na render.
 
 let capacityStickyTimer = null;
 let capacityStickySyncTimer = null;
+let capacityStickyWatchdog = null;
+let capacityStickyBootTries = 0;
 
 function stickyText(el){
   return String(el?.innerText || el?.textContent || "").replace(/\s+/g, " ").trim();
 }
 
+function getPlannerScroll(){
+  return document.getElementById("plannerScroll") || document.querySelector(".planner-scroll");
+}
+
 function getPlannerTable(){
-  return document.querySelector("#plannerGrid table") ||
-    document.querySelector(".planning-grid table") ||
-    document.querySelector("#plannerScroll table") ||
-    document.querySelector("table");
+  return document.querySelector("#plannerGrid table:not(#capacityStickyBottomClone table)") ||
+    document.querySelector(".planning-grid table:not(#capacityStickyBottomClone table)") ||
+    document.querySelector("#plannerScroll table:not(#capacityStickyBottomClone table)") ||
+    Array.from(document.querySelectorAll("table")).find(t => !t.closest("#capacityStickyBottomClone"));
 }
 
 function isHiddenRow(row){
@@ -33,7 +39,7 @@ function isNewOrderCapacityRow(row){
 }
 
 function collectCapacityRows(table){
-  const rows = Array.from(table.querySelectorAll("tbody tr"));
+  const rows = Array.from(table?.querySelectorAll("tbody tr") || []);
   const startIndex = rows.findIndex(isCapacityHeaderRow);
   if (startIndex < 0) return [];
 
@@ -53,15 +59,13 @@ function ensureCapacityFixedShell(){
   style.textContent = `
     #capacityStickyBottomClone{
       position:fixed !important;
-      left:0 !important;
-      right:0 !important;
       bottom:0 !important;
       z-index:450 !important;
       background:#fff !important;
       border-top:2px solid #94a3b8 !important;
       box-shadow:0 -8px 22px rgba(15,23,42,.16) !important;
       overflow:hidden !important;
-      max-height:45vh !important;
+      max-height:46vh !important;
       pointer-events:none !important;
     }
     #capacityStickyBottomClone .capacity-sticky-inner{
@@ -84,12 +88,6 @@ function ensureCapacityFixedShell(){
     #capacityStickyBottomClone tbody tr.capacity-clone-header > td{
       background:#f8fafc !important;
       font-weight:800 !important;
-    }
-    #capacityStickyBottomClone .sticky-left,
-    #capacityStickyBottomClone .sticky-left2{
-      position:static !important;
-      left:auto !important;
-      z-index:auto !important;
     }
     #capacityStickyBottomClone .wknd{ background:#dbeafe !important; }
     #capacityStickyBottomClone .balance-cell.pos{ background:#bbf7d0 !important; }
@@ -129,8 +127,9 @@ function copyColWidths(sourceTable, cloneTable){
 function buildCloneTable(sourceTable, rows){
   const cloneTable = document.createElement("table");
   cloneTable.className = sourceTable.className;
-  cloneTable.style.width = `${Math.ceil(sourceTable.getBoundingClientRect().width || sourceTable.scrollWidth)}px`;
-  cloneTable.style.minWidth = cloneTable.style.width;
+  const w = Math.ceil(sourceTable.getBoundingClientRect().width || sourceTable.scrollWidth || 1200);
+  cloneTable.style.width = `${w}px`;
+  cloneTable.style.minWidth = `${w}px`;
 
   const tbody = document.createElement("tbody");
   rows.forEach(row => {
@@ -153,27 +152,32 @@ function buildCloneTable(sourceTable, rows){
 function syncFixedCapacityHorizontal(){
   const shell = document.getElementById("capacityStickyBottomClone");
   const inner = shell?.querySelector(".capacity-sticky-inner");
+  const scroll = getPlannerScroll();
   const table = getPlannerTable();
   if (!shell || !inner || !table) return;
 
-  const rect = table.getBoundingClientRect();
-  const x = Math.round(rect.left);
-  inner.style.transform = `translateX(${x}px)`;
+  const rect = (scroll || table).getBoundingClientRect();
+  shell.style.left = `${Math.max(0, Math.round(rect.left))}px`;
+  shell.style.width = `${Math.round(rect.width || window.innerWidth)}px`;
+  shell.style.right = "auto";
+
+  const scrollLeft = scroll ? scroll.scrollLeft : 0;
+  inner.style.transform = `translateX(${-Math.round(scrollLeft)}px)`;
 }
 
 function applyCapacityStickyBottom(){
   const sourceTable = getPlannerTable();
-  if (!sourceTable) return;
+  if (!sourceTable) return false;
 
   const rows = collectCapacityRows(sourceTable);
   const shell = ensureCapacityFixedShell();
   const inner = shell.querySelector(".capacity-sticky-inner");
-  if (!inner) return;
+  if (!inner) return false;
 
   if (!rows.length) {
-    shell.hidden = true;
-    document.body.classList.remove("has-capacity-sticky-clone");
-    return;
+    // Niet meteen verwijderen tijdens tussenrender; later opnieuw proberen.
+    scheduleCapacitySticky(700);
+    return false;
   }
 
   shell.hidden = false;
@@ -184,6 +188,7 @@ function applyCapacityStickyBottom(){
   const h = Math.ceil(shell.getBoundingClientRect().height || 180);
   document.documentElement.style.setProperty("--capacity-sticky-height", `${h}px`);
   document.body.classList.add("has-capacity-sticky-clone");
+  return true;
 }
 
 function scheduleCapacitySticky(delay = 250){
@@ -196,14 +201,30 @@ function scheduleHorizontalSync(){
   capacityStickySyncTimer = window.setTimeout(syncFixedCapacityHorizontal, 20);
 }
 
-window.addEventListener("DOMContentLoaded", () => {
-  scheduleCapacitySticky(700);
-  scheduleCapacitySticky(1800);
-  scheduleCapacitySticky(3000);
-});
-window.addEventListener("load", () => scheduleCapacitySticky(700));
+function startCapacityStickyBootLoop(){
+  capacityStickyBootTries = 0;
+  const run = () => {
+    capacityStickyBootTries += 1;
+    const ok = applyCapacityStickyBottom();
+    if (!ok && capacityStickyBootTries < 40) window.setTimeout(run, 300);
+  };
+  run();
+
+  window.clearInterval(capacityStickyWatchdog);
+  capacityStickyWatchdog = window.setInterval(() => {
+    applyCapacityStickyBottom();
+  }, 5000);
+}
+
+window.addEventListener("DOMContentLoaded", startCapacityStickyBootLoop);
+window.addEventListener("load", startCapacityStickyBootLoop);
 window.addEventListener("resize", () => scheduleCapacitySticky(150));
 window.addEventListener("scroll", scheduleHorizontalSync, { passive:true });
+
+const plannerScroll = () => getPlannerScroll();
+window.setTimeout(() => plannerScroll()?.addEventListener("scroll", scheduleHorizontalSync, { passive:true }), 800);
+window.setTimeout(() => plannerScroll()?.addEventListener("scroll", scheduleHorizontalSync, { passive:true }), 2000);
+
 window.addEventListener("planning:project-include-changed", () => scheduleCapacitySticky(250));
 window.addEventListener("planning:all-time-hours-updated", () => scheduleCapacitySticky(250));
 
