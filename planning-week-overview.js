@@ -1,6 +1,6 @@
 // planning-week-overview.js
 // Klik op weeknummer => weekoverzicht per dag/medewerker + concepten + verlof.
-// Leest zoveel mogelijk uit window.__plannerCtx en valt terug op DOM-medewerkerlijsten.
+// Beschikbaarheid wordt nu meegenomen, zodat 'Beschikbaar' alleen wordt getoond bij uren > 0.
 
 (function(){
   const DAY_NAMES = ["Zo", "Ma", "Di", "Wo", "Do", "Vr", "Za"];
@@ -63,14 +63,12 @@
   }
 
   async function getSupabase(){
-    if (!sbPromise) {
-      sbPromise = import("./auth.js").then(m => m.makeSupabaseClient());
-    }
+    if (!sbPromise) sbPromise = import("./auth.js").then(m => m.makeSupabaseClient());
     return sbPromise;
   }
 
   function ensureStyle(){
-    if (document.getElementById("weekOverviewStyle")) return;
+    document.getElementById("weekOverviewStyle")?.remove();
     const style = document.createElement("style");
     style.id = "weekOverviewStyle";
     style.textContent = `
@@ -95,10 +93,8 @@
         cursor:pointer; font-size:18px; line-height:1;
       }
       .week-overview-body{ overflow:auto; padding:14px; background:#f8fafc; }
-      .week-overview-grid{
-        display:grid; grid-template-columns:repeat(7, minmax(210px, 1fr)); gap:10px; min-width:1460px;
-      }
-      .week-day-col{ background:#fff; border:1px solid #dbe3ef; border-radius:14px; overflow:hidden; }
+      .week-overview-grid{ display:grid; gap:10px; min-width:0; }
+      .week-day-col{ background:#fff; border:1px solid #dbe3ef; border-radius:14px; overflow:hidden; min-width:210px; }
       .week-day-head{ padding:10px 10px 8px; border-bottom:1px solid #e5e7eb; background:#f1f5f9; }
       .week-day-name{ font-weight:800; color:#0f172a; }
       .week-day-date{ font-size:11px; color:#64748b; margin-top:1px; }
@@ -116,6 +112,7 @@
       .week-card.concept{ background:#f5f3ff; border-color:#c4b5fd; }
       .week-card-type{ display:block; font-size:10px; color:#64748b; margin-bottom:2px; font-weight:700; text-transform:uppercase; letter-spacing:.02em; }
       .week-empty{ font-size:12px; color:#64748b; padding:4px 0; }
+      .week-unavailable{ font-size:12px; color:#94a3b8; padding:4px 0; }
       .week-concepts{ padding:10px; background:#faf5ff; border-top:2px solid #ddd6fe; }
       .week-concepts-title{ font-weight:900; color:#5b21b6; font-size:12px; margin-bottom:6px; }
       .week-clickable-week{ cursor:pointer !important; }
@@ -195,6 +192,13 @@
     return x || "prod";
   }
 
+  function normalizeDiscipline(t){
+    const x = String(t || "").toLowerCase().trim();
+    if (x === "geen" || x === "none" || x === "0") return "geen";
+    if (x === "wvb" || x.includes("werkvoor")) return "wvb";
+    return "prod_mont";
+  }
+
   function typeLabel(t){
     if (t === "wvb") return "WVB";
     if (t === "prod") return "Productie";
@@ -228,7 +232,6 @@
   async function loadAbsences(days, employees){
     const ids = Array.from(employees.keys()).map(Number).filter(Number.isFinite);
     if (!ids.length || !days.length) return [];
-
     try {
       const sb = await getSupabase();
       const { data, error } = await sb
@@ -249,14 +252,49 @@
     }
   }
 
+  async function loadCapacity(days, employees){
+    const ids = Array.from(employees.keys()).map(Number).filter(Number.isFinite);
+    const out = new Map();
+    for (const id of employees.keys()) out.set(String(id), new Map());
+    if (!ids.length || !days.length) return out;
+
+    try {
+      const sb = await getSupabase();
+      const { data, error } = await sb
+        .from("capacity_entries")
+        .select("werknemer_id, work_date, hours, type")
+        .in("werknemer_id", ids)
+        .gte("work_date", days[0])
+        .lte("work_date", days[days.length - 1])
+        .limit(5000);
+      if (error) {
+        console.warn("Weekoverzicht beschikbaarheid laden mislukt:", error.message);
+        return out;
+      }
+
+      for (const r of data || []) {
+        const empId = String(r.werknemer_id ?? "").trim();
+        const iso = String(r.work_date || "").slice(0,10);
+        const hours = normalizeDiscipline(r.type) === "geen" ? 0 : Number(r.hours || 0);
+        if (!empId || !iso || !out.has(empId)) continue;
+        out.get(empId).set(iso, (out.get(empId).get(iso) || 0) + Math.max(0, hours));
+      }
+    } catch (e) {
+      console.warn("Weekoverzicht beschikbaarheid laden mislukt:", e);
+    }
+    return out;
+  }
+
   async function collectWeekData(days){
     const ctx = window.__plannerCtx || {};
     const employees = buildEmployeeMap();
+    const availability = await loadCapacity(days, employees);
     const byDay = new Map(days.map(iso => [iso, { employees: new Map(), concepts: [] }]));
 
     for (const iso of days) {
       for (const [empId, name] of employees) {
-        byDay.get(iso).employees.set(empId, { name, items: [] });
+        const availableHours = Number(availability.get(String(empId))?.get(iso) || 0);
+        byDay.get(iso).employees.set(empId, { name, availableHours, items: [] });
       }
     }
 
@@ -274,10 +312,7 @@
           const note = String(r.note || "").trim();
 
           if (isRealEmployee) {
-            pushUnique(byDay.get(iso).employees.get(empId).items, {
-              type: wt,
-              text: baseText || "Planning"
-            });
+            pushUnique(byDay.get(iso).employees.get(empId).items, { type: wt, text: baseText || "Planning" });
           } else if (!note.startsWith("inhuur:")) {
             pushUnique(byDay.get(iso).concepts, {
               type: "concept",
@@ -298,7 +333,6 @@
       handleRows("", String(pid), dm, true);
     }
 
-    // Verlof/vrije dagen toevoegen. Eerst uit context als die bestaat, anders live uit Supabase.
     let absRows = [];
     if (ctx.absenceByEmp instanceof Map) {
       for (const [empId, dm] of ctx.absenceByEmp) {
@@ -330,6 +364,15 @@
     return `<div class="week-card ${esc(item.type)}"><span class="week-card-type">${esc(typeLabel(item.type))}</span>${esc(item.text).replace(/\n/g, "<br>")}</div>`;
   }
 
+  function dayHasContent(day){
+    if (!day) return false;
+    if ((day.concepts || []).length) return true;
+    for (const emp of day.employees.values()) {
+      if (emp?.items?.length) return true;
+    }
+    return false;
+  }
+
   async function renderWeekOverview(weekNo, days){
     const modal = ensureModal();
     const title = modal.querySelector("#weekOverviewTitle");
@@ -344,9 +387,16 @@
     const { byDay, employees } = await collectWeekData(days);
     const employeeIds = Array.from(employees.keys());
 
+    const visibleDays = days.filter(iso => {
+      const d = parseISODate(iso);
+      const isWeekend = d && (d.getDay() === 0 || d.getDay() === 6);
+      return !isWeekend || dayHasContent(byDay.get(iso));
+    });
+
+    const cols = Math.max(1, visibleDays.length);
     body.innerHTML = `
-      <div class="week-overview-grid">
-        ${days.map(iso => {
+      <div class="week-overview-grid" style="grid-template-columns:repeat(${cols}, minmax(210px, 1fr)); min-width:${Math.max(210 * cols, 210)}px;">
+        ${visibleDays.map(iso => {
           const day = byDay.get(iso);
           return `
             <div class="week-day-col">
@@ -356,10 +406,14 @@
               </div>
               ${employeeIds.map(empId => {
                 const emp = day.employees.get(empId);
+                const available = Number(emp?.availableHours || 0);
+                const emptyHtml = available > 0
+                  ? `<div class="week-empty">Beschikbaar</div>`
+                  : `<div class="week-unavailable">Niet beschikbaar</div>`;
                 return `
                   <div class="week-emp-block">
                     <div class="week-emp-name">${esc(emp?.name || empId)}</div>
-                    ${emp?.items?.length ? emp.items.map(cardHtml).join("") : `<div class="week-empty">Beschikbaar</div>`}
+                    ${emp?.items?.length ? emp.items.map(cardHtml).join("") : emptyHtml}
                   </div>
                 `;
               }).join("")}
