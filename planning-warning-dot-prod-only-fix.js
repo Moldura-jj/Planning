@@ -5,7 +5,7 @@
 // Gebruikt een eigen class, zodat oude warning-logica dit bolletje niet kan verwijderen.
 
 // Extra module: weekoverzicht openen via klik op weeknummer.
-import("./planning-week-overview.js?v=week-overview-2").catch(err => console.warn("Weekoverzicht laden mislukt:", err));
+import("./planning-week-overview.js?v=week-overview-3").catch(err => console.warn("Weekoverzicht laden mislukt:", err));
 
 function parseNlNumber(value){
   const raw = String(value ?? "").trim();
