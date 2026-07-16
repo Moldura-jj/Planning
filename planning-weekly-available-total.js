@@ -1,10 +1,12 @@
 // Toont onder het capaciteitblok per week hoeveel saldo-uren nog beschikbaar zijn.
 // Voor de huidige week worden alleen vandaag en de resterende dagen meegeteld.
 // Daaronder staat een cumulatieve optelling vanaf vandaag; verleden telt niet mee.
+// Bij navigeren naar een volgende maand loopt de cumulatieve waarde door.
 (() => {
   const ROW_CLASS = "weekly-available-total-row";
   const CUM_ROW_CLASS = "weekly-available-cumulative-row";
   const STYLE_ID = "weeklyAvailableTotalStyle";
+  const STORAGE_KEY = "planning_weekly_capacity_checkpoints_v1";
 
   function ensureStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -91,6 +93,38 @@
     return `${weekYear}-${String(week).padStart(2, "0")}`;
   }
 
+  function readCheckpoints() {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function writeCheckpoint(endISO, total, todayISO) {
+    if (!endISO || endISO < todayISO || !Number.isFinite(total)) return;
+    const checkpoints = readCheckpoints().filter(item =>
+      item && item.todayISO === todayISO && item.endISO !== endISO
+    );
+    checkpoints.push({ todayISO, endISO, total });
+    checkpoints.sort((a, b) => String(a.endISO).localeCompare(String(b.endISO)));
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(checkpoints.slice(-24)));
+  }
+
+  function getCarryBefore(firstVisibleISO, todayISO) {
+    if (!firstVisibleISO || firstVisibleISO <= todayISO) return 0;
+    const candidates = readCheckpoints()
+      .filter(item =>
+        item &&
+        item.todayISO === todayISO &&
+        String(item.endISO || "") < firstVisibleISO &&
+        Number.isFinite(Number(item.total))
+      )
+      .sort((a, b) => String(b.endISO).localeCompare(String(a.endISO)));
+    return candidates.length ? Number(candidates[0].total) : 0;
+  }
+
   function findSaldoRow(table) {
     const rows = Array.from(table.tBodies?.[0]?.rows || []);
     return rows.find(row => {
@@ -128,6 +162,8 @@
     if (dayCells.length !== dayHeaders.length) return;
 
     const todayISO = localTodayISO();
+    const firstVisibleISO = String(dayHeaders[0]?.dataset.iso || "");
+    const lastVisibleISO = String(dayHeaders[dayHeaders.length - 1]?.dataset.iso || "");
     const groups = [];
 
     dayHeaders.forEach((header, index) => {
@@ -146,11 +182,15 @@
       }
     });
 
-    let cumulative = 0;
+    let cumulative = getCarryBefore(firstVisibleISO, todayISO);
     const cumulativeGroups = groups.map(group => {
       if (group.countedDays) cumulative += group.total;
       return { ...group, cumulative };
     });
+
+    if (lastVisibleISO >= todayISO) {
+      writeCheckpoint(lastVisibleISO, cumulative, todayISO);
+    }
 
     const signature = JSON.stringify(cumulativeGroups.map(g => [
       g.key,
