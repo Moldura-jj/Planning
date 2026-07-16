@@ -24,7 +24,6 @@
       stack = document.createElement('div');
       stack.className = 'plan-stack';
 
-      // Bestaande losse balken/markers eerst in dezelfde stack plaatsen.
       const existingItems = Array.from(projectCell.children).filter(el =>
         el.classList?.contains('bar') || el.classList?.contains('marker')
       );
@@ -34,12 +33,22 @@
     return stack;
   }
 
+  function isRealTopLaneItem(el) {
+    if (!el?.classList) return false;
+    if (el.classList.contains(CLONE_CLASS)) return false;
+    if (el.classList.contains(PLACEHOLDER_CLASS)) return false;
+    if (el.classList.contains('placeholder')) return false;
+    if (el.classList.contains('subc-ph')) return false;
+    if (el.classList.contains('bar-subc')) return false;
+
+    const style = getComputedStyle(el);
+    if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return false;
+
+    return el.classList.contains('bar') || el.classList.contains('marker');
+  }
+
   function hasExistingTopLane(stack) {
-    return Array.from(stack.children).some(el =>
-      !el.classList.contains(CLONE_CLASS) &&
-      !el.classList.contains(PLACEHOLDER_CLASS) &&
-      !el.classList.contains('placeholder')
-    );
+    return Array.from(stack.children).some(isRealTopLaneItem);
   }
 
   function addCloneToProjectCell(projectCell, sourceBar) {
@@ -47,23 +56,23 @@
 
     const stack = ensureStack(projectCell);
 
-    // Onderaanneming gebruikt altijd de tweede regel. Wanneer er op die dag
-    // geen productie/montage/marker staat, plaatsen we een onzichtbare eerste regel.
+    // Onderaanneming staat altijd op regel 2. Onzichtbare subcontracting-
+    // placeholders uit de normale render tellen nadrukkelijk niet als regel 1.
     if (!hasExistingTopLane(stack) && !stack.querySelector(`.${PLACEHOLDER_CLASS}`)) {
       const placeholder = document.createElement('div');
       placeholder.className = `bar placeholder ${PLACEHOLDER_CLASS}`;
       placeholder.setAttribute('aria-hidden', 'true');
       placeholder.style.pointerEvents = 'none';
-      stack.appendChild(placeholder);
+      placeholder.style.visibility = 'hidden';
+      stack.prepend(placeholder);
     }
 
     const clone = sourceBar.cloneNode(true);
     clone.classList.add(CLONE_CLASS);
+    clone.classList.remove('subc-ph', 'placeholder');
     clone.removeAttribute('draggable');
     clone.style.pointerEvents = 'none';
 
-    // De projectcel kan zelf de klasse bar-prod/bar-mont hebben. Die regels
-    // overschrijven anders de paarse kleur van onderaanneming met groen/geel.
     clone.style.setProperty('background', '#a955f767', 'important');
     clone.style.setProperty('background-image', 'none', 'important');
     clone.style.setProperty('color', '#0f172a', 'important');
