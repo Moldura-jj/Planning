@@ -1,12 +1,10 @@
 // planning-collapsed-subcontracting.js
 // Toont onderaanneming uit verborgen sectieregels ook op de projectregel.
-// Onderaanneming krijgt een eigen gereserveerde regel onder de bestaande planning,
-// zodat productie, montage en conceptblokken nooit worden bedekt of verborgen.
+// De paarse balk krijgt een eigen normale flow-regel onder de bestaande planning.
 
 (() => {
+  const WRAP_CLASS = "project-collapsed-subc-wrap";
   const CLONE_CLASS = "project-collapsed-subc";
-  const CELL_CLASS = "project-collapsed-subc-cell";
-  const ROW_CLASS = "project-collapsed-subc-row";
 
   function ensureStyle() {
     if (document.getElementById("projectCollapsedSubcStyle")) return;
@@ -14,24 +12,24 @@
     const style = document.createElement("style");
     style.id = "projectCollapsedSubcStyle";
     style.textContent = `
-      tr.project-row.${ROW_CLASS} > td.plan-cell {
-        min-height: 34px !important;
+      tr.project-row td.plan-cell > .${WRAP_CLASS} {
+        display: block !important;
+        width: 100% !important;
+        height: 16px !important;
+        min-height: 16px !important;
+        margin: 1px 0 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        box-sizing: border-box !important;
       }
 
-      tr.project-row td.${CELL_CLASS} {
-        position: relative !important;
-        padding-bottom: 16px !important;
-      }
-
-      tr.project-row td.${CELL_CLASS} > .${CLONE_CLASS} {
-        position: absolute !important;
-        left: 1px !important;
-        right: 1px !important;
-        bottom: 1px !important;
-        width: auto !important;
-        height: 14px !important;
-        min-height: 14px !important;
-        line-height: 12px !important;
+      tr.project-row td.plan-cell > .${WRAP_CLASS} > .${CLONE_CLASS} {
+        display: block !important;
+        position: static !important;
+        width: 100% !important;
+        height: 15px !important;
+        min-height: 15px !important;
+        line-height: 13px !important;
         margin: 0 !important;
         padding: 0 2px !important;
         box-sizing: border-box !important;
@@ -48,7 +46,6 @@
         border: 1px solid rgba(126, 34, 206, .52) !important;
         visibility: visible !important;
         opacity: 1 !important;
-        z-index: 20 !important;
         pointer-events: none !important;
       }
     `;
@@ -65,13 +62,7 @@
   }
 
   function clearManaged(projectRow) {
-    projectRow.querySelectorAll(`.${CLONE_CLASS}`).forEach(el => el.remove());
-    projectRow.querySelectorAll(`td.${CELL_CLASS}`).forEach(cell => {
-      cell.classList.remove(CELL_CLASS);
-      cell.style.removeProperty('padding-bottom');
-      cell.style.removeProperty('position');
-    });
-    projectRow.classList.remove(ROW_CLASS);
+    projectRow.querySelectorAll(`.${WRAP_CLASS}`).forEach(el => el.remove());
   }
 
   function makeClone(sourceBars) {
@@ -119,14 +110,14 @@
       });
     });
 
-    if (!subcByCellIndex.size) return;
-    projectRow.classList.add(ROW_CLASS);
-
     subcByCellIndex.forEach((bars, index) => {
       const cell = projectCells[index];
-      if (!cell) return;
-      cell.classList.add(CELL_CLASS);
-      cell.appendChild(makeClone(bars));
+      if (!cell?.classList?.contains('plan-cell')) return;
+
+      const wrap = document.createElement('div');
+      wrap.className = WRAP_CLASS;
+      wrap.appendChild(makeClone(bars));
+      cell.appendChild(wrap);
     });
   }
 
