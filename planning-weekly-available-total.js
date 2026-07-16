@@ -1,7 +1,9 @@
 // Toont onder het capaciteitblok per week hoeveel saldo-uren nog beschikbaar zijn.
 // Voor de huidige week worden alleen vandaag en de resterende dagen meegeteld.
+// Daaronder staat een cumulatieve optelling vanaf vandaag; verleden telt niet mee.
 (() => {
   const ROW_CLASS = "weekly-available-total-row";
+  const CUM_ROW_CLASS = "weekly-available-cumulative-row";
   const STYLE_ID = "weeklyAvailableTotalStyle";
 
   function ensureStyle() {
@@ -9,40 +11,48 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
-      .planner-table tr.${ROW_CLASS} > td {
+      .planner-table tr.${ROW_CLASS} > td,
+      .planner-table tr.${CUM_ROW_CLASS} > td {
         height: 28px !important;
-        border-top: 2px solid #94a3b8 !important;
-        border-bottom: 2px solid #94a3b8 !important;
         background: #f8fafc !important;
         font-size: 11px !important;
         font-weight: 700 !important;
         vertical-align: middle !important;
       }
-      .planner-table tr.${ROW_CLASS} > td.weekly-available-label {
+      .planner-table tr.${ROW_CLASS} > td {
+        border-top: 2px solid #94a3b8 !important;
+      }
+      .planner-table tr.${CUM_ROW_CLASS} > td {
+        border-top: 1px solid #cbd5e1 !important;
+        border-bottom: 2px solid #94a3b8 !important;
+      }
+      .planner-table tr.${ROW_CLASS} > td.weekly-available-label,
+      .planner-table tr.${CUM_ROW_CLASS} > td.weekly-available-label {
         text-align: left !important;
         padding: 0 8px !important;
         color: #0f172a !important;
       }
-      .planner-table tr.${ROW_CLASS} > td.weekly-available-hours {
+      .planner-table tr.${ROW_CLASS} > td.weekly-available-hours,
+      .planner-table tr.${CUM_ROW_CLASS} > td.weekly-available-hours {
         text-align: center !important;
         padding: 0 4px !important;
         color: #166534 !important;
         background: #dcfce7 !important;
       }
-      .planner-table tr.${ROW_CLASS} > td.weekly-available-hours.negative {
+      .planner-table tr.${CUM_ROW_CLASS} > td.weekly-available-hours {
+        background: #dbeafe !important;
+        color: #1e3a8a !important;
+      }
+      .planner-table tr.${ROW_CLASS} > td.weekly-available-hours.negative,
+      .planner-table tr.${CUM_ROW_CLASS} > td.weekly-available-hours.negative {
         color: #991b1b !important;
         background: #fee2e2 !important;
       }
-      .planner-table tr.${ROW_CLASS} > td.weekly-available-hours.empty {
+      .planner-table tr.${ROW_CLASS} > td.weekly-available-hours.empty,
+      .planner-table tr.${CUM_ROW_CLASS} > td.weekly-available-hours.empty {
         color: #94a3b8 !important;
         background: #f8fafc !important;
         font-weight: 500 !important;
-      }
-      .planner-table tr.${ROW_CLASS} > td.weekly-available-hours.wknd {
-        background: #dcfce7 !important;
-      }
-      .planner-table tr.${ROW_CLASS} > td.weekly-available-hours.negative.wknd {
-        background: #fee2e2 !important;
       }
     `;
     document.head.appendChild(style);
@@ -89,6 +99,22 @@
     }) || null;
   }
 
+  function appendFixedColumns(row, saldoRow, labelText) {
+    const label = document.createElement("td");
+    label.className = "rowhdr sticky-left weekly-available-label";
+    label.textContent = labelText;
+    row.appendChild(label);
+
+    const hoursCol = document.createElement("td");
+    hoursCol.className = "cell hourscol sticky-left2";
+    hoursCol.style.left = "380px";
+    const referenceHoursCell = saldoRow.children[1];
+    if (referenceHoursCell && getComputedStyle(referenceHoursCell).display === "none") {
+      hoursCol.style.display = "none";
+    }
+    row.appendChild(hoursCol);
+  }
+
   function render() {
     ensureStyle();
     const table = document.querySelector(".planner-table");
@@ -120,30 +146,38 @@
       }
     });
 
-    const signature = JSON.stringify(groups.map(g => [g.key, g.span, Math.round(g.total * 100), g.countedDays]));
-    let row = table.querySelector(`tbody tr.${ROW_CLASS}`);
-    if (row?.dataset.signature === signature && row.previousElementSibling === saldoRow) return;
-    row?.remove();
+    let cumulative = 0;
+    const cumulativeGroups = groups.map(group => {
+      if (group.countedDays) cumulative += group.total;
+      return { ...group, cumulative };
+    });
 
-    row = document.createElement("tr");
-    row.className = ROW_CLASS;
-    row.dataset.signature = signature;
+    const signature = JSON.stringify(cumulativeGroups.map(g => [
+      g.key,
+      g.span,
+      Math.round(g.total * 100),
+      Math.round(g.cumulative * 100),
+      g.countedDays
+    ]));
 
-    const label = document.createElement("td");
-    label.className = "rowhdr sticky-left weekly-available-label";
-    label.textContent = "Beschikbaar per week";
-    row.appendChild(label);
+    let weekRow = table.querySelector(`tbody tr.${ROW_CLASS}`);
+    let cumRow = table.querySelector(`tbody tr.${CUM_ROW_CLASS}`);
+    if (
+      weekRow?.dataset.signature === signature &&
+      cumRow?.dataset.signature === signature &&
+      weekRow.previousElementSibling === saldoRow &&
+      cumRow.previousElementSibling === weekRow
+    ) return;
 
-    const hoursCol = document.createElement("td");
-    hoursCol.className = "cell hourscol sticky-left2";
-    hoursCol.style.left = "380px";
-    const referenceHoursCell = saldoRow.children[1];
-    if (referenceHoursCell && getComputedStyle(referenceHoursCell).display === "none") {
-      hoursCol.style.display = "none";
-    }
-    row.appendChild(hoursCol);
+    weekRow?.remove();
+    cumRow?.remove();
 
-    groups.forEach(group => {
+    weekRow = document.createElement("tr");
+    weekRow.className = ROW_CLASS;
+    weekRow.dataset.signature = signature;
+    appendFixedColumns(weekRow, saldoRow, "Beschikbaar per week");
+
+    cumulativeGroups.forEach(group => {
       const cell = document.createElement("td");
       cell.colSpan = group.span;
       cell.className = "weekly-available-hours";
@@ -157,10 +191,33 @@
         const weekNo = Number(group.key.split("-")[1]);
         cell.title = `Week ${weekNo}: resterend saldo van ${group.start < todayISO ? todayISO : group.start} t/m ${group.end}`;
       }
-      row.appendChild(cell);
+      weekRow.appendChild(cell);
     });
 
-    saldoRow.insertAdjacentElement("afterend", row);
+    cumRow = document.createElement("tr");
+    cumRow.className = CUM_ROW_CLASS;
+    cumRow.dataset.signature = signature;
+    appendFixedColumns(cumRow, saldoRow, "Totaal vanaf vandaag");
+
+    cumulativeGroups.forEach(group => {
+      const cell = document.createElement("td");
+      cell.colSpan = group.span;
+      cell.className = "weekly-available-hours";
+      if (!group.countedDays) {
+        cell.classList.add("empty");
+        cell.textContent = "—";
+        cell.title = "Verleden telt niet mee";
+      } else {
+        if (group.cumulative < 0) cell.classList.add("negative");
+        cell.textContent = formatHours(group.cumulative);
+        const weekNo = Number(group.key.split("-")[1]);
+        cell.title = `Cumulatief beschikbaar vanaf vandaag t/m week ${weekNo}`;
+      }
+      cumRow.appendChild(cell);
+    });
+
+    saldoRow.insertAdjacentElement("afterend", weekRow);
+    weekRow.insertAdjacentElement("afterend", cumRow);
   }
 
   let scheduled = false;
