@@ -3,6 +3,7 @@
 
 (() => {
   const CLONE_CLASS = "project-collapsed-subc";
+  const PLACEHOLDER_CLASS = "project-collapsed-subc-placeholder";
 
   function isProjectOpen(projectRow) {
     const btn = projectRow.querySelector('.expander[data-proj]');
@@ -10,25 +11,50 @@
   }
 
   function clearProjectClones(projectRow) {
-    projectRow.querySelectorAll(`.${CLONE_CLASS}`).forEach(el => el.remove());
+    projectRow.querySelectorAll(`.${CLONE_CLASS}, .${PLACEHOLDER_CLASS}`).forEach(el => el.remove());
   }
 
   function getProjectId(projectRow) {
     return String(projectRow.querySelector('.expander[data-proj]')?.dataset?.proj || "");
   }
 
-  function addCloneToProjectCell(projectCell, sourceBar) {
-    if (!projectCell || !sourceBar) return;
-
+  function ensureStack(projectCell) {
     let stack = projectCell.querySelector('.plan-stack');
     if (!stack) {
       stack = document.createElement('div');
       stack.className = 'plan-stack';
 
-      // Bestaande losse balken eerst in dezelfde stack plaatsen.
-      const existingBars = Array.from(projectCell.children).filter(el => el.classList?.contains('bar'));
-      existingBars.forEach(el => stack.appendChild(el));
+      // Bestaande losse balken/markers eerst in dezelfde stack plaatsen.
+      const existingItems = Array.from(projectCell.children).filter(el =>
+        el.classList?.contains('bar') || el.classList?.contains('marker')
+      );
+      existingItems.forEach(el => stack.appendChild(el));
       projectCell.appendChild(stack);
+    }
+    return stack;
+  }
+
+  function hasExistingTopLane(stack) {
+    return Array.from(stack.children).some(el =>
+      !el.classList.contains(CLONE_CLASS) &&
+      !el.classList.contains(PLACEHOLDER_CLASS) &&
+      !el.classList.contains('placeholder')
+    );
+  }
+
+  function addCloneToProjectCell(projectCell, sourceBar) {
+    if (!projectCell || !sourceBar) return;
+
+    const stack = ensureStack(projectCell);
+
+    // Onderaanneming gebruikt altijd de tweede regel. Wanneer er op die dag
+    // geen productie/montage/marker staat, plaatsen we een onzichtbare eerste regel.
+    if (!hasExistingTopLane(stack) && !stack.querySelector(`.${PLACEHOLDER_CLASS}`)) {
+      const placeholder = document.createElement('div');
+      placeholder.className = `bar placeholder ${PLACEHOLDER_CLASS}`;
+      placeholder.setAttribute('aria-hidden', 'true');
+      placeholder.style.pointerEvents = 'none';
+      stack.appendChild(placeholder);
     }
 
     const clone = sourceBar.cloneNode(true);
