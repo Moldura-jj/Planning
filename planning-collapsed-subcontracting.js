@@ -35,6 +35,16 @@
     clone.classList.add(CLONE_CLASS);
     clone.removeAttribute('draggable');
     clone.style.pointerEvents = 'none';
+
+    // De projectcel kan zelf de klasse bar-prod/bar-mont hebben. Die regels
+    // overschrijven anders de paarse kleur van onderaanneming met groen/geel.
+    clone.style.setProperty('background', '#a955f767', 'important');
+    clone.style.setProperty('background-image', 'none', 'important');
+    clone.style.setProperty('color', '#0f172a', 'important');
+    clone.style.setProperty('border', '1px dashed rgba(15,23,42,.35)', 'important');
+    clone.style.setProperty('visibility', 'visible', 'important');
+    clone.style.setProperty('opacity', '1', 'important');
+
     stack.appendChild(clone);
   }
 
