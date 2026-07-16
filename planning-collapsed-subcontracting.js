@@ -1,46 +1,55 @@
 // planning-collapsed-subcontracting.js
 // Toont onderaanneming uit verborgen sectieregels ook op de projectregel.
-// De ingeklapte projectregel gebruikt een compacte vaste indeling:
-// 1) normale planning
-// 2) conceptplanning
-// 3) onderaanneming
+// Onderaanneming krijgt een eigen gereserveerde regel onder de bestaande planning,
+// zodat productie, montage en conceptblokken nooit worden bedekt of verborgen.
 
 (() => {
   const CLONE_CLASS = "project-collapsed-subc";
-  const PH_NORMAL_CLASS = "project-collapsed-ph-normal";
-  const PH_CONCEPT_CLASS = "project-collapsed-ph-concept";
-  const CELL_CLASS = "project-collapsed-lanes";
+  const CELL_CLASS = "project-collapsed-subc-cell";
+  const ROW_CLASS = "project-collapsed-subc-row";
 
   function ensureStyle() {
-    if (document.getElementById("projectCollapsedLanesStyle")) return;
+    if (document.getElementById("projectCollapsedSubcStyle")) return;
 
     const style = document.createElement("style");
-    style.id = "projectCollapsedLanesStyle";
+    style.id = "projectCollapsedSubcStyle";
     style.textContent = `
-      tr.project-row td.${CELL_CLASS} > .plan-stack {
-        gap: 1px !important;
-        padding: 1px 0 !important;
+      tr.project-row.${ROW_CLASS} > td.plan-cell {
+        min-height: 34px !important;
       }
 
-      tr.project-row td.${CELL_CLASS} > .plan-stack > .bar,
-      tr.project-row td.${CELL_CLASS} > .plan-stack > .marker {
-        height: 15px !important;
-        min-height: 15px !important;
-        line-height: 15px !important;
+      tr.project-row td.${CELL_CLASS} {
+        position: relative !important;
+        padding-bottom: 16px !important;
+      }
+
+      tr.project-row td.${CELL_CLASS} > .${CLONE_CLASS} {
+        position: absolute !important;
+        left: 1px !important;
+        right: 1px !important;
+        bottom: 1px !important;
+        width: auto !important;
+        height: 14px !important;
+        min-height: 14px !important;
+        line-height: 12px !important;
         margin: 0 !important;
         padding: 0 2px !important;
-        border-radius: 4px !important;
-        font-size: 9px !important;
-        text-align: center !important;
         box-sizing: border-box !important;
-      }
-
-      tr.project-row td.${CELL_CLASS} .${CLONE_CLASS} {
-        background: rgba(168, 85, 247, .38) !important;
+        overflow: hidden !important;
+        white-space: nowrap !important;
+        text-overflow: ellipsis !important;
+        text-align: center !important;
+        font-size: 9px !important;
+        font-weight: 500 !important;
+        border-radius: 4px !important;
+        background: rgba(168, 85, 247, .42) !important;
         background-image: none !important;
         color: #312e81 !important;
-        border: 1px solid rgba(126, 34, 206, .48) !important;
-        font-weight: 500 !important;
+        border: 1px solid rgba(126, 34, 206, .52) !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        z-index: 20 !important;
+        pointer-events: none !important;
       }
     `;
     document.head.appendChild(style);
@@ -55,82 +64,22 @@
     return String(projectRow.querySelector('.expander[data-proj]')?.dataset?.proj || "");
   }
 
-  function ensureStack(projectCell) {
-    let stack = projectCell.querySelector(':scope > .plan-stack');
-    if (!stack) {
-      stack = document.createElement('div');
-      stack.className = 'plan-stack';
-
-      Array.from(projectCell.children)
-        .filter(el => el.classList?.contains('bar') || el.classList?.contains('marker'))
-        .forEach(el => stack.appendChild(el));
-
-      projectCell.appendChild(stack);
-    }
-    return stack;
-  }
-
-  function clearManagedItems(projectRow) {
-    projectRow.querySelectorAll(
-      `.${CLONE_CLASS}, .${PH_NORMAL_CLASS}, .${PH_CONCEPT_CLASS}`
-    ).forEach(el => el.remove());
-
+  function clearManaged(projectRow) {
+    projectRow.querySelectorAll(`.${CLONE_CLASS}`).forEach(el => el.remove());
     projectRow.querySelectorAll(`td.${CELL_CLASS}`).forEach(cell => {
       cell.classList.remove(CELL_CLASS);
+      cell.style.removeProperty('padding-bottom');
+      cell.style.removeProperty('position');
     });
+    projectRow.classList.remove(ROW_CLASS);
   }
 
-  function isManaged(el) {
-    return el.classList?.contains(CLONE_CLASS)
-      || el.classList?.contains(PH_NORMAL_CLASS)
-      || el.classList?.contains(PH_CONCEPT_CLASS);
-  }
-
-  function isVisible(el) {
-    if (!el) return false;
-    const st = getComputedStyle(el);
-    return st.display !== "none" && st.visibility !== "hidden" && Number(st.opacity) !== 0;
-  }
-
-  function isSubcontracting(el) {
-    return !!el?.classList?.contains('bar-subc');
-  }
-
-  function isConcept(el) {
-    return !!el?.classList?.contains('dummy-hatch');
-  }
-
-  function isNormalLaneItem(el) {
-    if (!el || isManaged(el) || !isVisible(el)) return false;
-    if (isSubcontracting(el) || isConcept(el)) return false;
-    return el.classList.contains('bar') || el.classList.contains('marker');
-  }
-
-  function isConceptLaneItem(el) {
-    if (!el || isManaged(el) || !isVisible(el)) return false;
-    if (isSubcontracting(el)) return false;
-    return isConcept(el);
-  }
-
-  function makePlaceholder(cls) {
-    const ph = document.createElement('div');
-    ph.className = `bar placeholder ${cls}`;
-    ph.setAttribute('aria-hidden', 'true');
-    ph.style.pointerEvents = 'none';
-    ph.style.visibility = 'hidden';
-    ph.style.opacity = '0';
-    return ph;
-  }
-
-  function makeSubcontractingClone(sourceBars) {
-    const first = sourceBars[0];
-    const clone = first.cloneNode(true);
+  function makeClone(sourceBars) {
+    const clone = sourceBars[0].cloneNode(true);
     clone.classList.add(CLONE_CLASS);
     clone.classList.remove('subc-ph', 'placeholder', 'bar-start', 'bar-end');
     clone.removeAttribute('draggable');
-    clone.style.pointerEvents = 'none';
 
-    // Meerdere onderaannemingen op dezelfde dag compact in één balk tonen.
     const labels = sourceBars
       .map(bar => String(bar.textContent || '').trim())
       .filter(Boolean);
@@ -144,29 +93,8 @@
     return clone;
   }
 
-  function rebuildCell(projectCell, subcBars) {
-    if (!projectCell || !subcBars?.length) return;
-
-    projectCell.classList.add(CELL_CLASS);
-    const stack = ensureStack(projectCell);
-    const items = Array.from(stack.children).filter(el => !isManaged(el));
-
-    const normalItems = items.filter(isNormalLaneItem);
-    const conceptItems = items.filter(el => !normalItems.includes(el) && isConceptLaneItem(el));
-
-    stack.innerHTML = "";
-
-    if (normalItems.length) normalItems.forEach(el => stack.appendChild(el));
-    else stack.appendChild(makePlaceholder(PH_NORMAL_CLASS));
-
-    if (conceptItems.length) conceptItems.forEach(el => stack.appendChild(el));
-    else stack.appendChild(makePlaceholder(PH_CONCEPT_CLASS));
-
-    stack.appendChild(makeSubcontractingClone(subcBars));
-  }
-
   function syncProject(projectRow) {
-    clearManagedItems(projectRow);
+    clearManaged(projectRow);
     if (isProjectOpen(projectRow)) return;
 
     const pid = getProjectId(projectRow);
@@ -184,15 +112,22 @@
 
     sectionRows.forEach(sectionRow => {
       Array.from(sectionRow.children).forEach((sectionCell, index) => {
-        const subBars = Array.from(sectionCell.querySelectorAll('.bar-subc:not(.subc-ph)'));
-        if (!subBars.length) return;
-
+        const bars = Array.from(sectionCell.querySelectorAll('.bar-subc:not(.subc-ph)'));
+        if (!bars.length) return;
         if (!subcByCellIndex.has(index)) subcByCellIndex.set(index, []);
-        subcByCellIndex.get(index).push(...subBars);
+        subcByCellIndex.get(index).push(...bars);
       });
     });
 
-    subcByCellIndex.forEach((bars, index) => rebuildCell(projectCells[index], bars));
+    if (!subcByCellIndex.size) return;
+    projectRow.classList.add(ROW_CLASS);
+
+    subcByCellIndex.forEach((bars, index) => {
+      const cell = projectCells[index];
+      if (!cell) return;
+      cell.classList.add(CELL_CLASS);
+      cell.appendChild(makeClone(bars));
+    });
   }
 
   function syncAll() {
