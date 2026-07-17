@@ -39,22 +39,54 @@
     return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
   }
 
+  function elementMentionsWeek(el, weekNumber){
+    const text = `${ownText(el)} ${String(el.textContent || "")}`.replace(/\s+/g, " ").trim();
+    const patterns = [
+      new RegExp(`\\bWeek\\s*${weekNumber}\\b`, "i"),
+      new RegExp(`\\bWk\\.?\\s*${weekNumber}\\b`, "i"),
+      new RegExp(`\\bW\\s*${weekNumber}\\b`, "i")
+    ];
+    if (patterns.some(re => re.test(text))) return true;
+
+    return Object.entries(el.dataset || {}).some(([key, value]) => {
+      const k = String(key || "").toLowerCase();
+      const v = String(value || "").trim();
+      return k.includes("week") && (v === String(weekNumber) || v.endsWith(`-${String(weekNumber).padStart(2, "0")}`));
+    });
+  }
+
+  function clickableAncestor(el){
+    if (!el) return null;
+    const direct = el.closest("button, [role='button'], a, [data-week], [data-week-number], .week-header, .week-label, .week-number, th, td");
+    if (direct) return direct;
+
+    let cur = el;
+    for (let i = 0; i < 5 && cur; i++, cur = cur.parentElement) {
+      if (typeof cur.onclick === "function" || getComputedStyle(cur).cursor === "pointer") return cur;
+    }
+    return el;
+  }
+
   function findWeekTrigger(weekNumber){
     const root = document.getElementById("plannerGrid") || document;
-    const exact = new RegExp(`^Week\\s+${weekNumber}$`, "i");
-    const candidates = Array.from(root.querySelectorAll("button, [role='button'], th, td, div, span"))
+    const all = Array.from(root.querySelectorAll("button, [role='button'], a, th, td, div, span"))
       .filter(isVisible)
-      .filter(el => exact.test(ownText(el) || String(el.textContent || "").trim()));
+      .filter(el => elementMentionsWeek(el, weekNumber));
 
-    return candidates.find(el =>
-      el.matches("button, [role='button']") ||
+    const clickables = all
+      .map(clickableAncestor)
+      .filter(Boolean)
+      .filter((el, index, arr) => arr.indexOf(el) === index);
+
+    return clickables.find(el =>
+      el.matches("button, [role='button'], a") ||
       typeof el.onclick === "function" ||
       getComputedStyle(el).cursor === "pointer"
-    ) || candidates[0] || null;
+    ) || clickables[0] || null;
   }
 
   function findVisibleWeekModal(weekNumber){
-    const titleRe = new RegExp(`\\bWeek\\s+${weekNumber}\\b`, "i");
+    const titleRe = new RegExp(`\\b(?:Week|Wk\\.?|W)\\s*${weekNumber}\\b`, "i");
     const candidates = Array.from(document.querySelectorAll(".modal, [role='dialog'], .modal-card, .week-overview-modal, .week-modal"))
       .filter(isVisible)
       .filter(el => titleRe.test(String(el.textContent || "")));
@@ -67,13 +99,16 @@
   }
 
   async function openWeekModal(weekNumber){
+    const alreadyOpen = findVisibleWeekModal(weekNumber);
+    if (alreadyOpen) return alreadyOpen;
+
     const trigger = findWeekTrigger(weekNumber);
     if (!trigger) throw new Error(`Week ${weekNumber} is niet zichtbaar in de planning.`);
 
     trigger.scrollIntoView({ block: "center", inline: "center" });
-    trigger.click();
+    trigger.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
 
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < 40; i++) {
       await wait(100);
       const modal = findVisibleWeekModal(weekNumber);
       if (modal) return modal;
@@ -160,10 +195,10 @@
 
       for (let i = 0; i < weeks.length; i++) {
         const modal = await openWeekModal(weeks[i]);
-        await wait(350); // uitlijning en inhoud laten afronden
+        await wait(500);
         pdfRoot.appendChild(prepareClone(modal, i));
         closeWeekModal(modal);
-        await wait(250);
+        await wait(300);
       }
 
       await window.html2pdf()
