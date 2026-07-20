@@ -126,42 +126,66 @@
   function prepareClone(modal, pageIndex){
     const clone = modal.cloneNode(true);
     clone.removeAttribute("id");
+    clone.removeAttribute("hidden");
+    clone.setAttribute("aria-hidden", "false");
+
     clone.querySelectorAll("[id]").forEach(el => el.removeAttribute("id"));
+    clone.querySelectorAll("[hidden]").forEach(el => el.removeAttribute("hidden"));
     clone.querySelectorAll("button").forEach(btn => {
       if (/^(x|sluiten|close)$/i.test(String(btn.textContent || "").trim())) btn.remove();
     });
 
     Object.assign(clone.style, {
       display: "block",
-      position: "static",
+      visibility: "visible",
+      position: "relative",
+      left: "auto",
+      right: "auto",
+      top: "auto",
+      bottom: "auto",
       inset: "auto",
       transform: "none",
       width: "100%",
       maxWidth: "none",
+      minHeight: "1px",
       height: "auto",
       maxHeight: "none",
       overflow: "visible",
       margin: "0",
+      opacity: "1",
       boxShadow: "none",
-      background: "white"
+      background: "#ffffff"
     });
 
     clone.querySelectorAll("*").forEach(el => {
+      el.removeAttribute("hidden");
       const style = el.style;
-      if (style) {
-        if (style.maxHeight) style.maxHeight = "none";
-        if (style.overflow === "auto" || style.overflow === "scroll") style.overflow = "visible";
+      if (!style) return;
+      if (style.display === "none") style.display = "block";
+      if (style.visibility === "hidden") style.visibility = "visible";
+      if (style.maxHeight) style.maxHeight = "none";
+      if (style.overflow === "auto" || style.overflow === "scroll" || style.overflow === "hidden") {
+        style.overflow = "visible";
       }
     });
 
     const page = document.createElement("section");
     page.className = "weekplanning-pdf-page";
+    Object.assign(page.style, {
+      display: "block",
+      width: "1470px",
+      minHeight: "1px",
+      padding: "12px",
+      boxSizing: "border-box",
+      background: "#ffffff",
+      color: "#111827"
+    });
     if (pageIndex > 0) page.style.pageBreakBefore = "always";
     page.appendChild(clone);
     return page;
   }
 
-  async function ensureHtml2Pdf(){
+  function ensureHtml2Pdf(){
     if (window.html2pdf) return;
     throw new Error("De PDF-module is nog niet geladen. Vernieuw de pagina en probeer opnieuw.");
   }
@@ -178,27 +202,43 @@
     const dates = [today, addDays(today, 7)];
     const weeks = dates.map(d => isoWeekNumber(d));
     const filename = `weekplanning-${weekKey(dates[0])}-tm-${weekKey(dates[1])}.pdf`;
+    const previousScrollX = window.scrollX;
+    const previousScrollY = window.scrollY;
+
     const pdfRoot = document.createElement("div");
     pdfRoot.id = "weekplanningPdfRoot";
     Object.assign(pdfRoot.style, {
-      position: "fixed",
-      left: "-20000px",
-      top: "0",
+      position: "absolute",
+      left: "0",
+      top: `${previousScrollY}px`,
       width: "1500px",
-      background: "white",
-      zIndex: "-1"
+      minHeight: "1px",
+      display: "block",
+      visibility: "visible",
+      opacity: "1",
+      overflow: "visible",
+      pointerEvents: "none",
+      background: "#ffffff",
+      zIndex: "2147483647"
     });
     document.body.appendChild(pdfRoot);
 
     try {
-      await ensureHtml2Pdf();
+      ensureHtml2Pdf();
 
       for (let i = 0; i < weeks.length; i++) {
         const modal = await openWeekModal(weeks[i]);
-        await wait(500);
+        await wait(350);
         pdfRoot.appendChild(prepareClone(modal, i));
         closeWeekModal(modal);
-        await wait(300);
+        await wait(250);
+      }
+
+      // Geef de browser tijd om alle gekloonde tabellen en lettertypes te tekenen.
+      await wait(500);
+
+      if (pdfRoot.scrollWidth < 10 || pdfRoot.scrollHeight < 10 || !pdfRoot.textContent.trim()) {
+        throw new Error("Het weekoverzicht bevat geen renderbare inhoud.");
       }
 
       await window.html2pdf()
@@ -206,7 +246,17 @@
           margin: [5, 5, 5, 5],
           filename,
           image: { type: "jpeg", quality: 0.97 },
-          html2canvas: { scale: 1.35, useCORS: true, logging: false, backgroundColor: "#ffffff" },
+          html2canvas: {
+            scale: 1.2,
+            useCORS: true,
+            allowTaint: false,
+            logging: false,
+            backgroundColor: "#ffffff",
+            width: 1500,
+            windowWidth: 1500,
+            scrollX: 0,
+            scrollY: -previousScrollY
+          },
           jsPDF: { unit: "mm", format: "a3", orientation: "landscape" },
           pagebreak: { mode: ["css", "legacy"], before: ".weekplanning-pdf-page + .weekplanning-pdf-page" }
         })
@@ -217,6 +267,7 @@
       alert(error?.message || "De PDF kon niet worden gemaakt.");
     } finally {
       pdfRoot.remove();
+      window.scrollTo(previousScrollX, previousScrollY);
       if (button) {
         button.disabled = false;
         button.textContent = oldText;
